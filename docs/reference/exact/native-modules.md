@@ -45,8 +45,10 @@ station implements it. The generator emits the Android export only when the
 implementation manifest exists. The package APK compiled and installed on the
 Motorola, and seat 1 accepted the repaired frozen candidate `c1d29501e` after a
 send-back on event ordering, failed-load completion, renderer death, URL
-validation and attached-view destruction. Physical WebView interaction remains
-a named proof obligation; see `docs/evidence/android-package-seat1-*-2026-11-26.txt`.
+validation and attached-view destruction. The basic physical WebView
+open/close/external hand-off and force-stop relaunch are proved in
+`docs/evidence/android-a3-web-view-2026-11-26/`; the review receipts remain in
+`docs/evidence/android-package-seat1-*-2026-11-26.txt`.
 
 What a platform does with an interface name it has no implementation for:
 Exact's standard packages answer `NotSupportedError` and `available: false`

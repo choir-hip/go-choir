@@ -168,8 +168,8 @@ stations:
     class: orange
     review: one seat on a frozen candidate
     depends_on: [A0]
-    carrier: none yet
-    status: pending
+    carrier: android-package (web-page and external links); android-web-proof (physical evidence)
+    status: working
   - id: A4
     name: Android mail secrecy
     scope: 'implement the shared mailSeal/mailOpen contract with Android Keystore AES-GCM, authenticated record identity, tamper/wrong-account refusal, cache cleanup and sign-out wipe; never log plaintext or key material'
@@ -233,16 +233,16 @@ owner_rulings:
     read_as: 'the old Motorola is the baseline; larger-phone models are a later ladder, not a reason to skip the baseline'
 now:
   status: working
-  slice: 'A0: reconcile and establish the current-main physical Android baseline'
-  source_ref: origin/main cdb219cc8a4ff5a8d5fdffd0c7927b8ac5f1bc6c
+  slice: 'A3: basic source WebView and external hand-off proved; remaining platform seams open'
+  source_ref: origin/main 02a9a1dafda4854070ce1ab200501d8dc1460a06
   deploy_identity: staging proxy/platform 16f04df4d1dcda2b4a2777968c27926dfed485ba
   candidate:
-    id: android-build-harness
-    state: rehearsing
-    ref: .lane/trees/android-build-harness
-    base: origin/main cdb219cc8a4ff5a8d5fdffd0c7927b8ac5f1bc6c
+    id: android-web-proof
+    state: proved
+    ref: .lane/trees/android-web-proof
+    base: origin/main 02a9a1dafda4854070ce1ab200501d8dc1460a06
     digest: none
-    scope: [mobile/scripts, mobile/AutoradioLab/store-build.test.ts, mobile/README.md, docs/changes.md, docs/reference/exact/build-and-ship.md]
+    scope: [scripts/proofs/android-a3-web-view.sh, docs/evidence/android-a3-web-view-2026-11-26, docs/changes.md, docs/current-architecture.md, docs/system-map.md, docs/reference/exact/native-modules.md]
   conjecture:
     id: Android-parity-bridge
     calibration_claim: C254
@@ -262,9 +262,9 @@ now:
   belief:
     believed_state: 'Exact already supplies the shared Android host, Media3 background service and passkey package; the missing work is the package-first Kotlin ExactExtension, Android auth association, and verified model runtimes'
     main_uncertainty: 'how much of the current train is alive on the physical phone, whether background media needs an Exact patch, and which local model configuration fits and performs acceptably'
-    next_observation: 'A0 current-main lab-one build and page/native-call inventory on ZY22H5K8QR'
+    next_observation: 'A3 file/audio hand-off, reader follow/aim and podcast clip location on ZY22H5K8QR; A1/A2/A5/A6 proceed in their own lanes'
   blocker_or_risk: 'adb is not on PATH; the system passkey/biometric prompt may not be drivable by adb; CoreML model bundles are not Android artifacts; Exact Android background media and model fitness are unproved; only one native build may run at a time'
-  next_action: 'finish the android-build-harness whole-suite check, land it, then run A0 in qa-mac under the build lock with ANDROID_SERIAL=ZY22H5K8QR'
+  next_action: 'land the A3 physical WebView evidence, then continue the remaining A3 platform seams while A1 auth, A2 deck and A5/A6 model work proceed in parallel'
 weak_measures:
   - name: required native calls answering a substitute
     kind: gate

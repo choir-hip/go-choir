@@ -1,0 +1,8 @@
+Starting: Intent { cmp=news.choir.autoradio.lab.one/dev.exact.app.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: news.choir.autoradio.lab.one/dev.exact.app.MainActivity
+TotalTime: 537
+WaitTime: 549
+Complete
+14517

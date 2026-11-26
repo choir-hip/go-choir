@@ -1,10 +1,20 @@
+## 2026-11-26: Android source WebView and external hand-off are physically proved (green; lane `android-web-proof`)
+
+What: `scripts/proofs/android-a3-web-view.sh` now reproduces the package-first source-page journey on the connected Motorola: discover a current Paper story, open a source in the native WebView, capture the rendered page, hand an HTTPS source to Chrome, close the in-app layer, then force-stop and cold-launch the normal app. Raw logs, screenshots, package/certificate readback and activity/relaunch evidence are in `docs/evidence/android-a3-web-view-2026-11-26/`.
+
+Why: the package review proved compilation and accepted the repaired lifecycle code, but the mission requires a physical device result rather than a code-only claim.
+
+Proof: the installed APK SHA-256 `a2a920bb8312509c64b1e7c95ee5e599ab2381c1e273fb035132d68b0e912a3c` matched the build artifact; `NativeView [reader-web-view]` rendered `pravda.com.ua`; Android resumed Chrome for the external action; close removed the native view; force-stop/cold launch returned `Status: ok`, `LaunchState: COLD`, and a live process id with no fatal exception in the following logcat read. This closes the basic WebView proof obligation, not full A3/A7 parity.
+
+Replaced: the named unproved physical WebView interaction. Undo: revert this evidence/proof commit; runtime rollback remains reverting the package commit and reinstalling the previous APK.
+
 ## 2026-11-26: Autoradio has a package-first Android extension (orange; lane `android-package`)
 
 What: `@choir/autoradio` now exports an Android `ExactExtension`. It implements the shared `readerOpenExternal` send and the `web-page` package view with strict URL routing, WebView lifecycle/error/renderer handling, external-app hand-off and safe destruction. The interface generator preserves the Android export without changing Apple or web behavior. Unknown native names still refuse explicitly rather than silently substituting.
 
 Why: the A0 physical drive recorded 48 Apple-style app-module calls with no Android extension. The package seam is the correct Android path; porting `ModelsEntry.swift` would recreate the wrong boundary.
 
-Proof: the APK compiled and installed on `ZY22H5K8QR`; focused package tests pass 4/4, the whole shared Bun suite passes 1,785 with 1 skip, and the native-boundary gate holds at 34 files / 3,406 lines / 18 names with the Android platform seam explicitly listed and its reason written beside it. Seat 1 first sent back five lifecycle/security defects, then accepted the repaired frozen candidate `c1d29501e` (diff SHA-256 `25d635360b66aed2f7d79965703be35ecad4c76706a993da6d0b9269170edb55`); both receipts are in `docs/evidence/android-package-seat1-*-2026-11-26.txt`. Not proved yet: the physical WebView interaction, external-link matrix and teardown drill.
+Proof: the APK compiled and installed on `ZY22H5K8QR`; focused package tests pass 4/4, the whole shared Bun suite passes 1,785 with 1 skip, and the native-boundary gate holds at 34 files / 3,406 lines / 18 names with the Android platform seam explicitly listed and its reason written beside it. Seat 1 first sent back five lifecycle/security defects, then accepted the repaired frozen candidate `c1d29501e` (diff SHA-256 `25d635360b66aed2f7d79965703be35ecad4c76706a993da6d0b9269170edb55`); both receipts are in `docs/evidence/android-package-seat1-*-2026-11-26.txt`. The basic physical WebView open/close/external hand-off and force-stop relaunch are now proved in `docs/evidence/android-a3-web-view-2026-11-26/`; the full external matrix and the other A3 platform seams remain open.
 
 Replaced: the absent Android package export. Undo: revert the commit; the shared web and iOS paths are unchanged.
 

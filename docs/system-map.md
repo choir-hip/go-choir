@@ -319,9 +319,12 @@ version 1.0 and ran it on the physical Motorola. The signed-out Paper fetched
 Apple-style extension calls failed. This proves the shared Android host and
 build route, not feature parity. The package-first Kotlin `ExactExtension` now
 serves `readerOpenExternal` and `web-page`; its APK compiled and installed, and
-seat 1 accepted the repaired candidate `c1d29501e`. The physical WebView drill,
-Kotlin deck, auth, audio and voice are still missing. Artifacts:
-`docs/evidence/android-a0-2026-11-26/` and
+seat 1 accepted the repaired candidate `c1d29501e`. The physical WebView drill
+now renders a source in-app, hands an HTTPS source to Chrome, closes cleanly and
+survives force-stop/cold relaunch. The full external matrix, file/audio hand-off,
+reader follow/aim, podcast clip location, Kotlin deck, auth, audio and voice are
+still missing. Artifacts: `docs/evidence/android-a0-2026-11-26/`,
+`docs/evidence/android-a3-web-view-2026-11-26/` and
 `docs/evidence/android-package-seat1-*-2026-11-26.txt`.
 
 Key paths: `mobile/AutoradioLab/app.ts`, `radio-runtime.ts`,

@@ -1,0 +1,1339 @@
+variant lab-one: news.choir.autoradio.lab.one
+clock 6000 ms · generation 1 · epoch 25 · real=6021
+clock 6000 ms · settled · generation 1 · epoch 25
+tapped #30 "bar-mark" · delivery platform · generation 1 · epoch 26 · clock 6000 ms
+clock 6600 ms · generation 1 · epoch 44 · real=619
+clock 6600 ms · settled · generation 1 · epoch 44
+tapped #198 "place-paper" · delivery platform · generation 1 · epoch 47 · clock 6600 ms
+clock 11600 ms · generation 1 · epoch 47 · real=5032
+clock 11600 ms · settled · generation 1 · epoch 47
+tapped #343 "paper-story-/pub/texture/russia-and-ukraine-trade-strikes-overnight-four-dead-as-attacks-on-energy-grid-intensify-pub945c577d8" · delivery platform · generation 1 · epoch 49 · clock 11600 ms
+clock 16600 ms · generation 1 · epoch 50 · real=5039
+clock 16600 ms · settled · generation 1 · epoch 50
+tapped #1849 "reader-source-5" · delivery platform · generation 1 · epoch 51 · clock 16600 ms · scrolled={"from":[160,48358.78],"to":[160,48358.78]}
+clock 24600 ms · generation 1 · epoch 52 · real=8036
+clock 24600 ms · settled · generation 1 · epoch 52
+tapped #3239 "content-toggle" · delivery platform · generation 1 · epoch 53 · clock 24600 ms
+clock 25600 ms · generation 1 · epoch 53 · real=1041
+clock 25600 ms · settled · generation 1 · epoch 53
+tapped #3256 "reader-web-safari" · delivery platform · generation 1 · epoch 54 · clock 25600 ms
+clock 28600 ms · generation 1 · epoch 54 · real=3092
+t=0 hc did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading state lockTick
+t=0 hb did not use its kept answer: identifying argument 1 differs from the one it was kept for, reading state hbTick
+t=0 rpulse did not use its kept answer: identifying argument 3 differs from the one it was kept for, reading state radioTick
+t=0 tc did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading resource vp (holding a fresh answer)
+t=0 tx did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading resource vp (holding a fresh answer)
+t=0 th did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading resource vp (holding a fresh answer)
+t=0 thl did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading resource vp (holding a fresh answer)
+t=0 brun's kept answer is waiting for its identifying arguments
+t=0 bi's kept answer is waiting for its identifying arguments
+t=0 acs's kept answer is waiting for its identifying arguments
+t=0 pfront did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading state paperWidth
+t=0 tlist's kept answer is waiting for its identifying arguments
+t=0 fsList's kept answer is waiting for its identifying arguments
+t=0 fvInfo's kept answer is waiting for its identifying arguments
+t=0 mbx's kept answer is waiting for its identifying arguments
+t=0 msy's kept answer is waiting for its identifying arguments
+t=0 mmsg's kept answer is waiting for its identifying arguments
+t=0 mnote's kept answer is waiting for its identifying arguments
+t=0 qv's kept answer is waiting for its identifying arguments
+t=0 rpfacts's kept answer is waiting for its identifying arguments
+t=0 rp's kept answer is waiting for its identifying arguments
+t=0 lbList's kept answer is waiting for its identifying arguments
+t=0 ldInfo's kept answer is waiting for its identifying arguments
+t=0 ldChap's kept answer is waiting for its identifying arguments
+t=0 ldFound's kept answer is waiting for its identifying arguments
+t=0 edInfo's kept answer is waiting for its identifying arguments
+t=0 micperm's kept answer is waiting for its identifying arguments
+t=0 podNow's kept answer is waiting for its identifying arguments
+t=0 podHead's kept answer is waiting for its identifying arguments
+t=0 podShow's kept answer is waiting for its identifying arguments
+t=0 podEp's kept answer is waiting for its identifying arguments
+t=0 lnc's kept answer is waiting for its identifying arguments
+t=0 psr's kept answer is waiting for its identifying arguments
+t=0 preq shows its kept answer from the last session
+t=0 preqd shows its kept answer from the last session
+t=0 pgs shows its kept answer from the last session
+t=0 bf shows its kept answer from the last session
+t=0 ds shows its kept answer from the last session
+t=0 rnote shows its kept answer from the last session
+t=0 au shows its kept answer from the last session
+t=0 pl shows its kept answer from the last session
+t=0 siv shows its kept answer from the last session
+t=0 ri shows its kept answer from the last session
+t=0 epicks shows its kept answer from the last session
+t=0 rfollow shows its kept answer from the last session
+t=0 raim shows its kept answer from the last session
+t=0 mfr shows its kept answer from the last session
+t=0 mcmp shows its kept answer from the last session
+t=0 acctInfo shows its kept answer from the last session
+t=0 cmpt shows its kept answer from the last session
+t=0 sfacts shows its kept answer from the last session
+t=0 learnt shows its kept answer from the last session
+t=0 act shows its kept answer from the last session
+t=0 about shows its kept answer from the last session
+t=0 bld shows its kept answer from the last session
+t=0 delv shows its kept answer from the last session
+t=0 ovoice shows its kept answer from the last session
+t=0 ob shows its kept answer from the last session
+t=0 ep shows its kept answer from the last session
+t=0 vc shows its kept answer from the last session
+t=0 trec shows its kept answer from the last session
+t=0 tp shows its kept answer from the last session
+t=0 nb shows its kept answer from the last session
+t=0 ldFollow shows its kept answer from the last session
+t=0 ldFollowAt shows its kept answer from the last session
+t=0 cvraw shows its kept answer from the last session
+t=0 cv shows its kept answer from the last session
+t=0 voicep shows its kept answer from the last session
+t=0 rask shows its kept answer from the last session
+t=0 rserved shows its kept answer from the last session
+t=0 lrn shows its kept answer from the last session
+t=0 cons shows its kept answer from the last session
+t=0 dl shows its kept answer from the last session
+t=0 podHome shows its kept answer from the last session
+t=0 shClips shows its kept answer from the last session
+t=0 hearClips shows its kept answer from the last session
+t=0 boot: 47 nodes, epoch 1
+t=0 hc shows its build-time answer until its source answers
+t=0 th shows its build-time answer until its source answers
+t=0 thl shows its build-time answer until its source answers
+t=0 hb shows its build-time answer until its source answers
+t=0 rpulse shows its build-time answer until its source answers
+t=0 brun shows its build-time answer until its source answers
+t=0 bi shows its build-time answer until its source answers
+t=0 acs shows its build-time answer until its source answers
+t=0 rdoc shows its build-time answer until its source answers
+t=0 tlist shows its build-time answer until its source answers
+t=0 fsList shows its build-time answer until its source answers
+t=0 fvInfo shows its build-time answer until its source answers
+t=0 mbx shows its build-time answer until its source answers
+t=0 msy shows its build-time answer until its source answers
+t=0 mmsg shows its build-time answer until its source answers
+t=0 mnote shows its build-time answer until its source answers
+t=0 tc shows its build-time answer until its source answers
+t=0 tx shows its build-time answer until its source answers
+t=0 qv shows its build-time answer until its source answers
+t=0 rpfacts shows its build-time answer until its source answers
+t=0 rp shows its build-time answer until its source answers
+t=0 lbList shows its build-time answer until its source answers
+t=0 ldInfo shows its build-time answer until its source answers
+t=0 ldChap shows its build-time answer until its source answers
+t=0 ldFound shows its build-time answer until its source answers
+t=0 edInfo shows its build-time answer until its source answers
+t=0 psr shows its build-time answer until its source answers
+t=0 micperm shows its build-time answer until its source answers
+t=0 podNow shows its build-time answer until its source answers
+t=0 podHead shows its build-time answer until its source answers
+t=0 podShow shows its build-time answer until its source answers
+t=0 podEp shows its build-time answer until its source answers
+t=0 display scale (4 asked again) → epoch 1 (+0 −0 ~0)
+t=0 trust roots: the platform certificate verifier
+t=0 preferences (4 asked again) → epoch 1 (+0 −0 ~0)
+t=0 root font size (0 asked again) → epoch 2 (+0 −0 ~46)
+t=0 viewport (4 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query hc: hostCaps
+t=0 console: api: native handle usable (answering hostCaps)
+t=0 query preq: autoradio.pageRequest (substituted)
+t=0 query preqd: pageRequested
+t=0 query pgs: pagesView
+t=0 query bf: autoradio.barFacts (substituted)
+t=0 query hb: heartbeat
+t=0 query ds: autoradio.deckState (substituted)
+t=0 query rnote: autoradio.radioNote (substituted)
+t=0 query rpulse: radioPulse
+t=0 query au: autoradio.choirAuth (substituted)
+t=0 query pl: autoradio.choirPlayer (substituted)
+t=0 query siv: signInView
+t=0 query ri: autoradio.radioView (substituted)
+t=0 query rfollow: autoradio.readerFollow (substituted)
+t=0 query raim: autoradio.readerAim (substituted)
+t=0 query tc: themeCards
+t=0 query tx: themeExtras
+t=0 query acctInfo: settingsAccount
+t=0 query cmpt: settingsComputer
+t=0 query sfacts: autoradio.settingsFacts (substituted)
+t=0 query learnt: learnedInfo
+t=0 query act: activityPage
+t=0 query about: aboutPage
+t=0 query bld: aboutBuild
+t=0 query delv: accountDeleteView
+t=0 query ovoice: autoradio.voiceSetupFacts (substituted)
+t=0 query vc: autoradio.voiceCards (substituted)
+t=0 query trec: autoradio.takesRecorder (substituted)
+t=0 query tp: takesPage
+t=0 query ldFollow: autoradio.importedFollow (substituted)
+t=0 query ldFollowAt: importedLocate
+t=0 query cvraw: autoradio.conversationEntries (substituted)
+t=0 query cv: conversationInfo
+t=0 query voicep: autoradio.voiceProfile (substituted)
+t=0 query rask: autoradio.retrievalAsk (substituted)
+t=0 query rserved: retrievalServe
+t=0 query lrn: learnPage
+t=0 query cons: consentView
+t=0 query dl: modelsPage
+t=0 query th: theme
+t=0 query thl: themeList
+t=0 query brun: barRun
+t=0 query bi: barInfo
+t=0 query acs: accountState
+t=0 query epicks: editionPicks
+t=0 query pfront: paperFront
+t=0 query tlist: texturesList
+t=0 query fsList: fileList
+t=0 query fvInfo: fileOpen
+t=0 query mbx: mailBox
+t=0 query mfr: mailFrame
+t=0 query msy: mailSync
+t=0 query mmsg: mailMessage
+t=0 query mcmp: mailCompose
+t=0 query mnote: mailNoteSelect
+t=0 query ob: onboardingPage
+t=0 query ep: editionTopics
+t=0 query qv: queueView
+t=0 query rpfacts: radioPageFacts
+t=0 query rp: radioPage
+t=0 query nb: notebookPageShared
+t=0 query lbList: importedList
+t=0 query ldInfo: importedDoc
+t=0 query ldChap: importedSection
+t=0 query ldFound: importedFind
+t=0 query edInfo: textureEditInfo
+t=0 query micperm: micPermission
+t=0 query podNow: podcastNow
+t=0 query podHead: podcastPlayhead
+t=0 query podHome: podcastHome
+t=0 query podShow: podcastShow
+t=0 query podEp: podcastEpisode
+t=0 query shClips: showClips
+t=0 query hearClips: storyClips
+t=0 query rdoc: readerDocShared
+t=0 query lnc: launcherData
+t=0 query psr: paperSearch
+t=0 continuation 1 (hc): executor token 1
+t=0 continuation 2 (preqd): executor token 2
+t=0 continuation 3 (pgs): executor token 3
+t=0 continuation 4 (th): executor token 23
+t=0 continuation 5 (thl): executor token 24
+t=0 continuation 6 (hb): executor token 4
+t=0 continuation 7 (rpulse): executor token 5
+t=0 continuation 8 (brun): executor token 25
+t=0 continuation 9 (bi): executor token 26
+t=0 continuation 10 (acs): executor token 27
+t=0 continuation 11 (siv): executor token 6
+t=0 continuation 12 (epicks): executor token 28
+t=0 continuation 13 (pfront): executor token 29
+t=0 continuation 14 (rdoc): executor token 58
+t=0 continuation 15 (tlist): executor token 30
+t=0 continuation 16 (lnc): executor token 59
+t=0 continuation 17 (fsList): executor token 31
+t=0 continuation 18 (fvInfo): executor token 32
+t=0 continuation 19 (mbx): executor token 33
+t=0 continuation 20 (mfr): executor token 34
+t=0 continuation 21 (msy): executor token 35
+t=0 continuation 22 (mmsg): executor token 36
+t=0 continuation 23 (mcmp): executor token 37
+t=0 continuation 24 (mnote): executor token 38
+t=0 continuation 25 (tc): executor token 7
+t=0 continuation 26 (tx): executor token 8
+t=0 continuation 27 (acctInfo): executor token 9
+t=0 continuation 28 (cmpt): executor token 10
+t=0 continuation 29 (learnt): executor token 11
+t=0 continuation 30 (act): executor token 12
+t=0 continuation 31 (about): executor token 13
+t=0 continuation 32 (bld): executor token 14
+t=0 continuation 33 (delv): executor token 15
+t=0 continuation 34 (ob): executor token 39
+t=0 continuation 35 (ep): executor token 40
+t=0 continuation 36 (qv): executor token 41
+t=0 continuation 37 (rpfacts): executor token 42
+t=0 continuation 38 (rp): executor token 43
+t=0 continuation 39 (tp): executor token 16
+t=0 continuation 40 (nb): executor token 44
+t=0 continuation 41 (lbList): executor token 45
+t=0 continuation 42 (ldInfo): executor token 46
+t=0 continuation 43 (ldChap): executor token 47
+t=0 continuation 44 (ldFound): executor token 48
+t=0 continuation 45 (ldFollowAt): executor token 17
+t=0 continuation 46 (edInfo): executor token 49
+t=0 continuation 47 (cv): executor token 18
+t=0 continuation 48 (rserved): executor token 19
+t=0 continuation 49 (psr): executor token 60
+t=0 continuation 50 (lrn): executor token 20
+t=0 continuation 51 (cons): executor token 21
+t=0 continuation 52 (micperm): executor token 50
+t=0 continuation 53 (dl): executor token 22
+t=0 continuation 54 (podNow): executor token 51
+t=0 continuation 55 (podHead): executor token 52
+t=0 continuation 56 (podHome): executor token 53
+t=0 continuation 57 (podShow): executor token 54
+t=0 continuation 58 (podEp): executor token 55
+t=0 continuation 59 (shClips): executor token 56
+t=0 continuation 60 (hearClips): executor token 57
+t=0 data_ready (77 asked again) → epoch 2 (+0 −0 ~0)
+t=0 modules bound here: autoradio
+t=0 query bf: autoradio.barFacts (native)
+t=0 request 61 (bf): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query au: autoradio.choirAuth (native)
+t=0 request 62 (au): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query pl: autoradio.choirPlayer (native)
+t=0 request 63 (pl): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query cvraw: autoradio.conversationEntries (native)
+t=0 request 64 (cvraw): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query ds: autoradio.deckState (native)
+t=0 request 65 (ds): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query ldFollow: autoradio.importedFollow (native)
+t=0 request 66 (ldFollow): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query preq: autoradio.pageRequest (native)
+t=0 request 67 (preq): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query rnote: autoradio.radioNote (native)
+t=0 request 68 (rnote): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query ri: autoradio.radioView (native)
+t=0 request 69 (ri): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query raim: autoradio.readerAim (native)
+t=0 request 70 (raim): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query rfollow: autoradio.readerFollow (native)
+t=0 request 71 (rfollow): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query rask: autoradio.retrievalAsk (native)
+t=0 request 72 (rask): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query sfacts: autoradio.settingsFacts (native)
+t=0 request 73 (sfacts): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query trec: autoradio.takesRecorder (native)
+t=0 request 74 (trec): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query vc: autoradio.voiceCards (native)
+t=0 request 75 (vc): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query voicep: autoradio.voiceProfile (native)
+t=0 request 76 (voicep): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query ovoice: autoradio.voiceSetupFacts (native)
+t=0 request 77 (ovoice): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 hc: the reply asks for one more request
+t=0 continuation 78 (hc): executor token 1
+t=0 fulfil 1 (hc) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 6 ms] → epoch 2 (+0 −0 ~0)
+t=0 storage failed: stat app:/data/signout-pending: ENOENT filesystem: No such file or directory (os error 2)
+t=0 hc: the reply asks for one more request
+t=0 continuation 79 (hc): executor token 1
+t=0 fulfil 78 (hc) [HTTP 204, 0 bytes; wall 0 ms] → epoch 2 (+0 −0 ~0)
+t=0 storage failed: stat app:/data/account-stamp: ENOENT filesystem: No such file or directory (os error 2)
+t=0 hc: the reply asks for one more request
+t=0 continuation 80 (hc): executor token 1
+t=0 fulfil 79 (hc) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 1 ms] → epoch 2 (+0 −0 ~0)
+t=0 storage failed: readFile app:/data/pending-revoke: ENOENT filesystem: No such file or directory (os error 2)
+t=0 hc: the reply asks for one more request
+t=0 continuation 81 (hc): executor token 1
+t=0 fulfil 80 (hc) [HTTP 204, 0 bytes; wall 0 ms] → epoch 2 (+0 −0 ~0)
+t=0 console: AUTORADIO js heartbeat n=1 t=0
+t=0 console: api: session found=false key=false computer=false
+t=0 hc answered: equal to its build-time answer
+t=0 acs did not use its kept answer: identifying argument 1 differs from the one it was kept for, reading state lockTick and resource hc (holding a fresh answer) and resource au (holding a fresh answer) and resource hpg (holding a fresh answer) and resource siv (holding an admitted kept answer) and state so
+t=0 store exact.kept.hc
+t=0 fulfil 81 (hc) [HTTP 204, 0 bytes; wall 0 ms] → epoch 2 (+0 −0 ~0)
+t=0 preqd: the reply asks for one more request
+t=0 continuation 82 (preqd): executor token 2
+t=0 fulfil 2 (preqd) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 14 ms] → epoch 2 (+0 −0 ~0)
+t=0 pgs: the reply asks for one more request
+t=0 continuation 83 (pgs): executor token 3
+t=0 fulfil 3 (pgs) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 15 ms] → epoch 2 (+0 −0 ~0)
+t=0 th: the reply asks for one more request
+t=0 continuation 84 (th): executor token 23
+t=0 fulfil 4 (th) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 16 ms] → epoch 2 (+0 −0 ~0)
+t=0 thl: the reply asks for one more request
+t=0 continuation 85 (thl): executor token 24
+t=0 fulfil 5 (thl) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 17 ms] → epoch 2 (+0 −0 ~0)
+t=0 hb answered: equal to its build-time answer
+t=0 store exact.kept.hb
+t=0 fulfil 6 (hb) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 19 ms] → epoch 2 (+0 −0 ~0)
+t=0 rpulse: the reply asks for one more request
+t=0 request 86 (rpulse): POST exact-native:
+t=0 fulfil 7 (rpulse) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 2 (+0 −0 ~0)
+t=0 brun answered: equal to its build-time answer
+t=0 bi did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading resource brun (holding a fresh answer)
+t=0 store exact.kept.brun
+t=0 fulfil 8 (brun) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 22 ms] → epoch 2 (+0 −0 ~0)
+t=0 bi answered: equal to its build-time answer
+t=0 query micperm: micPermission
+t=0 forget request 52 (micperm)
+t=0 request 87 (micperm): POST exact-native:
+t=0 micperm shows its kept answer from the last session
+t=0 store exact.kept.bi
+t=0 fulfil 9 (bi) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 26 ms] → epoch 2 (+0 −0 ~0)
+t=0 acs answered: replaces its build-time answer
+t=0 query tlist: texturesList
+t=0 query fsList: fileList
+t=0 query fvInfo: fileOpen
+t=0 query mbx: mailBox
+t=0 query msy: mailSync
+t=0 query mmsg: mailMessage
+t=0 query mnote: mailNoteSelect
+t=0 query lbList: importedList
+t=0 query ldInfo: importedDoc
+t=0 query ldChap: importedSection
+t=0 query ldFound: importedFind
+t=0 query edInfo: textureEditInfo
+t=0 query rdoc: readerDocShared
+t=0 forget request 15 (tlist)
+t=0 forget request 17 (fsList)
+t=0 forget request 18 (fvInfo)
+t=0 forget request 19 (mbx)
+t=0 forget request 21 (msy)
+t=0 forget request 22 (mmsg)
+t=0 forget request 24 (mnote)
+t=0 forget request 41 (lbList)
+t=0 forget request 42 (ldInfo)
+t=0 forget request 43 (ldChap)
+t=0 forget request 44 (ldFound)
+t=0 forget request 46 (edInfo)
+t=0 forget request 14 (rdoc)
+t=0 continuation 88 (rdoc): executor token 85
+t=0 store exact.kept.acs
+t=0 fulfil 10 (acs) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 29 ms] → epoch 3 (+0 −3 ~2)
+t=0 fulfil 11 (siv) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 38 ms] → epoch 3 (+0 −0 ~0)
+t=0 epicks: the reply asks for one more request
+t=0 continuation 89 (epicks): executor token 28
+t=0 fulfil 12 (epicks) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 40 ms] → epoch 3 (+0 −0 ~0)
+t=0 pfront: the reply asks for one more request
+t=0 request 90 (pfront): GET https://choir.news/api/platform/publications/front?limit=100
+t=0 fulfil 13 (pfront) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 42 ms] → epoch 3 (+0 −0 ~0)
+t=0 lnc: the reply asks for one more request
+t=0 continuation 91 (lnc): executor token 59
+t=0 fulfil 16 (lnc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 45 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 20 (mfr) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 46 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 23 (mcmp) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 51 ms] → epoch 3 (+0 −0 ~0)
+t=0 tc: the reply asks for one more request
+t=0 continuation 92 (tc): executor token 7
+t=0 fulfil 25 (tc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 53 ms] → epoch 3 (+0 −0 ~0)
+t=0 tx: the reply asks for one more request
+t=0 continuation 93 (tx): executor token 8
+t=0 fulfil 26 (tx) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 54 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 27 (acctInfo) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 56 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 28 (cmpt) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 59 ms] → epoch 3 (+0 −0 ~0)
+t=0 learnt: the reply asks for one more request
+t=0 continuation 94 (learnt): executor token 11
+t=0 fulfil 29 (learnt) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 62 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 30 (act) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 63 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 31 (about) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 65 ms] → epoch 3 (+0 −0 ~0)
+t=0 bld: the reply asks for one more request
+t=0 request 95 (bld): GET https://choir.news/health
+t=0 fulfil 32 (bld) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 68 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 33 (delv) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 70 ms] → epoch 3 (+0 −0 ~0)
+t=0 ob: the reply asks for one more request
+t=0 continuation 96 (ob): executor token 39
+t=0 fulfil 34 (ob) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 72 ms] → epoch 3 (+0 −0 ~0)
+t=0 ep: the reply asks for one more request
+t=0 continuation 97 (ep): executor token 40
+t=0 fulfil 35 (ep) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 73 ms] → epoch 3 (+0 −0 ~0)
+t=0 qv answered: equal to its build-time answer
+t=0 store exact.kept.qv
+t=0 fulfil 36 (qv) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 75 ms] → epoch 3 (+0 −0 ~0)
+t=0 rpfacts: the reply asks for one more request
+t=0 request 98 (rpfacts): POST exact-native:
+t=0 fulfil 37 (rpfacts) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 78 ms] → epoch 3 (+0 −0 ~0)
+t=0 rp answered: equal to its build-time answer
+t=0 store exact.kept.rp
+t=0 fulfil 38 (rp) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 80 ms] → epoch 3 (+0 −0 ~0)
+t=0 tp: the reply asks for one more request
+t=0 continuation 99 (tp): executor token 16
+t=0 fulfil 39 (tp) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 84 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 40 (nb) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 86 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 45 (ldFollowAt) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 90 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 47 (cv) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 93 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 48 (rserved) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 96 ms] → epoch 3 (+0 −0 ~0)
+t=0 psr answered: equal to its build-time answer
+t=0 fulfil 49 (psr) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 99 ms] → epoch 3 (+0 −0 ~0)
+t=0 lrn: the reply asks for one more request
+t=0 request 100 (lrn): POST exact-native:
+t=0 fulfil 50 (lrn) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 103 ms] → epoch 3 (+0 −0 ~0)
+t=0 cons: the reply asks for one more request
+t=0 continuation 101 (cons): executor token 21
+t=0 fulfil 51 (cons) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 104 ms] → epoch 3 (+0 −0 ~0)
+t=0 dl: the reply asks for one more request
+t=0 continuation 102 (dl): executor token 22
+t=0 fulfil 53 (dl) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 106 ms] → epoch 3 (+0 −0 ~0)
+t=0 podNow answered: equal to its build-time answer
+t=0 query podHead: podcastPlayhead
+t=0 query podShow: podcastShow
+t=0 query podEp: podcastEpisode
+t=0 forget request 55 (podHead)
+t=0 forget request 57 (podShow)
+t=0 forget request 58 (podEp)
+t=0 store exact.kept.podNow
+t=0 fulfil 54 (podNow) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 108 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 56 (podHome) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 113 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 59 (shClips) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 118 ms] → epoch 3 (+0 −0 ~0)
+t=0 hearClips: the reply asks for one more request
+t=0 request 103 (hearClips): GET https://choir.news/api/platform/podcast-clips?limit=200
+t=0 fulfil 60 (hearClips) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 122 ms] → epoch 3 (+0 −0 ~0)
+t=0 preqd: the reply asks for one more request
+t=0 request 104 (preqd): POST exact-native:
+t=0 fulfil 82 (preqd) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 106 ms] → epoch 3 (+0 −0 ~0)
+t=0 rdoc answered: replaces its build-time answer
+t=0 store exact.kept.rdoc
+t=0 fulfil 88 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 89 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 61 (bf) [HTTP 200, 29 bytes; wall 139 ms] refused: Data { resource: "bf", error: Failed(Error, "autoradio.barFacts: NotSupportedError", "NotSupportedError") }
+t=0 request 61 (bf) failed and is no longer pending: it keeps its last value: autoradio.barFacts: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 62 (au) [HTTP 200, 29 bytes; wall 145 ms] refused: Data { resource: "au", error: Failed(Error, "autoradio.choirAuth: NotSupportedError", "NotSupportedError") }
+t=0 request 62 (au) failed and is no longer pending: it keeps its last value: autoradio.choirAuth: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 63 (pl) [HTTP 200, 29 bytes; wall 149 ms] refused: Data { resource: "pl", error: Failed(Error, "autoradio.choirPlayer: NotSupportedError", "NotSupportedError") }
+t=0 request 63 (pl) failed and is no longer pending: it keeps its last value: autoradio.choirPlayer: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 64 (cvraw) [HTTP 200, 29 bytes; wall 154 ms] refused: Data { resource: "cvraw", error: Failed(Error, "autoradio.conversationEntries: NotSupportedError", "NotSupportedError") }
+t=0 request 64 (cvraw) failed and is no longer pending: it keeps its last value: autoradio.conversationEntries: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 65 (ds) [HTTP 200, 29 bytes; wall 159 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=0 request 65 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 66 (ldFollow) [HTTP 200, 29 bytes; wall 164 ms] refused: Data { resource: "ldFollow", error: Failed(Error, "autoradio.importedFollow: NotSupportedError", "NotSupportedError") }
+t=0 request 66 (ldFollow) failed and is no longer pending: it keeps its last value: autoradio.importedFollow: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 67 (preq) [HTTP 200, 29 bytes; wall 169 ms] refused: Data { resource: "preq", error: Failed(Error, "autoradio.pageRequest: NotSupportedError", "NotSupportedError") }
+t=0 request 67 (preq) failed and is no longer pending: it keeps its last value: autoradio.pageRequest: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 68 (rnote) [HTTP 200, 29 bytes; wall 174 ms] refused: Data { resource: "rnote", error: Failed(Error, "autoradio.radioNote: NotSupportedError", "NotSupportedError") }
+t=0 request 68 (rnote) failed and is no longer pending: it keeps its last value: autoradio.radioNote: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 69 (ri) [HTTP 200, 29 bytes; wall 179 ms] refused: Data { resource: "ri", error: Failed(Error, "autoradio.radioView: NotSupportedError", "NotSupportedError") }
+t=0 request 69 (ri) failed and is no longer pending: it keeps its last value: autoradio.radioView: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 70 (raim) [HTTP 200, 29 bytes; wall 183 ms] refused: Data { resource: "raim", error: Failed(Error, "autoradio.readerAim: NotSupportedError", "NotSupportedError") }
+t=0 request 70 (raim) failed and is no longer pending: it keeps its last value: autoradio.readerAim: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 71 (rfollow) [HTTP 200, 29 bytes; wall 188 ms] refused: Data { resource: "rfollow", error: Failed(Error, "autoradio.readerFollow: NotSupportedError", "NotSupportedError") }
+t=0 request 71 (rfollow) failed and is no longer pending: it keeps its last value: autoradio.readerFollow: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 72 (rask) [HTTP 200, 29 bytes; wall 191 ms] refused: Data { resource: "rask", error: Failed(Error, "autoradio.retrievalAsk: NotSupportedError", "NotSupportedError") }
+t=0 request 72 (rask) failed and is no longer pending: it keeps its last value: autoradio.retrievalAsk: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 73 (sfacts) [HTTP 200, 29 bytes; wall 195 ms] refused: Data { resource: "sfacts", error: Failed(Error, "autoradio.settingsFacts: NotSupportedError", "NotSupportedError") }
+t=0 request 73 (sfacts) failed and is no longer pending: it keeps its last value: autoradio.settingsFacts: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 74 (trec) [HTTP 200, 29 bytes; wall 199 ms] refused: Data { resource: "trec", error: Failed(Error, "autoradio.takesRecorder: NotSupportedError", "NotSupportedError") }
+t=0 request 74 (trec) failed and is no longer pending: it keeps its last value: autoradio.takesRecorder: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 75 (vc) [HTTP 200, 29 bytes; wall 203 ms] refused: Data { resource: "vc", error: Failed(Error, "autoradio.voiceCards: NotSupportedError", "NotSupportedError") }
+t=0 request 75 (vc) failed and is no longer pending: it keeps its last value: autoradio.voiceCards: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 76 (voicep) [HTTP 200, 29 bytes; wall 209 ms] refused: Data { resource: "voicep", error: Failed(Error, "autoradio.voiceProfile: NotSupportedError", "NotSupportedError") }
+t=0 request 76 (voicep) failed and is no longer pending: it keeps its last value: autoradio.voiceProfile: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 77 (ovoice) [HTTP 200, 29 bytes; wall 214 ms] refused: Data { resource: "ovoice", error: Failed(Error, "autoradio.voiceSetupFacts: NotSupportedError", "NotSupportedError") }
+t=0 request 77 (ovoice) failed and is no longer pending: it keeps its last value: autoradio.voiceSetupFacts: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 rpulse: the reply asks for one more request
+t=0 request 105 (rpulse): POST exact-native:
+t=0 fulfil 86 (rpulse) [HTTP 200, 29 bytes; wall 185 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 87 (micperm) [HTTP 200, 29 bytes; wall 175 ms] → epoch 3 (+0 −0 ~0)
+t=0 rpfacts answered: equal to its build-time answer
+t=0 query lnc: launcherData
+t=0 forget request 91 (lnc)
+t=0 continuation 106 (lnc): executor token 91
+t=0 lnc shows its kept answer from the last session
+t=0 store exact.kept.rpfacts
+t=0 fulfil 98 (rpfacts) [HTTP 200, 29 bytes; wall 134 ms] → epoch 3 (+0 −0 ~0)
+t=0 lrn: the reply asks for one more request
+t=0 request 107 (lrn): POST exact-native:
+t=0 fulfil 100 (lrn) [HTTP 200, 29 bytes; wall 115 ms] → epoch 3 (+0 −0 ~0)
+t=0 preqd answered differently from its kept answer: the first frame showed the last session's value until its source answered
+t=0 store exact.kept.preqd
+t=0 fulfil 104 (preqd) [HTTP 200, 29 bytes; wall 86 ms] → epoch 3 (+0 −0 ~0)
+t=0 console: radio: pulse restored=false ready=true started=false onAir=no write=false hold=true ahead=0 inFlight=false lost=0
+t=0 rpulse answered: equal to its build-time answer
+t=0 store exact.kept.rpulse
+t=0 fulfil 105 (rpulse) [HTTP 200, 29 bytes; wall 21 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 107 (lrn) [HTTP 200, 29 bytes; wall 15 ms] → epoch 3 (+0 −0 ~0)
+t=0.001334000000042579 pfront: the reply asks for one more request
+t=0.001334000000042579 continuation 108 (pfront): executor token 29
+t=0.001334000000042579 fulfil 90 (pfront) [HTTP 200, 92959 bytes; wall 534 ms; delivery wait 19 ms] → epoch 3 (+0 −0 ~0)
+t=0.001334000000042579 fulfil 95 (bld) [HTTP 200, 3443 bytes; wall 229 ms; delivery wait 322 ms] → epoch 3 (+0 −0 ~0)
+t=0.001334000000042579 fulfil 103 (hearClips) [HTTP 200, 61 bytes; wall 174 ms; delivery wait 329 ms] → epoch 3 (+0 −0 ~0)
+t=0.001334000000042579 pgs answered differently from its kept answer: the first frame showed the last session's value until its source answered
+t=0.001334000000042579 query acs: accountState
+t=0.001334000000042579 query epicks: editionPicks
+t=0.001334000000042579 query pfront: paperFront
+t=0.001334000000042579 query tlist: texturesList
+t=0.001334000000042579 query fvInfo: fileOpen
+t=0.001334000000042579 query mbx: mailBox
+t=0.001334000000042579 query mfr: mailFrame
+t=0.001334000000042579 query msy: mailSync
+t=0.001334000000042579 query mmsg: mailMessage
+t=0.001334000000042579 query mcmp: mailCompose
+t=0.001334000000042579 query ob: onboardingPage
+t=0.001334000000042579 query lbList: importedList
+t=0.001334000000042579 query ldInfo: importedDoc
+t=0.001334000000042579 query edInfo: textureEditInfo
+t=0.001334000000042579 query podHome: podcastHome
+t=0.001334000000042579 query podShow: podcastShow
+t=0.001334000000042579 query podEp: podcastEpisode
+t=0.001334000000042579 query shClips: showClips
+t=0.001334000000042579 query hearClips: storyClips
+t=0.001334000000042579 query rdoc: readerDocShared
+t=0.001334000000042579 forget request 89 (epicks)
+t=0.001334000000042579 continuation 109 (epicks): executor token 93
+t=0.001334000000042579 forget request 108 (pfront)
+t=0.001334000000042579 continuation 110 (pfront): executor token 94
+t=0.001334000000042579 forget request 96 (ob)
+t=0.001334000000042579 continuation 111 (ob): executor token 102
+t=0.001334000000042579 store exact.kept.pgs
+t=0.001334000000042579 store exact.kept.acs
+t=0.001334000000042579 store exact.kept.tlist
+t=0.001334000000042579 store exact.kept.fvInfo
+t=0.001334000000042579 store exact.kept.mbx
+t=0.001334000000042579 store exact.kept.mfr
+t=0.001334000000042579 store exact.kept.msy
+t=0.001334000000042579 store exact.kept.mmsg
+t=0.001334000000042579 store exact.kept.mcmp
+t=0.001334000000042579 store exact.kept.lbList
+t=0.001334000000042579 store exact.kept.ldInfo
+t=0.001334000000042579 store exact.kept.edInfo
+t=0.001334000000042579 store exact.kept.podHome
+t=0.001334000000042579 store exact.kept.podShow
+t=0.001334000000042579 store exact.kept.podEp
+t=0.001334000000042579 store exact.kept.shClips
+t=0.001334000000042579 store exact.kept.hearClips
+t=0.001334000000042579 store exact.kept.rdoc
+t=0.001334000000042579 fulfil 83 (pgs) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 519 ms] → epoch 4 (+40 −3 ~1)
+t=0.001334000000042579 tc: the reply asks for one more request
+t=0.001334000000042579 continuation 112 (tc): executor token 7
+t=0.001334000000042579 fulfil 92 (tc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 554 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 storage failed: readFile app:/data/theme-choice.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.001334000000042579 tc: the reply asks for one more request
+t=0.001334000000042579 continuation 113 (tc): executor token 7
+t=0.001334000000042579 fulfil 112 (tc) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 learnt: the reply asks for one more request
+t=0.001334000000042579 continuation 114 (learnt): executor token 11
+t=0.001334000000042579 fulfil 94 (learnt) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 storage failed: readFile app:/data/what-i-told-the-paper.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.001334000000042579 fulfil 114 (learnt) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 cons: the reply asks for one more request
+t=0.001334000000042579 continuation 115 (cons): executor token 21
+t=0.001334000000042579 fulfil 101 (cons) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 lnc: the reply asks for one more request
+t=0.001334000000042579 continuation 116 (lnc): executor token 91
+t=0.001334000000042579 fulfil 106 (lnc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 storage failed: readFile app:/data/consent.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.001334000000042579 storage failed: readFile app:/data/edition-topics.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.001334000000042579 storage failed: readFile app:/data/onboarding.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.001334000000042579 cons: the reply asks for one more request
+t=0.001334000000042579 request 117 (cons): POST exact-native:
+t=0.001334000000042579 fulfil 115 (cons) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 fulfil 117 (cons) [HTTP 200, 29 bytes; wall 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 tp: the reply asks for one more request
+t=0.001334000000042579 continuation 118 (tp): executor token 16
+t=0.001334000000042579 fulfil 99 (tp) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 23 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 ob: the reply asks for one more request
+t=0.001334000000042579 request 119 (ob): POST exact-native:
+t=0.001334000000042579 fulfil 111 (ob) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 23 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 store exact.kept.ob
+t=0.001334000000042579 fulfil 119 (ob) [HTTP 200, 29 bytes; wall 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 storage failed: readFile app:/data/takes.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.001334000000042579 console: paper: list front stories=100
+t=0.001334000000042579 fulfil 118 (tp) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 23 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 dl: the reply asks for one more request
+t=0.001334000000042579 request 120 (dl): POST exact-native:
+t=0.001334000000042579 fulfil 102 (dl) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 85 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 store exact.kept.pfront
+t=0.001334000000042579 fulfil 110 (pfront) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 fulfil 120 (dl) [HTTP 200, 29 bytes; wall 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 tc: the reply asks for one more request
+t=0.001334000000042579 continuation 121 (tc): executor token 7
+t=0.001334000000042579 fulfil 113 (tc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 57 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 lnc: the reply asks for one more request
+t=0.001334000000042579 continuation 122 (lnc): executor token 91
+t=0.001334000000042579 fulfil 116 (lnc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 58 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 storage failed: readdir app:/data/themes: ENOENT filesystem: No such file or directory (os error 2)
+t=0.001334000000042579 storage failed: stat app:/data/edition-topics.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.001334000000042579 console: themes: the system scheme the app reports is "light"
+t=0.001334000000042579 tc answered: equal to its build-time answer
+t=0.001334000000042579 fulfil 121 (tc) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.001334000000042579 background: storage (0 waiting)
+t=0.001334000000042579 background: done (1 operations)
+t=0.001334000000042579 th answered: replaces its build-time answer
+t=0.001334000000042579 fulfil 84 (th) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 5 (+0 −0 ~6)
+t=0.001334000000042579 thl answered: equal to its build-time answer
+t=0.001334000000042579 fulfil 85 (thl) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 46 ms] → epoch 5 (+0 −0 ~0)
+t=0.001334000000042579 tx answered: replaces its build-time answer
+t=0.001334000000042579 fulfil 93 (tx) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 48 ms] → epoch 5 (+0 −0 ~0)
+t=0.001334000000042579 fulfil 97 (ep) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 70 ms] → epoch 5 (+0 −0 ~0)
+t=0.001334000000042579 store exact.kept.epicks
+t=0.001334000000042579 fulfil 109 (epicks) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 74 ms] → epoch 5 (+0 −0 ~0)
+t=0.001334000000042579 lnc answered differently from its kept answer: the first frame showed the last session's value until its source answered
+t=0.001334000000042579 store exact.kept.lnc
+t=0.001334000000042579 fulfil 122 (lnc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 71 ms] → epoch 5 (+0 −0 ~0)
+t=1 timer row=26 kind=0 nominal_ms=1.000 cutoff_ms=1.000 commit_ms=1.000
+t=1 request 124 (rhm): POST exact-native:
+t=1 timer row=28 kind=0 nominal_ms=1.000 cutoff_ms=1.000 commit_ms=1.000
+t=1 advance → 2 timers fired, epoch 5
+t=1 rhm: the reply asks for one more request
+t=1 request 125 (rhm): POST exact-native:
+t=1 fulfil 124 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 126 (rhm): POST exact-native:
+t=1 fulfil 125 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 continuation 127 (rhm): executor token 115
+t=1 fulfil 126 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 crypto: the driver seeds this launch's randomness (seed 1), so each launch at that seed draws the same bytes; --seed <n> draws others (LLP 1069.005 D2b)
+t=1 console: runsheet: aired refused: duplicate
+t=1 rhm: the reply asks for one more request
+t=1 request 128 (rhm): POST exact-native:
+t=1 fulfil 127 (rhm) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 19 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 129 (rhm): POST exact-native:
+t=1 fulfil 128 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 console: radio: pump starts p-0000000000003c327bbf3da0; deck item none
+t=1 rhm: the reply asks for one more request
+t=1 request 130 (rhm): POST exact-native:
+t=1 fulfil 129 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 131 (rhm): POST exact-native:
+t=1 fulfil 130 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 132 (rhm): POST exact-native:
+t=1 fulfil 131 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 133 (rhm): POST exact-native:
+t=1 fulfil 132 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 134 (rhm): POST exact-native:
+t=1 fulfil 133 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 135 (rhm): POST exact-native:
+t=1 fulfil 134 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 136 (rhm): POST exact-native:
+t=1 fulfil 135 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 137 (rhm): POST exact-native:
+t=1 fulfil 136 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 138 (rhm): POST exact-native:
+t=1 fulfil 137 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 console: radio: hold: 4 ahead on the sheet, the deck holds 0, playing nothing
+t=1 fulfil 138 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=10 timer row=18 kind=0 nominal_ms=10.000 cutoff_ms=10.000 commit_ms=10.000
+t=10 timer row=31 kind=0 nominal_ms=10.000 cutoff_ms=10.000 commit_ms=10.000
+t=16.666666666666668 timer row=24 kind=6 nominal_ms=16.667 cutoff_ms=16.667 commit_ms=16.667
+t=33.333333333333336 timer row=24 kind=6 nominal_ms=33.333 cutoff_ms=33.333 commit_ms=33.333
+t=50 timer row=24 kind=6 nominal_ms=50.000 cutoff_ms=50.000 commit_ms=50.000
+t=55.84483399999999 advance → 5 timers fired, epoch 8
+t=66.66666666666667 timer row=24 kind=6 nominal_ms=66.667 cutoff_ms=66.667 commit_ms=66.667
+t=83.33333333333333 timer row=24 kind=6 nominal_ms=83.333 cutoff_ms=83.333 commit_ms=83.333
+t=100 timer row=24 kind=6 nominal_ms=100.000 cutoff_ms=100.000 commit_ms=100.000
+t=100.00133400000004 query hc: hostCaps
+t=100.00133400000004 query acs: accountState
+t=100.00133400000004 store exact.kept.hc
+t=100.00133400000004 store exact.kept.acs
+t=100.00133400000004 timer row=7 kind=0 nominal_ms=100.001 cutoff_ms=100.001 commit_ms=100.001
+t=116.66666666666667 timer row=24 kind=6 nominal_ms=116.667 cutoff_ms=116.667 commit_ms=116.667
+t=133.33333333333334 timer row=24 kind=6 nominal_ms=133.333 cutoff_ms=133.333 commit_ms=133.333
+t=150 timer row=24 kind=6 nominal_ms=150.000 cutoff_ms=150.000 commit_ms=150.000
+t=166.66666666666666 timer row=24 kind=6 nominal_ms=166.667 cutoff_ms=166.667 commit_ms=166.667
+t=183.33333333333334 timer row=24 kind=6 nominal_ms=183.333 cutoff_ms=183.333 commit_ms=183.333
+t=200 timer row=24 kind=6 nominal_ms=200.000 cutoff_ms=200.000 commit_ms=200.000
+t=216.66666666666666 timer row=24 kind=6 nominal_ms=216.667 cutoff_ms=216.667 commit_ms=216.667
+t=233.33333333333334 timer row=24 kind=6 nominal_ms=233.333 cutoff_ms=233.333 commit_ms=233.333
+t=250 timer row=24 kind=6 nominal_ms=250.000 cutoff_ms=250.000 commit_ms=250.000
+t=266.6666666666667 timer row=24 kind=6 nominal_ms=266.667 cutoff_ms=266.667 commit_ms=266.667
+t=283.3333333333333 timer row=24 kind=6 nominal_ms=283.333 cutoff_ms=283.333 commit_ms=283.333
+t=300 timer row=24 kind=6 nominal_ms=300.000 cutoff_ms=300.000 commit_ms=300.000
+t=316.6666666666667 timer row=24 kind=6 nominal_ms=316.667 cutoff_ms=316.667 commit_ms=316.667
+t=333.3333333333333 timer row=24 kind=6 nominal_ms=333.333 cutoff_ms=333.333 commit_ms=333.333
+t=350 timer row=24 kind=6 nominal_ms=350.000 cutoff_ms=350.000 commit_ms=350.000
+t=366.6666666666667 timer row=24 kind=6 nominal_ms=366.667 cutoff_ms=366.667 commit_ms=366.667
+t=383.3333333333333 timer row=24 kind=6 nominal_ms=383.333 cutoff_ms=383.333 commit_ms=383.333
+t=400 timer row=24 kind=6 nominal_ms=400.000 cutoff_ms=400.000 commit_ms=400.000
+t=416.6666666666667 timer row=24 kind=6 nominal_ms=416.667 cutoff_ms=416.667 commit_ms=416.667
+t=1000 query ds: autoradio.deckState (native)
+t=1000 query rpulse: radioPulse
+t=1000 request 139 (ds): POST exact-native:
+t=1000 request 140 (rpulse): POST exact-native:
+t=1000 timer row=2 kind=0 nominal_ms=1000.000 cutoff_ms=1000.000 commit_ms=1000.000
+t=1000 advance → 24 timers fired, epoch 24
+t=1000 fulfil 139 (ds) [HTTP 200, 29 bytes; wall 20 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=1000 request 139 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=1000 release autoradio.deckState {"tick":0.0}: no reader asks with it
+t=1000 a failed request (0 asked again) → epoch 24 (+0 −0 ~0)
+t=1000 rpulse: the reply asks for one more request
+t=1000 request 141 (rpulse): POST exact-native:
+t=1000 fulfil 140 (rpulse) [HTTP 200, 29 bytes; wall 20 ms; delivery wait 2 ms] → epoch 24 (+0 −0 ~0)
+t=1000 console: radio: pulse restored=true ready=true started=false onAir=yes write=true hold=false ahead=4 inFlight=false lost=0
+t=1000 query brun: barRun
+t=1000 query bi: barInfo
+t=1000 query qv: queueView
+t=1000 query rpfacts: radioPageFacts
+t=1000 query podNow: podcastNow
+t=1000 request 142 (rpfacts): POST exact-native:
+t=1000 request 143 (podNow): POST exact-native:
+t=1000 store exact.kept.rpulse
+t=1000 store exact.kept.brun
+t=1000 store exact.kept.bi
+t=1000 store exact.kept.qv
+t=1000 fulfil 141 (rpulse) [HTTP 200, 29 bytes; wall 20 ms] → epoch 24 (+0 −0 ~0)
+t=1000 query rp: radioPage
+t=1000 store exact.kept.rpfacts
+t=1000 store exact.kept.rp
+t=1000 fulfil 142 (rpfacts) [HTTP 200, 29 bytes; wall 20 ms] → epoch 25 (+86 −2 ~5)
+t=1000 store exact.kept.podNow
+t=1000 fulfil 143 (podNow) [HTTP 200, 29 bytes; wall 20 ms; delivery wait 31 ms] → epoch 25 (+0 −0 ~0)
+t=1001 request 144 (rwm): POST exact-native:
+t=1001 timer row=27 kind=0 nominal_ms=1001.000 cutoff_ms=1001.000 commit_ms=1001.000
+t=1001 advance → 1 timer fired, epoch 25
+t=1236.94825 console: lap: radioWrite: start
+t=1236.94825 rwm: the reply asks for one more request
+t=1236.94825 request 145 (rwm): POST exact-native:
+t=1236.94825 fulfil 144 (rwm) [HTTP 200, 29 bytes; wall 3 ms] → epoch 25 (+0 −0 ~0)
+t=1236.94825 console: lap: radioWrite: radio ready
+t=1236.94825 fulfil 145 (rwm) [HTTP 200, 29 bytes; wall 3 ms] → epoch 25 (+0 −0 ~0)
+t=2000 query ds: autoradio.deckState (native)
+t=2000 query rpulse: radioPulse
+t=2000 request 146 (ds): POST exact-native:
+t=2000 request 147 (rpulse): POST exact-native:
+t=2000 timer row=2 kind=0 nominal_ms=2000.000 cutoff_ms=2000.000 commit_ms=2000.000
+t=2000 advance → 1 timer fired, epoch 25
+t=2013.2807089999997 fulfil 146 (ds) [HTTP 200, 29 bytes; wall 1 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=2013.2807089999997 request 146 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=2013.2807089999997 release autoradio.deckState {"tick":1.0}: no reader asks with it
+t=2013.2807089999997 a failed request (0 asked again) → epoch 25 (+0 −0 ~0)
+t=2013.2807089999997 store exact.kept.rpulse
+t=2013.2807089999997 fulfil 147 (rpulse) [HTTP 200, 29 bytes; wall 1 ms; delivery wait 2 ms] → epoch 25 (+0 −0 ~0)
+t=3000 query ds: autoradio.deckState (native)
+t=3000 query rpulse: radioPulse
+t=3000 request 148 (ds): POST exact-native:
+t=3000 request 149 (rpulse): POST exact-native:
+t=3000 timer row=2 kind=0 nominal_ms=3000.000 cutoff_ms=3000.000 commit_ms=3000.000
+t=3000 advance → 1 timer fired, epoch 25
+t=3000.9505419999996 fulfil 148 (ds) [HTTP 200, 29 bytes; wall 2 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=3000.9505419999996 request 148 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=3000.9505419999996 release autoradio.deckState {"tick":2.0}: no reader asks with it
+t=3000.9505419999996 a failed request (0 asked again) → epoch 25 (+0 −0 ~0)
+t=3000.9505419999996 console: radio: pulse restored=true ready=true started=false onAir=yes write=false hold=false ahead=4 inFlight=false lost=0
+t=3000.9505419999996 store exact.kept.rpulse
+t=3000.9505419999996 fulfil 149 (rpulse) [HTTP 200, 29 bytes; wall 2 ms; delivery wait 3 ms] → epoch 25 (+0 −0 ~0)
+t=5000 query hb: heartbeat
+t=5000 console: AUTORADIO js heartbeat n=2 t=0
+t=5000 store exact.kept.hb
+t=5000 timer row=1 kind=0 nominal_ms=5000.000 cutoff_ms=5000.000 commit_ms=5000.000
+t=5065.15225 advance → 1 timer fired, epoch 25
+t=6000 press view 30 (toggleLauncher) → epoch 26 (+127 −4 ~5)
+t=6001 timer row=26 kind=0 nominal_ms=6001.000 cutoff_ms=6001.000 commit_ms=6001.000
+t=6017.666666666667 timer row=24 kind=6 nominal_ms=6017.667 cutoff_ms=6017.667 commit_ms=6017.667
+t=6034.333333333333 timer row=24 kind=6 nominal_ms=6034.333 cutoff_ms=6034.333 commit_ms=6034.333
+t=6051 timer row=24 kind=6 nominal_ms=6051.000 cutoff_ms=6051.000 commit_ms=6051.000
+t=6062.453958 advance → 4 timers fired, epoch 29
+t=6067.666666666667 timer row=24 kind=6 nominal_ms=6067.667 cutoff_ms=6067.667 commit_ms=6067.667
+t=6084.333333333333 timer row=24 kind=6 nominal_ms=6084.333 cutoff_ms=6084.333 commit_ms=6084.333
+t=6101 timer row=24 kind=6 nominal_ms=6101.000 cutoff_ms=6101.000 commit_ms=6101.000
+t=6117.666666666667 timer row=24 kind=6 nominal_ms=6117.667 cutoff_ms=6117.667 commit_ms=6117.667
+t=6134.333333333333 timer row=24 kind=6 nominal_ms=6134.333 cutoff_ms=6134.333 commit_ms=6134.333
+t=6151 timer row=24 kind=6 nominal_ms=6151.000 cutoff_ms=6151.000 commit_ms=6151.000
+t=6167.666666666667 timer row=24 kind=6 nominal_ms=6167.667 cutoff_ms=6167.667 commit_ms=6167.667
+t=6184.333333333333 timer row=24 kind=6 nominal_ms=6184.333 cutoff_ms=6184.333 commit_ms=6184.333
+t=6201 timer row=24 kind=6 nominal_ms=6201.000 cutoff_ms=6201.000 commit_ms=6201.000
+t=6202.706458000001 advance → 9 timers fired, epoch 38
+t=6217.666666666667 timer row=24 kind=6 nominal_ms=6217.667 cutoff_ms=6217.667 commit_ms=6217.667
+t=6234.333333333333 timer row=24 kind=6 nominal_ms=6234.333 cutoff_ms=6234.333 commit_ms=6234.333
+t=6251 timer row=24 kind=6 nominal_ms=6251.000 cutoff_ms=6251.000 commit_ms=6251.000
+t=6267.666666666667 timer row=24 kind=6 nominal_ms=6267.667 cutoff_ms=6267.667 commit_ms=6267.667
+t=6284.333333333333 timer row=24 kind=6 nominal_ms=6284.333 cutoff_ms=6284.333 commit_ms=6284.333
+t=6301 timer row=24 kind=6 nominal_ms=6301.000 cutoff_ms=6301.000 commit_ms=6301.000
+t=6317.666666666667 timer row=24 kind=6 nominal_ms=6317.667 cutoff_ms=6317.667 commit_ms=6317.667
+t=6331.277833 advance → 7 timers fired, epoch 44
+t=6334.333333333333 timer row=24 kind=6 nominal_ms=6334.333 cutoff_ms=6334.333 commit_ms=6334.333
+t=6351 timer row=24 kind=6 nominal_ms=6351.000 cutoff_ms=6351.000 commit_ms=6351.000
+t=6367.666666666667 timer row=24 kind=6 nominal_ms=6367.667 cutoff_ms=6367.667 commit_ms=6367.667
+t=6384.333333333333 timer row=24 kind=6 nominal_ms=6384.333 cutoff_ms=6384.333 commit_ms=6384.333
+t=6401 timer row=24 kind=6 nominal_ms=6401.000 cutoff_ms=6401.000 commit_ms=6401.000
+t=6452.323916000001 advance → 5 timers fired, epoch 44
+t=6600 continuation 150 (pms): executor token 151
+t=6600 press view 198 (openPage) → epoch 45 (+7 −251 ~7)
+t=6600 -exact-exit-animation: refused on Android (LLP 1063): the painter reads the live tree, so a removed node leaves at once; keep it mounted and fade it on a leaving state instead
+t=6600 pms: the reply asks for one more request
+t=6600 continuation 151 (pms): executor token 151
+t=6600 fulfil 150 (pms) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 1 ms] → epoch 45 (+0 −0 ~0)
+t=6600 pms: the reply asks for one more request
+t=6600 request 152 (pms): POST exact-native:
+t=6600 fulfil 151 (pms) [HTTP 204, 0 bytes; wall 1 ms] → epoch 45 (+0 −0 ~0)
+t=6600 query pgs: pagesView
+t=6600 query acs: accountState
+t=6600 query epicks: editionPicks
+t=6600 query pfront: paperFront
+t=6600 query tlist: texturesList
+t=6600 query fvInfo: fileOpen
+t=6600 query mbx: mailBox
+t=6600 query mfr: mailFrame
+t=6600 query msy: mailSync
+t=6600 query mmsg: mailMessage
+t=6600 query mcmp: mailCompose
+t=6600 query ob: onboardingPage
+t=6600 query lbList: importedList
+t=6600 query ldInfo: importedDoc
+t=6600 query edInfo: textureEditInfo
+t=6600 query podHome: podcastHome
+t=6600 query podShow: podcastShow
+t=6600 query podEp: podcastEpisode
+t=6600 query shClips: showClips
+t=6600 query hearClips: storyClips
+t=6600 query rdoc: readerDocShared
+t=6600 store exact.kept.pgs
+t=6600 store exact.kept.acs
+t=6600 store exact.kept.epicks
+t=6600 store exact.kept.pfront
+t=6600 store exact.kept.tlist
+t=6600 store exact.kept.fvInfo
+t=6600 store exact.kept.mbx
+t=6600 store exact.kept.mfr
+t=6600 store exact.kept.msy
+t=6600 store exact.kept.mmsg
+t=6600 store exact.kept.mcmp
+t=6600 store exact.kept.ob
+t=6600 store exact.kept.lbList
+t=6600 store exact.kept.ldInfo
+t=6600 store exact.kept.edInfo
+t=6600 store exact.kept.podHome
+t=6600 store exact.kept.podShow
+t=6600 store exact.kept.podEp
+t=6600 store exact.kept.shClips
+t=6600 store exact.kept.hearClips
+t=6600 store exact.kept.rdoc
+t=6600 fulfil 152 (pms) [HTTP 200, 29 bytes; wall 17 ms] → epoch 46 (+548 −3 ~1)
+t=6600 query pfront: paperFront
+t=6600 store exact.kept.pfront
+t=6600 resize view 310 (paperFit) → epoch 47 (+37 −39 ~2)
+t=6610 timer row=18 kind=0 nominal_ms=6610.000 cutoff_ms=6610.000 commit_ms=6610.000
+t=6610 timer row=31 kind=0 nominal_ms=6610.000 cutoff_ms=6610.000 commit_ms=6610.000
+t=6656.804667 advance → 2 timers fired, epoch 47
+t=6700 query hc: hostCaps
+t=6700 query acs: accountState
+t=6700 store exact.kept.hc
+t=6700 store exact.kept.acs
+t=6700 timer row=7 kind=0 nominal_ms=6700.000 cutoff_ms=6700.000 commit_ms=6700.000
+t=6721.43425 advance → 1 timer fired, epoch 47
+t=8000.950542 query ds: autoradio.deckState (native)
+t=8000.950542 query rpulse: radioPulse
+t=8000.950542 request 153 (ds): POST exact-native:
+t=8000.950542 request 154 (rpulse): POST exact-native:
+t=8000.950542 timer row=3 kind=0 nominal_ms=8000.951 cutoff_ms=8000.951 commit_ms=8000.951
+t=8000.950542 advance → 1 timer fired, epoch 47
+t=8015.418874999999 fulfil 153 (ds) [HTTP 200, 29 bytes; wall 2 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=8015.418874999999 request 153 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=8015.418874999999 release autoradio.deckState {"tick":3.0}: no reader asks with it
+t=8015.418874999999 a failed request (0 asked again) → epoch 47 (+0 −0 ~0)
+t=8015.418874999999 store exact.kept.rpulse
+t=8015.418874999999 fulfil 154 (rpulse) [HTTP 200, 29 bytes; wall 2 ms; delivery wait 2 ms] → epoch 47 (+0 −0 ~0)
+t=10000 query hb: heartbeat
+t=10000 console: AUTORADIO js heartbeat n=3 t=0
+t=10000 store exact.kept.hb
+t=10000 timer row=1 kind=0 nominal_ms=10000.000 cutoff_ms=10000.000 commit_ms=10000.000
+t=10044.429458999999 advance → 1 timer fired, epoch 47
+t=11600 continuation 155 (pms): executor token 180
+t=11600 press view 343 (openPage) → epoch 48 (+11 −555 ~3)
+t=11600 pms: the reply asks for one more request
+t=11600 continuation 156 (pms): executor token 180
+t=11600 fulfil 155 (pms) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 1 ms] → epoch 48 (+0 −0 ~0)
+t=11600 pms: the reply asks for one more request
+t=11600 request 157 (pms): POST exact-native:
+t=11600 fulfil 156 (pms) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 1 ms] → epoch 48 (+0 −0 ~0)
+t=11600 query pgs: pagesView
+t=11600 query acs: accountState
+t=11600 query epicks: editionPicks
+t=11600 query pfront: paperFront
+t=11600 query tlist: texturesList
+t=11600 query fvInfo: fileOpen
+t=11600 query mbx: mailBox
+t=11600 query mfr: mailFrame
+t=11600 query msy: mailSync
+t=11600 query mmsg: mailMessage
+t=11600 query mcmp: mailCompose
+t=11600 query ob: onboardingPage
+t=11600 query lbList: importedList
+t=11600 query ldInfo: importedDoc
+t=11600 query edInfo: textureEditInfo
+t=11600 query podHome: podcastHome
+t=11600 query podShow: podcastShow
+t=11600 query podEp: podcastEpisode
+t=11600 query shClips: showClips
+t=11600 query hearClips: storyClips
+t=11600 query rdoc: readerDocShared
+t=11600 request 158 (rdoc): GET https://choir.news/api/platform/publications/related?route=%2Fpub%2Ftexture%2Frussia-and-ukraine-trade-strikes-overnight-four-dead-as-attacks-on-energy-grid-intensify-pub945c577d8&limit=5
+t=11600 request 159 (rdoc): GET https://choir.news/api/platform/publications/resolve?route=%2Fpub%2Ftexture%2Frussia-and-ukraine-trade-strikes-overnight-four-dead-as-attacks-on-energy-grid-intensify-pub945c577d8
+t=11600 request 160 (hearClips): GET https://choir.news/api/platform/podcast-clips?limit=200
+t=11600 store exact.kept.pgs
+t=11600 store exact.kept.acs
+t=11600 store exact.kept.epicks
+t=11600 store exact.kept.pfront
+t=11600 store exact.kept.tlist
+t=11600 store exact.kept.fvInfo
+t=11600 store exact.kept.mbx
+t=11600 store exact.kept.mfr
+t=11600 store exact.kept.msy
+t=11600 store exact.kept.mmsg
+t=11600 store exact.kept.mcmp
+t=11600 store exact.kept.ob
+t=11600 store exact.kept.lbList
+t=11600 store exact.kept.ldInfo
+t=11600 store exact.kept.edInfo
+t=11600 store exact.kept.podHome
+t=11600 store exact.kept.podShow
+t=11600 store exact.kept.podEp
+t=11600 store exact.kept.shClips
+t=11600 fulfil 157 (pms) [HTTP 200, 29 bytes; wall 4 ms] → epoch 49 (+12 −3 ~1)
+t=11600.000834 fulfil 158 (rdoc) [HTTP 200, 3353 bytes; wall 42 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 161 (rdoc): executor token 203
+t=11600.000834 fulfil 159 (rdoc) [HTTP 200, 2441541 bytes; wall 363 ms; delivery wait 3 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 store exact.kept.hearClips
+t=11600.000834 fulfil 160 (hearClips) [HTTP 200, 61 bytes; HTTP cache; wall 0 ms; delivery wait 485 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: reply decoded, before the bundle's decoding
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 162 (rdoc): executor token 203
+t=11600.000834 fulfil 161 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 25 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: entities
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 163 (rdoc): executor token 203
+t=11600.000834 fulfil 162 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: resolved blocks
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 164 (rdoc): executor token 203
+t=11600.000834 fulfil 163 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 22 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: before build
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 165 (rdoc): executor token 203
+t=11600.000834 fulfil 164 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 22 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: decoded body_doc
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 166 (rdoc): executor token 203
+t=11600.000834 fulfil 165 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 8 of 114, blocks 8
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 167 (rdoc): executor token 203
+t=11600.000834 fulfil 166 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 16 of 114, blocks 16
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 168 (rdoc): executor token 203
+t=11600.000834 fulfil 167 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 22 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 24 of 114, blocks 24
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 169 (rdoc): executor token 203
+t=11600.000834 fulfil 168 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 32 of 114, blocks 32
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 170 (rdoc): executor token 203
+t=11600.000834 fulfil 169 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 40 of 114, blocks 40
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 171 (rdoc): executor token 203
+t=11600.000834 fulfil 170 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 48 of 114, blocks 48
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 172 (rdoc): executor token 203
+t=11600.000834 fulfil 171 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 56 of 114, blocks 56
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 173 (rdoc): executor token 203
+t=11600.000834 fulfil 172 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 64 of 114, blocks 64
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 174 (rdoc): executor token 203
+t=11600.000834 fulfil 173 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 72 of 114, blocks 72
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 175 (rdoc): executor token 203
+t=11600.000834 fulfil 174 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 80 of 114, blocks 80
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 176 (rdoc): executor token 203
+t=11600.000834 fulfil 175 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 88 of 114, blocks 88
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 177 (rdoc): executor token 203
+t=11600.000834 fulfil 176 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 96 of 114, blocks 96
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 178 (rdoc): executor token 203
+t=11600.000834 fulfil 177 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 104 of 114, blocks 104
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 179 (rdoc): executor token 203
+t=11600.000834 fulfil 178 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 22 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: nodes 112 of 114, blocks 112
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 180 (rdoc): executor token 203
+t=11600.000834 fulfil 179 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: built 114 blocks
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 181 (rdoc): executor token 203
+t=11600.000834 fulfil 180 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: cites 248
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 182 (rdoc): executor token 203
+t=11600.000834 fulfil 181 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: plain text
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 183 (rdoc): executor token 203
+t=11600.000834 fulfil 182 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 22 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: lap: story: markdown 64 blocks
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 continuation 184 (rdoc): executor token 203
+t=11600.000834 fulfil 183 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: reader: story blocks=113 cites=248 related=3
+t=11600.000834 rdoc: the reply asks for one more request
+t=11600.000834 request 185 (rdoc): POST exact-native:
+t=11600.000834 fulfil 184 (rdoc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 49 (+0 −0 ~0)
+t=11600.000834 console: reader: the voice did not take the page
+t=11600.000834 too big to keep: resource `rdoc` answered with more than 262144 bytes (256 KiB) counting its identifying arguments, so the next launch cannot show this answer before the resource answers again. To show it at launch, keep the answer and its identifying arguments under 256 KiB: move what the first screen does not need into another resource, and pass large inputs that do not identify the answer (a token, a time) after `with`, which are not counted; an input that identifies it stays in the call, or becomes a smaller key (LLP 1027 D4)
+t=11600.000834 forget exact.kept.rdoc
+t=11600.000834 fulfil 185 (rdoc) [HTTP 200, 29 bytes; wall 22 ms] → epoch 50 (+2319 −10 ~1)
+t=11601 request 186 (rpf): GET https://choir.news/api/platform/publications/related?route=%2Fpub%2Ftexture%2Fus-reportedly-preparing-new-tariffs-on-china-and-other-countries-wsj-reports-pub4eb21a2ad&limit=5
+t=11601 timer row=17 kind=0 nominal_ms=11601.000 cutoff_ms=11601.000 commit_ms=11601.000
+t=11601 advance → 1 timer fired, epoch 50
+t=11601 rpf: the reply asks for one more request
+t=11601 request 187 (rpf): GET https://choir.news/api/platform/publications/resolve?route=%2Fpub%2Ftexture%2Fus-reportedly-preparing-new-tariffs-on-china-and-other-countries-wsj-reports-pub4eb21a2ad
+t=11601 fulfil 186 (rpf) [HTTP 200, 3281 bytes; wall 46 ms; delivery wait 20 ms] → epoch 50 (+0 −0 ~0)
+t=11601 rpf: the reply asks for one more request
+t=11601 continuation 188 (rpf): executor token 207
+t=11601 fulfil 187 (rpf) [HTTP 200, 383030 bytes; wall 131 ms; delivery wait 2 ms] → epoch 50 (+0 −0 ~0)
+t=11601 console: lap: story: reply decoded, before the bundle's decoding
+t=11601 rpf: the reply asks for one more request
+t=11601 continuation 189 (rpf): executor token 207
+t=11601 fulfil 188 (rpf) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 50 (+0 −0 ~0)
+t=11601 console: lap: story: entities
+t=11601 rpf: the reply asks for one more request
+t=11601 continuation 190 (rpf): executor token 207
+t=11601 fulfil 189 (rpf) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 22 ms] → epoch 50 (+0 −0 ~0)
+t=11601 console: lap: story: resolved blocks
+t=11601 rpf: the reply asks for one more request
+t=11601 continuation 191 (rpf): executor token 207
+t=11601 fulfil 190 (rpf) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 23 ms] → epoch 50 (+0 −0 ~0)
+t=11601 console: lap: story: before build
+t=11601 rpf: the reply asks for one more request
+t=11601 continuation 192 (rpf): executor token 207
+t=11601 fulfil 191 (rpf) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 23 ms] → epoch 50 (+0 −0 ~0)
+t=11601 console: lap: story: decoded body_doc
+t=11601 rpf: the reply asks for one more request
+t=11601 continuation 193 (rpf): executor token 207
+t=11601 fulfil 192 (rpf) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 23 ms] → epoch 50 (+0 −0 ~0)
+t=11601 console: lap: story: nodes 5 of 6, blocks 5
+t=11601 rpf: the reply asks for one more request
+t=11601 continuation 194 (rpf): executor token 207
+t=11601 fulfil 193 (rpf) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 22 ms] → epoch 50 (+0 −0 ~0)
+t=11601 console: lap: story: built 6 blocks
+t=11601 rpf: the reply asks for one more request
+t=11601 continuation 195 (rpf): executor token 207
+t=11601 fulfil 194 (rpf) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 50 (+0 −0 ~0)
+t=11601 console: lap: story: cites 37
+t=11601 rpf: the reply asks for one more request
+t=11601 continuation 196 (rpf): executor token 207
+t=11601 fulfil 195 (rpf) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 23 ms] → epoch 50 (+0 −0 ~0)
+t=11601 console: lap: story: plain text
+t=11601 rpf: the reply asks for one more request
+t=11601 continuation 197 (rpf): executor token 207
+t=11601 fulfil 196 (rpf) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 22 ms] → epoch 50 (+0 −0 ~0)
+t=11601 console: reader: story blocks=5 cites=37 related=3
+t=11601 console: lap: prefetch: between two stories
+t=11601 rpf: the reply asks for one more request
+t=11601 continuation 198 (rpf): executor token 207
+t=11601 fulfil 197 (rpf) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 24 ms] → epoch 50 (+0 −0 ~0)
+t=11601 fulfil 198 (rpf) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 22 ms] → epoch 50 (+0 −0 ~0)
+t=11610 timer row=18 kind=0 nominal_ms=11610.000 cutoff_ms=11610.000 commit_ms=11610.000
+t=11610 timer row=31 kind=0 nominal_ms=11610.000 cutoff_ms=11610.000 commit_ms=11610.000
+t=11657.507875 advance → 2 timers fired, epoch 50
+t=11700 query hc: hostCaps
+t=11700 query acs: accountState
+t=11700 store exact.kept.hc
+t=11700 store exact.kept.acs
+t=11700 timer row=7 kind=0 nominal_ms=11700.000 cutoff_ms=11700.000 commit_ms=11700.000
+t=13000.950541999999 query ds: autoradio.deckState (native)
+t=13000.950541999999 query rpulse: radioPulse
+t=13000.950541999999 request 199 (ds): POST exact-native:
+t=13000.950541999999 request 200 (rpulse): POST exact-native:
+t=13000.950541999999 timer row=3 kind=0 nominal_ms=13000.951 cutoff_ms=13000.951 commit_ms=13000.951
+t=13000.950541999999 advance → 2 timers fired, epoch 50
+t=14387.125125 fulfil 199 (ds) [HTTP 200, 29 bytes; wall 4 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=14387.125125 request 199 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=14387.125125 release autoradio.deckState {"tick":4.0}: no reader asks with it
+t=14387.125125 a failed request (0 asked again) → epoch 50 (+0 −0 ~0)
+t=14387.125125 store exact.kept.rpulse
+t=14387.125125 fulfil 200 (rpulse) [HTTP 200, 29 bytes; wall 3 ms; delivery wait 2 ms] → epoch 50 (+0 −0 ~0)
+t=15000 query hb: heartbeat
+t=15000 console: AUTORADIO js heartbeat n=4 t=0
+t=15000 store exact.kept.hb
+t=15000 timer row=1 kind=0 nominal_ms=15000.000 cutoff_ms=15000.000 commit_ms=15000.000
+t=15051.45875 advance → 1 timer fired, epoch 50
+t=16600 press view 1849 (openLink) → epoch 51 (+11 −2 ~4)
+t=16669.200458 message view 3236 (webMsg) → epoch 51 (+0 −0 ~0)
+t=17986.530916 message view 3236 (webMsg) → epoch 52 (+0 −1 ~1)
+t=17986.530916 load view 3236 refused: NoHandler { view: 3236, event: "load" }
+t=18000.950542 query ds: autoradio.deckState (native)
+t=18000.950542 query rpulse: radioPulse
+t=18000.950542 request 201 (ds): POST exact-native:
+t=18000.950542 request 202 (rpulse): POST exact-native:
+t=18000.950542 timer row=3 kind=0 nominal_ms=18000.951 cutoff_ms=18000.951 commit_ms=18000.951
+t=18000.950542 advance → 1 timer fired, epoch 52
+t=18056.440125 fulfil 201 (ds) [HTTP 200, 29 bytes; wall 5 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=18056.440125 request 201 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=18056.440125 release autoradio.deckState {"tick":5.0}: no reader asks with it
+t=18056.440125 a failed request (0 asked again) → epoch 52 (+0 −0 ~0)
+t=18056.440125 store exact.kept.rpulse
+t=18056.440125 fulfil 202 (rpulse) [HTTP 200, 29 bytes; wall 4 ms; delivery wait 2 ms] → epoch 52 (+0 −0 ~0)
+t=20000 query hb: heartbeat
+t=20000 console: AUTORADIO js heartbeat n=5 t=0
+t=20000 store exact.kept.hb
+t=20000 timer row=1 kind=0 nominal_ms=20000.000 cutoff_ms=20000.000 commit_ms=20000.000
+t=20026.091333 advance → 1 timer fired, epoch 52
+t=23000.950542 query ds: autoradio.deckState (native)
+t=23000.950542 query rpulse: radioPulse
+t=23000.950542 request 203 (ds): POST exact-native:
+t=23000.950542 request 204 (rpulse): POST exact-native:
+t=23000.950542 timer row=3 kind=0 nominal_ms=23000.951 cutoff_ms=23000.951 commit_ms=23000.951
+t=23000.950542 advance → 1 timer fired, epoch 52
+t=23029.0575 fulfil 203 (ds) [HTTP 200, 29 bytes; wall 4 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=23029.0575 request 203 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=23029.0575 release autoradio.deckState {"tick":6.0}: no reader asks with it
+t=23029.0575 a failed request (0 asked again) → epoch 52 (+0 −0 ~0)
+t=23029.0575 console: radio: pulse restored=true ready=true started=false onAir=yes write=true hold=false ahead=4 inFlight=false lost=0
+t=23029.0575 store exact.kept.rpulse
+t=23029.0575 fulfil 204 (rpulse) [HTTP 200, 29 bytes; wall 4 ms; delivery wait 2 ms] → epoch 52 (+0 −0 ~0)
+t=23030.0575 request 205 (rwm): POST exact-native:
+t=23030.0575 timer row=27 kind=0 nominal_ms=23030.057 cutoff_ms=23030.057 commit_ms=23030.057
+t=23030.0575 advance → 1 timer fired, epoch 52
+t=23113.146791 console: lap: radioWrite: start
+t=23113.146791 rwm: the reply asks for one more request
+t=23113.146791 request 206 (rwm): POST exact-native:
+t=23113.146791 fulfil 205 (rwm) [HTTP 200, 29 bytes; wall 6 ms] → epoch 52 (+0 −0 ~0)
+t=23113.146791 console: lap: radioWrite: radio ready
+t=23113.146791 fulfil 206 (rwm) [HTTP 200, 29 bytes; wall 7 ms] → epoch 52 (+0 −0 ~0)
+t=24029.0575 query ds: autoradio.deckState (native)
+t=24029.0575 query rpulse: radioPulse
+t=24029.0575 request 207 (ds): POST exact-native:
+t=24029.0575 request 208 (rpulse): POST exact-native:
+t=24029.0575 timer row=2 kind=0 nominal_ms=24029.057 cutoff_ms=24029.057 commit_ms=24029.057
+t=24029.0575 advance → 1 timer fired, epoch 52
+t=24076.462875 fulfil 207 (ds) [HTTP 200, 29 bytes; wall 5 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=24076.462875 request 207 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=24076.462875 release autoradio.deckState {"tick":7.0}: no reader asks with it
+t=24076.462875 a failed request (0 asked again) → epoch 52 (+0 −0 ~0)
+t=24076.462875 store exact.kept.rpulse
+t=24076.462875 fulfil 208 (rpulse) [HTTP 200, 29 bytes; wall 5 ms; delivery wait 3 ms] → epoch 52 (+0 −0 ~0)
+t=24600 press view 3239 (ctlToggle) → epoch 53 (+14 −0 ~4)
+t=25000 query hb: heartbeat
+t=25000 console: AUTORADIO js heartbeat n=6 t=0
+t=25000 store exact.kept.hb
+t=25000 timer row=1 kind=0 nominal_ms=25000.000 cutoff_ms=25000.000 commit_ms=25000.000
+t=25020.252875 advance → 1 timer fired, epoch 53
+t=25029.0575 query ds: autoradio.deckState (native)
+t=25029.0575 query rpulse: radioPulse
+t=25029.0575 request 209 (ds): POST exact-native:
+t=25029.0575 request 210 (rpulse): POST exact-native:
+t=25029.0575 timer row=2 kind=0 nominal_ms=25029.057 cutoff_ms=25029.057 commit_ms=25029.057
+t=25029.0575 advance → 1 timer fired, epoch 53
+t=25093.414792 fulfil 209 (ds) [HTTP 200, 29 bytes; wall 8 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=25093.414792 request 209 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=25093.414792 release autoradio.deckState {"tick":8.0}: no reader asks with it
+t=25093.414792 a failed request (0 asked again) → epoch 53 (+0 −0 ~0)
+t=25093.414792 console: radio: pulse restored=true ready=true started=false onAir=yes write=false hold=false ahead=4 inFlight=false lost=0
+t=25093.414792 store exact.kept.rpulse
+t=25093.414792 fulfil 210 (rpulse) [HTTP 200, 29 bytes; wall 7 ms; delivery wait 2 ms] → epoch 53 (+0 −0 ~0)
+t=25600 send rext: autoradio.readerOpenExternal (native)
+t=25600 request 211 (rext): POST exact-native:
+t=25600 press view 3256 (ctlSafari) → epoch 54 (+0 −14 ~4)
+t=25600 fulfil 211 (rext) [HTTP 200, 11 bytes; wall 27 ms] → epoch 54 (+0 −0 ~0)
+t=26108.061334 query acs: accountState
+t=26108.061334 query micperm: micPermission
+t=26108.061334 request 212 (micperm): POST exact-native:
+t=26108.061334 store exact.kept.acs
+t=26108.061334 page (1 asked again) → epoch 54 (+0 −0 ~0)
+t=26108.061334 store exact.kept.micperm
+t=26108.061334 fulfil 212 (micperm) [HTTP 200, 29 bytes; wall 24 ms] → epoch 54 (+0 −0 ~0)
+  app: Android screen before launch: Awake, keyguard hidden
+  app: --------- beginning of main
+  app: exact: canvas 1080x2400 px, scale 3.375, boot 75.8 ms
+  app: extension call 22: org.json.JSONException: No value for extension
+  app: extension call 23: org.json.JSONException: No value for extension
+  app: exact: request 61 (bf) failed and is no longer pending: it keeps its last value: autoradio.barFacts: NotSupportedError
+  app: exact: request 62 (au) failed and is no longer pending: it keeps its last value: autoradio.choirAuth: NotSupportedError
+  app: exact: request 63 (pl) failed and is no longer pending: it keeps its last value: autoradio.choirPlayer: NotSupportedError
+  app: extension call 24: org.json.JSONException: No value for extension
+  app: exact: request 64 (cvraw) failed and is no longer pending: it keeps its last value: autoradio.conversationEntries: NotSupportedError
+  app: exact: request 65 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: exact: request 66 (ldFollow) failed and is no longer pending: it keeps its last value: autoradio.importedFollow: NotSupportedError
+  app: exact: request 67 (preq) failed and is no longer pending: it keeps its last value: autoradio.pageRequest: NotSupportedError
+  app: exact: request 68 (rnote) failed and is no longer pending: it keeps its last value: autoradio.radioNote: NotSupportedError
+  app: exact: request 69 (ri) failed and is no longer pending: it keeps its last value: autoradio.radioView: NotSupportedError
+  app: exact: request 70 (raim) failed and is no longer pending: it keeps its last value: autoradio.readerAim: NotSupportedError
+  app: exact: request 71 (rfollow) failed and is no longer pending: it keeps its last value: autoradio.readerFollow: NotSupportedError
+  app: exact: request 72 (rask) failed and is no longer pending: it keeps its last value: autoradio.retrievalAsk: NotSupportedError
+  app: exact: request 73 (sfacts) failed and is no longer pending: it keeps its last value: autoradio.settingsFacts: NotSupportedError
+  app: exact: request 74 (trec) failed and is no longer pending: it keeps its last value: autoradio.takesRecorder: NotSupportedError
+  app: extension call 25: org.json.JSONException: No value for extension
+  app: exact: request 75 (vc) failed and is no longer pending: it keeps its last value: autoradio.voiceCards: NotSupportedError
+  app: extension call 26: org.json.JSONException: No value for extension
+  app: exact: request 76 (voicep) failed and is no longer pending: it keeps its last value: autoradio.voiceProfile: NotSupportedError
+  app: exact: request 77 (ovoice) failed and is no longer pending: it keeps its last value: autoradio.voiceSetupFacts: NotSupportedError
+  app: extension call 27: org.json.JSONException: No value for extension
+  app: extension call 28: org.json.JSONException: No value for extension
+  app: extension call 29: org.json.JSONException: No value for extension
+  app: extension call 30: org.json.JSONException: No value for extension
+  app: extension call 31: org.json.JSONException: No value for extension
+  app: extension call 32: org.json.JSONException: No value for extension
+  app: extension call 33: org.json.JSONException: No value for extension
+  app: extension call 34: org.json.JSONException: No value for extension
+  app: extension call 35: org.json.JSONException: No value for extension
+  app: extension call 36: org.json.JSONException: No value for extension
+  app: extension call 37: org.json.JSONException: No value for extension
+  app: extension call 38: org.json.JSONException: No value for extension
+  app: extension call 39: org.json.JSONException: No value for extension
+  app: extension call 40: org.json.JSONException: No value for extension
+  app: extension call 41: org.json.JSONException: No value for extension
+  app: extension call 42: org.json.JSONException: No value for extension
+  app: extension call 43: org.json.JSONException: No value for extension
+  app: extension call 44: org.json.JSONException: No value for extension
+  app: extension call 45: org.json.JSONException: No value for extension
+  app: extension call 47: org.json.JSONException: No value for extension
+  app: exact: request 139 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 49: org.json.JSONException: No value for extension
+  app: extension call 50: org.json.JSONException: No value for extension
+  app: extension call 51: org.json.JSONException: No value for extension
+  app: extension call 52: org.json.JSONException: No value for extension
+  app: extension call 53: org.json.JSONException: No value for extension
+  app: extension call 55: org.json.JSONException: No value for extension
+  app: exact: request 146 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 58: org.json.JSONException: No value for extension
+  app: exact: request 148 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 60: org.json.JSONException: No value for extension
+  app: extension call 62: org.json.JSONException: No value for extension
+  app: exact: request 153 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 64: org.json.JSONException: No value for extension
+  app: extension call 65: org.json.JSONException: No value for extension
+  app: [Text] hyphens-auto: Linux has no hyphenation dictionary; `hyphens: auto` breaks only at soft hyphens, as `manual` (LLP 1001)
+  app: extension call 67: org.json.JSONException: No value for extension
+  app: exact: request 199 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: [1126/034554.638478:INFO:android_webview/browser/variations/variations_seed_loader.cc:63] Failed to open file for reading.: No such file or directory (2)
+  app: exact: native module: NoHandler { view: 3236, event: "load" }
+  app: extension call 70: org.json.JSONException: No value for extension
+  app: exact: request 201 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 73: org.json.JSONException: No value for extension
+  app: exact: request 203 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 75: org.json.JSONException: No value for extension
+  app: extension call 76: org.json.JSONException: No value for extension
+  app: extension call 78: org.json.JSONException: No value for extension
+  app: exact: request 207 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 81: org.json.JSONException: No value for extension
+  app: exact: request 209 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 85: org.json.JSONException: No value for extension

@@ -1,0 +1,1601 @@
+variant lab-one: news.choir.autoradio.lab.one
+clock 6000 ms · generation 1 · epoch 25 · real=6030
+clock 6000 ms · settled · generation 1 · epoch 25
+tapped #30 "bar-mark" · delivery platform · generation 1 · epoch 26 · clock 6000 ms
+clock 6600 ms · generation 1 · epoch 44 · real=645
+clock 6600 ms · settled · generation 1 · epoch 44
+tapped #198 "place-paper" · delivery platform · generation 1 · epoch 47 · clock 6600 ms
+clock 11600 ms · generation 1 · epoch 47 · real=5031
+clock 11600 ms · settled · generation 1 · epoch 47
+generation 1 · epoch 47 · incarnation 1 · clock 11600 ms · 587 nodes
+View#1 [app]
+  View#2
+    View#3 [page-deck] (pan, panrelease)
+      View#8 [deck-slot-paper:front]
+        View#308
+          View#309
+            View#310 (resize)
+              ScrollView#311 [paper-scroll] (refresh)
+                View#312
+                  View#313
+                    View#314
+                      Text#315 [page-title] "AUTOPAPER"
+                      Text#316 [paper-date] "Thu 26 Nov"
+                    View#317
+                    View#318
+                    View#319
+                      Text#320 [paper-section-title] ""
+                      Text#321 [paper-updated] "Updated 1 min ago"
+                  View#322
+                    View#323 [paper-views]
+                      Pressable#324 [paper-section-front] (press)
+                        View#325
+                          Text#326 "Front page"
+                          View#327
+                      Pressable#328 [paper-section-mine] (press)
+                        View#329
+                          Text#330 "My edition"
+                          View#331
+                    Pressable#332 [paper-sections-toggle] label="Open the sections" (press)
+                      View#333
+                        Text#334 "Sections"
+                        View#335
+                          Image#336
+                  View#337
+                    View#338
+                      View#339 [paper-band-colead-0-0]
+                        View#340
+                          View#341
+                            Text#342 "World"
+                            Pressable#343 [paper-story-/pub/texture/russia-and-ukraine-trade-strikes-overnight-four-dead-as-attacks-on-energy-grid-intensify-pub945c577d8] (press)
+                              View#344
+                                Text#345 "Russia and Ukraine widen strike campaign as attacks on energy grid and refineries intensify"
+                            Text#346 "199 sources · 4 min ago"
+                            View#347
+                            View#348
+                              Pressable#349 [paper-play-/pub/texture/russia-and-ukraine-trade-strikes-overnight-four-dead-as-attacks-on-energy-grid-intensify-pub945c577d8] label="Play from Russia and Ukraine widen strike campaign as attacks on energy grid and refineries intensify" (press)
+                                View#350
+                                  Image#351
+                                  Text#352 "Play"
+                              Pressable#353 [paper-queue-/pub/texture/russia-and-ukraine-trade-strikes-overnight-four-dead-as-attacks-on-energy-grid-intensify-pub945c577d8] label="Add Russia and Ukraine widen strike campaign as attacks on energy grid and refineries intensify to the queue" (press)
+                                View#354
+                                  Image#355
+                                  Text#356 "Queue"
+                      View#357 [paper-band-colead-0-1]
+                        View#358
+                          View#359
+                            Text#360 "Business"
+                            Pressable#361 [paper-story-/pub/texture/us-reportedly-preparing-new-tariffs-on-china-and-other-countries-wsj-reports-pub4eb21a2ad] (press)
+                              View#362
+                                Text#363 "US reportedly preparing new tariffs on China and other countries, WSJ reports"
+                            Text#364 "30 sources · 32 min ago"
+                            View#365
+                            View#366
+                              Pressable#367 [paper-play-/pub/texture/us-reportedly-preparing-new-tariffs-on-china-and-other-countries-wsj-reports-pub4eb21a2ad] label="Play from US reportedly preparing new tariffs on China and other countries, WSJ reports" (press)
+                                View#368
+                                  Image#369
+                                  Text#370 "Play"
+                              Pressable#371 [paper-queue-/pub/texture/us-reportedly-preparing-new-tariffs-on-china-and-other-countries-wsj-reports-pub4eb21a2ad] label="Add US reportedly preparing new tariffs on China and other countries, WSJ reports to the queue" (press)
+                                View#372
+                                  Image#373
+                                  Text#374 "Queue"
+                  View#375
+                    View#376
+                      View#377 [paper-band-cluster-1]
+                        View#378
+                          Text#379 "Developing"
+                          View#380
+                            View#381
+                            View#382
+                              Pressable#383 [paper-story-/pub/texture/trump-and-natos-rutte-urge-russia-not-to-expand-the-war-in-ukraine-after-florida-meeting-pub3831b1311] (press)
+                                Text#384 "Trump and NATO's Rutte urge Russia not to 'expand' the war in Ukraine after Florida meeting"
+                              View#385
+                                Pressable#386 [paper-play-/pub/texture/trump-and-natos-rutte-urge-russia-not-to-expand-the-war-in-ukraine-after-florida-meeting-pub3831b1311] label="Play from Trump and NATO's Rutte urge Russia not to 'expand' the war in Ukraine after Florida meeting" (press)
+                                  View#387
+                                    Image#388
+                                    Text#389 "Play"
+                                Pressable#390 [paper-queue-/pub/texture/trump-and-natos-rutte-urge-russia-not-to-expand-the-war-in-ukraine-after-florida-meeting-pub3831b1311] label="Add Trump and NATO's Rutte urge Russia not to 'expand' the war in Ukraine after Florida meeting to the queue" (press)
+                                  View#391
+                                    Image#392
+                                    Text#393 "Queue"
+                          View#394
+                            View#395
+                            View#396
+                              Pressable#397 [paper-story-/pub/texture/ukraine-and-russia-race-to-build-military-satellite-networks-as-war-rages-on-pub86dee1c89] (press)
+                                Text#398 "Ukraine and Russia race to build military satellite networks as war rages on"
+                              View#399
+                                Pressable#400 [paper-play-/pub/texture/ukraine-and-russia-race-to-build-military-satellite-networks-as-war-rages-on-pub86dee1c89] label="Play from Ukraine and Russia race to build military satellite networks as war rages on" (press)
+                                  View#401
+                                    Image#402
+                                    Text#403 "Play"
+                                Pressable#404 [paper-queue-/pub/texture/ukraine-and-russia-race-to-build-military-satellite-networks-as-war-rages-on-pub86dee1c89] label="Add Ukraine and Russia race to build military satellite networks as war rages on to the queue" (press)
+                                  View#405
+                                    Image#406
+                                    Text#407 "Queue"
+                  View#408
+                    View#409
+                      View#856 [paper-band-pair-2]
+                        View#857 [paper-pair-/pub/texture/impunity-fuels-surge-in-settler-violence-across-occupied-west-bank-pub21a652586]
+                          View#858
+                            View#859
+                              Text#860 "World"
+                              Pressable#861 [paper-story-/pub/texture/impunity-fuels-surge-in-settler-violence-across-occupied-west-bank-pub21a652586] (press)
+                                View#862
+                                  Text#863 "Impunity fuels surge in settler violence across occupied West Bank"
+                              Text#864 "37 sources · 32 min ago"
+                              View#865
+                              View#866
+                                Pressable#867 [paper-play-/pub/texture/impunity-fuels-surge-in-settler-violence-across-occupied-west-bank-pub21a652586] label="Play from Impunity fuels surge in settler violence across occupied West Bank" (press)
+                                  View#868
+                                    Image#869
+                                    Text#870 "Play"
+                                Pressable#871 [paper-queue-/pub/texture/impunity-fuels-surge-in-settler-violence-across-occupied-west-bank-pub21a652586] label="Add Impunity fuels surge in settler violence across occupied West Bank to the queue" (press)
+                                  View#872
+                                    Image#873
+                                    Text#874 "Queue"
+                        View#875 [paper-pair-/pub/texture/sánchez-and-feijóo-renew-the-fight-for-first-place-in-spains-snap-election-pubb185df4f3]
+                          View#876
+                            View#877
+                              Text#878 "World"
+                              Pressable#879 [paper-story-/pub/texture/sánchez-and-feijóo-renew-the-fight-for-first-place-in-spains-snap-election-pubb185df4f3] (press)
+                                View#880
+                                  Text#881 "Sánchez and Feijóo renew the fight for first place in Spain's snap election"
+                              Text#882 "96 sources · 45 min ago"
+                              View#883
+                              View#884
+                                Pressable#885 [paper-play-/pub/texture/sánchez-and-feijóo-renew-the-fight-for-first-place-in-spains-snap-election-pubb185df4f3] label="Play from Sánchez and Feijóo renew the fight for first place in Spain's snap election" (press)
+                                  View#886
+                                    Image#887
+                                    Text#888 "Play"
+                                Pressable#889 [paper-queue-/pub/texture/sánchez-and-feijóo-renew-the-fight-for-first-place-in-spains-snap-election-pubb185df4f3] label="Add Sánchez and Feijóo renew the fight for first place in Spain's snap election to the queue" (press)
+                                  View#890
+                                    Image#891
+                                    Text#892 "Queue"
+                  View#449
+                    View#450
+                      View#451 [paper-band-briefs-3]
+                        View#452
+                          Text#453 "In brief"
+                          View#454
+                            View#455
+                              View#456
+                                Text#457 "World"
+                                Pressable#458 [paper-story-/pub/texture/trump-keeps-iran-blockade-as-hormuz-standoff-squeezes-gulf-shipping-puba756bacdb] (press)
+                                  Text#459 "Trump keeps Iran blockade as Hormuz standoff squeezes Gulf shipping"
+                                View#460
+                                  Pressable#461 [paper-play-/pub/texture/trump-keeps-iran-blockade-as-hormuz-standoff-squeezes-gulf-shipping-puba756bacdb] label="Play from Trump keeps Iran blockade as Hormuz standoff squeezes Gulf shipping" (press)
+                                    View#462
+                                      Image#463
+                                      Text#464 "Play"
+                                  Pressable#465 [paper-queue-/pub/texture/trump-keeps-iran-blockade-as-hormuz-standoff-squeezes-gulf-shipping-puba756bacdb] label="Add Trump keeps Iran blockade as Hormuz standoff squeezes Gulf shipping to the queue" (press)
+                                    View#466
+                                      Image#467
+                                      Text#468 "Queue"
+                          View#469
+                            View#470
+                            View#471
+                              View#472
+                                Text#473 "World"
+                                Pressable#474 [paper-story-/pub/texture/israel-readies-for-possible-strike-on-iran-as-security-cabinet-orders-stepped-up-preparations-pubb0f1cb74a] (press)
+                                  Text#475 "Israel readies for possible strike on Iran as security cabinet orders stepped-up preparations"
+                                View#476
+                                  Pressable#477 [paper-play-/pub/texture/israel-readies-for-possible-strike-on-iran-as-security-cabinet-orders-stepped-up-preparations-pubb0f1cb74a] label="Play from Israel readies for possible strike on Iran as security cabinet orders stepped-up preparations" (press)
+                                    View#478
+                                      Image#479
+                                      Text#480 "Play"
+                                  Pressable#481 [paper-queue-/pub/texture/israel-readies-for-possible-strike-on-iran-as-security-cabinet-orders-stepped-up-preparations-pubb0f1cb74a] label="Add Israel readies for possible strike on Iran as security cabinet orders stepped-up preparations to the queue" (press)
+                                    View#482
+                                      Image#483
+                                      Text#484 "Queue"
+                          View#485
+                            View#486
+                            View#487
+                              View#488
+                                Text#489 "World"
+                                Pressable#490 [paper-story-/pub/texture/housing-dominates-spains-election-campaign-as-rodríguez-and-bravo-clash-live-on-ser-and-el-paí-pubed97c94e3] (press)
+                                  Text#491 "Housing dominates Spain's election campaign after Rodríguez and Bravo's live SER debate"
+                                View#492
+                                  Pressable#493 [paper-play-/pub/texture/housing-dominates-spains-election-campaign-as-rodríguez-and-bravo-clash-live-on-ser-and-el-paí-pubed97c94e3] label="Play from Housing dominates Spain's election campaign after Rodríguez and Bravo's live SER debate" (press)
+                                    View#494
+                                      Image#495
+                                      Text#496 "Play"
+                                  Pressable#497 [paper-queue-/pub/texture/housing-dominates-spains-election-campaign-as-rodríguez-and-bravo-clash-live-on-ser-and-el-paí-pubed97c94e3] label="Add Housing dominates Spain's election campaign after Rodríguez and Bravo's live SER debate to the queue" (press)
+                                    View#498
+                                      Image#499
+                                      Text#500 "Queue"
+                          View#501
+                            View#502
+                            View#503
+                              View#504
+                                Text#505 "Business"
+                                Pressable#506 [paper-story-/pub/texture/ai-tech-rout-prompts-us-investors-to-rush-into-value-stocks-pubdb72d0c7f] (press)
+                                  Text#507 "AI tech rout prompts US investors to rush into value stocks"
+                                View#508
+                                  Pressable#509 [paper-play-/pub/texture/ai-tech-rout-prompts-us-investors-to-rush-into-value-stocks-pubdb72d0c7f] label="Play from AI tech rout prompts US investors to rush into value stocks" (press)
+                                    View#510
+                                      Image#511
+                                      Text#512 "Play"
+                                  Pressable#513 [paper-queue-/pub/texture/ai-tech-rout-prompts-us-investors-to-rush-into-value-stocks-pubdb72d0c7f] label="Add AI tech rout prompts US investors to rush into value stocks to the queue" (press)
+                                    View#514
+                                      Image#515
+                                      Text#516 "Queue"
+                          View#517
+                            View#518
+                            View#519
+                              View#520
+                                Text#521 "Tech and AI"
+                                Pressable#522 [paper-story-/pub/texture/fcc-authorizes-spacex-plan-for-up-to-1-million-orbital-data-center-satellites-pubce3e62516] (press)
+                                  Text#523 "FCC authorizes SpaceX plan for up to 1 million orbital data-center satellites"
+                                View#524
+                                  Pressable#525 [paper-play-/pub/texture/fcc-authorizes-spacex-plan-for-up-to-1-million-orbital-data-center-satellites-pubce3e62516] label="Play from FCC authorizes SpaceX plan for up to 1 million orbital data-center satellites" (press)
+                                    View#526
+                                      Image#527
+                                      Text#528 "Play"
+                                  Pressable#529 [paper-queue-/pub/texture/fcc-authorizes-spacex-plan-for-up-to-1-million-orbital-data-center-satellites-pubce3e62516] label="Add FCC authorizes SpaceX plan for up to 1 million orbital data-center satellites to the queue" (press)
+                                    View#530
+                                      Image#531
+                                      Text#532 "Queue"
+                          View#533
+                            View#534
+                            View#535
+                              View#536
+                                Text#537 "World"
+                                Pressable#538 [paper-story-/pub/texture/kim-jong-un-tours-north-korean-nuclear-facilities-and-calls-for-wider-tactical-nuclear-weapon-de-pub3134e4da9] (press)
+                                  Text#539 "Kim Jong Un tours North Korean nuclear facilities and calls for wider tactical nuclear weapon deployment"
+                                View#540
+                                  Pressable#541 [paper-play-/pub/texture/kim-jong-un-tours-north-korean-nuclear-facilities-and-calls-for-wider-tactical-nuclear-weapon-de-pub3134e4da9] label="Play from Kim Jong Un tours North Korean nuclear facilities and calls for wider tactical nuclear weapon deployment" (press)
+                                    View#542
+                                      Image#543
+                                      Text#544 "Play"
+                                  Pressable#545 [paper-queue-/pub/texture/kim-jong-un-tours-north-korean-nuclear-facilities-and-calls-for-wider-tactical-nuclear-weapon-de-pub3134e4da9] label="Add Kim Jong Un tours North Korean nuclear facilities and calls for wider tactical nuclear weapon deployment to the queue" (press)
+                                    View#546
+                                      Image#547
+                                      Text#548 "Queue"
+                  View#549
+                    View#550
+                      View#551 [paper-band-river-tech-ai]
+                        View#552
+                          Pressable#553 [paper-more-tech-ai] (press)
+                            View#554
+                              Text#555 "Tech and AI"
+                              Image#556
+                          View#557
+                            View#558
+                              View#559
+                                Pressable#560 [paper-story-/pub/texture/cia-and-odni-breach-of-unclassified-information-confirmed-by-reuters-pub5e57b78cd] (press)
+                                  Text#561 "CIA and ODNI breach of unclassified information confirmed by Reuters"
+                                View#562
+                                  Pressable#563 [paper-play-/pub/texture/cia-and-odni-breach-of-unclassified-information-confirmed-by-reuters-pub5e57b78cd] label="Play from CIA and ODNI breach of unclassified information confirmed by Reuters" (press)
+                                    View#564
+                                      Image#565
+                                      Text#566 "Play"
+                                  Pressable#567 [paper-queue-/pub/texture/cia-and-odni-breach-of-unclassified-information-confirmed-by-reuters-pub5e57b78cd] label="Add CIA and ODNI breach of unclassified information confirmed by Reuters to the queue" (press)
+                                    View#568
+                                      Image#569
+                                      Text#570 "Queue"
+                          View#571
+                            View#572
+                            View#573
+                              View#574
+                                Pressable#575 [paper-story-/pub/texture/equinor-says-cyberattack-against-the-company-has-been-stopped-pub43741f0a7] (press)
+                                  Text#576 "Equinor says cyberattack against the company has been stopped"
+                                View#577
+                                  Pressable#578 [paper-play-/pub/texture/equinor-says-cyberattack-against-the-company-has-been-stopped-pub43741f0a7] label="Play from Equinor says cyberattack against the company has been stopped" (press)
+                                    View#579
+                                      Image#580
+                                      Text#581 "Play"
+                                  Pressable#582 [paper-queue-/pub/texture/equinor-says-cyberattack-against-the-company-has-been-stopped-pub43741f0a7] label="Add Equinor says cyberattack against the company has been stopped to the queue" (press)
+                                    View#583
+                                      Image#584
+                                      Text#585 "Queue"
+                          View#586
+                            View#587
+                            View#588
+                              View#589
+                                Pressable#590 [paper-story-/pub/texture/nvidia-sales-chief-jay-puri-married-former-super-micro-executive-cenly-chen-tied-to-chip-smuggli-pub2e3e14079] (press)
+                                  Text#591 "Nvidia Sales Chief Jay Puri Married Former Super Micro Executive Cenly Chen, Tied to Chip-Smuggling Probe"
+                                View#592
+                                  Pressable#593 [paper-play-/pub/texture/nvidia-sales-chief-jay-puri-married-former-super-micro-executive-cenly-chen-tied-to-chip-smuggli-pub2e3e14079] label="Play from Nvidia Sales Chief Jay Puri Married Former Super Micro Executive Cenly Chen, Tied to Chip-Smuggling Probe" (press)
+                                    View#594
+                                      Image#595
+                                      Text#596 "Play"
+                                  Pressable#597 [paper-queue-/pub/texture/nvidia-sales-chief-jay-puri-married-former-super-micro-executive-cenly-chen-tied-to-chip-smuggli-pub2e3e14079] label="Add Nvidia Sales Chief Jay Puri Married Former Super Micro Executive Cenly Chen, Tied to Chip-Smuggling Probe to the queue" (press)
+                                    View#598
+                                      Image#599
+                                      Text#600 "Queue"
+                          View#601
+                            View#602
+                            View#603
+                              View#604
+                                Pressable#605 [paper-story-/pub/texture/microsofts-ntlm-hardening-broke-third-party-logins-microsoft-blames-buggy-implementations-pubb46be6d08] (press)
+                                  Text#606 "Microsoft's NTLM hardening broke third-party logins; Microsoft blames buggy implementations"
+                                View#607
+                                  Pressable#608 [paper-play-/pub/texture/microsofts-ntlm-hardening-broke-third-party-logins-microsoft-blames-buggy-implementations-pubb46be6d08] label="Play from Microsoft's NTLM hardening broke third-party logins; Microsoft blames buggy implementations" (press)
+                                    View#609
+                                      Image#610
+                                      Text#611 "Play"
+                                  Pressable#612 [paper-queue-/pub/texture/microsofts-ntlm-hardening-broke-third-party-logins-microsoft-blames-buggy-implementations-pubb46be6d08] label="Add Microsoft's NTLM hardening broke third-party logins; Microsoft blames buggy implementations to the queue" (press)
+                                    View#613
+                                      Image#614
+                                      Text#615 "Queue"
+                  View#616
+                    View#617
+                      View#618 [paper-band-river-world]
+                        View#619
+                          Pressable#620 [paper-more-world] (press)
+                            View#621
+                              Text#622 "World"
+                              Image#623
+                          View#624
+                            View#625
+                              View#626
+                                Pressable#627 [paper-story-/pub/texture/eu-council-president-costa-proposes-204-billion-in-eu-budget-savings-and-digital-tax-pub4409a116c] (press)
+                                  Text#628 "EU Council president Costa proposes €204 billion in EU budget savings and digital tax"
+                                View#629
+                                  Pressable#630 [paper-play-/pub/texture/eu-council-president-costa-proposes-204-billion-in-eu-budget-savings-and-digital-tax-pub4409a116c] label="Play from EU Council president Costa proposes €204 billion in EU budget savings and digital tax" (press)
+                                    View#631
+                                      Image#632
+                                      Text#633 "Play"
+                                  Pressable#634 [paper-queue-/pub/texture/eu-council-president-costa-proposes-204-billion-in-eu-budget-savings-and-digital-tax-pub4409a116c] label="Add EU Council president Costa proposes €204 billion in EU budget savings and digital tax to the queue" (press)
+                                    View#635
+                                      Image#636
+                                      Text#637 "Queue"
+                          View#638
+                            View#639
+                            View#640
+                              View#641
+                                Pressable#642 [paper-story-/pub/texture/south-koreas-fabricated-indictment-special-prosecutor-faces-obstacles-probing-current-and-former-pubc9d6e80fb] (press)
+                                  Text#643 "South Korea's fabricated-indictment special prosecutor faces obstacles probing current and former prosecutors"
+                                View#644
+                                  Pressable#645 [paper-play-/pub/texture/south-koreas-fabricated-indictment-special-prosecutor-faces-obstacles-probing-current-and-former-pubc9d6e80fb] label="Play from South Korea's fabricated-indictment special prosecutor faces obstacles probing current and former prosecutors" (press)
+                                    View#646
+                                      Image#647
+                                      Text#648 "Play"
+                                  Pressable#649 [paper-queue-/pub/texture/south-koreas-fabricated-indictment-special-prosecutor-faces-obstacles-probing-current-and-former-pubc9d6e80fb] label="Add South Korea's fabricated-indictment special prosecutor faces obstacles probing current and former prosecutors to the queue" (press)
+                                    View#650
+                                      Image#651
+                                      Text#652 "Queue"
+                          View#653
+                            View#654
+                            View#655
+                              View#656
+                                Pressable#657 [paper-story-/pub/texture/south-korea-nears-worlds-fourth-1-trillion-annual-export-milestone-pub9c84bb5ff] (press)
+                                  Text#658 "South Korea crosses $1 trillion in annual exports, world's fourth"
+                                View#659
+                                  Pressable#660 [paper-play-/pub/texture/south-korea-nears-worlds-fourth-1-trillion-annual-export-milestone-pub9c84bb5ff] label="Play from South Korea crosses $1 trillion in annual exports, world's fourth" (press)
+                                    View#661
+                                      Image#662
+                                      Text#663 "Play"
+                                  Pressable#664 [paper-queue-/pub/texture/south-korea-nears-worlds-fourth-1-trillion-annual-export-milestone-pub9c84bb5ff] label="Add South Korea crosses $1 trillion in annual exports, world's fourth to the queue" (press)
+                                    View#665
+                                      Image#666
+                                      Text#667 "Queue"
+                          View#668
+                            View#669
+                            View#670
+                              View#671
+                                Pressable#672 [paper-story-/pub/texture/émilie-könig-the-islamic-states-most-famous-french-égérie-goes-on-trial-in-paris-pub34efdf23e] (press)
+                                  Text#673 "Émilie König, the Islamic State's most famous French \"égérie\", goes on trial in Paris"
+                                View#674
+                                  Pressable#675 [paper-play-/pub/texture/émilie-könig-the-islamic-states-most-famous-french-égérie-goes-on-trial-in-paris-pub34efdf23e] label="Play from Émilie König, the Islamic State's most famous French \"égérie\", goes on trial in Paris" (press)
+                                    View#676
+                                      Image#677
+                                      Text#678 "Play"
+                                  Pressable#679 [paper-queue-/pub/texture/émilie-könig-the-islamic-states-most-famous-french-égérie-goes-on-trial-in-paris-pub34efdf23e] label="Add Émilie König, the Islamic State's most famous French \"égérie\", goes on trial in Paris to the queue" (press)
+                                    View#680
+                                      Image#681
+                                      Text#682 "Queue"
+                  View#683
+                    View#684
+                      View#685 [paper-band-river-us]
+                        View#686
+                          Pressable#687 [paper-more-us] (press)
+                            View#688
+                              Text#689 "US"
+                              Image#690
+                          View#691
+                            View#692
+                              View#693
+                                Pressable#694 [paper-story-/pub/texture/bay-area-king-tides-break-november-record-as-coastal-flood-warning-runs-through-wednesday-pubbcbd398cb] (press)
+                                  Text#695 "Bay Area king tides break November record as coastal flood warning runs through Wednesday"
+                                View#696
+                                  Pressable#697 [paper-play-/pub/texture/bay-area-king-tides-break-november-record-as-coastal-flood-warning-runs-through-wednesday-pubbcbd398cb] label="Play from Bay Area king tides break November record as coastal flood warning runs through Wednesday" (press)
+                                    View#698
+                                      Image#699
+                                      Text#700 "Play"
+                                  Pressable#701 [paper-queue-/pub/texture/bay-area-king-tides-break-november-record-as-coastal-flood-warning-runs-through-wednesday-pubbcbd398cb] label="Add Bay Area king tides break November record as coastal flood warning runs through Wednesday to the queue" (press)
+                                    View#702
+                                      Image#703
+                                      Text#704 "Queue"
+                          View#705
+                            View#706
+                            View#707
+                              View#708
+                                Pressable#709 [paper-story-/pub/texture/fedex-cargo-plane-overruns-runway-at-miami-international-airport-pubff964381c] (press)
+                                  Text#710 "FedEx cargo plane overruns runway at Miami International Airport"
+                                View#711
+                                  Pressable#712 [paper-play-/pub/texture/fedex-cargo-plane-overruns-runway-at-miami-international-airport-pubff964381c] label="Play from FedEx cargo plane overruns runway at Miami International Airport" (press)
+                                    View#713
+                                      Image#714
+                                      Text#715 "Play"
+                                  Pressable#716 [paper-queue-/pub/texture/fedex-cargo-plane-overruns-runway-at-miami-international-airport-pubff964381c] label="Add FedEx cargo plane overruns runway at Miami International Airport to the queue" (press)
+                                    View#717
+                                      Image#718
+                                      Text#719 "Queue"
+                          View#720
+                            View#721
+                            View#722
+                              View#723
+                                Pressable#724 [paper-story-/pub/texture/usc-band-will-not-march-at-saturdays-ucla-rivalry-game-after-its-members-vandalize-bruins-campus-pub2f94c6af4] (press)
+                                  Text#725 "USC Band Will Not March at Saturday’s UCLA Rivalry Game After Its Members Vandalize Bruins Campus"
+                                View#726
+                                  Pressable#727 [paper-play-/pub/texture/usc-band-will-not-march-at-saturdays-ucla-rivalry-game-after-its-members-vandalize-bruins-campus-pub2f94c6af4] label="Play from USC Band Will Not March at Saturday’s UCLA Rivalry Game After Its Members Vandalize Bruins Campus" (press)
+                                    View#728
+                                      Image#729
+                                      Text#730 "Play"
+                                  Pressable#731 [paper-queue-/pub/texture/usc-band-will-not-march-at-saturdays-ucla-rivalry-game-after-its-members-vandalize-bruins-campus-pub2f94c6af4] label="Add USC Band Will Not March at Saturday’s UCLA Rivalry Game After Its Members Vandalize Bruins Campus to the queue" (press)
+                                    View#732
+                                      Image#733
+                                      Text#734 "Queue"
+                          View#735
+                            View#736
+                            View#737
+                              View#738
+                                Pressable#739 [paper-story-/pub/texture/judge-ends-ban-on-taxpayer-funded-pro-trump-ads-after-midterms-pass-pubca78e2f70] (press)
+                                  Text#740 "Judge ends ban on taxpayer-funded pro-Trump ads after midterms pass"
+                                View#741
+                                  Pressable#742 [paper-play-/pub/texture/judge-ends-ban-on-taxpayer-funded-pro-trump-ads-after-midterms-pass-pubca78e2f70] label="Play from Judge ends ban on taxpayer-funded pro-Trump ads after midterms pass" (press)
+                                    View#743
+                                      Image#744
+                                      Text#745 "Play"
+                                  Pressable#746 [paper-queue-/pub/texture/judge-ends-ban-on-taxpayer-funded-pro-trump-ads-after-midterms-pass-pubca78e2f70] label="Add Judge ends ban on taxpayer-funded pro-Trump ads after midterms pass to the queue" (press)
+                                    View#747
+                                      Image#748
+                                      Text#749 "Queue"
+                  View#750
+                    View#751
+                      View#752 [paper-band-river-business]
+                        View#753
+                          Pressable#754 [paper-more-business] (press)
+                            View#755
+                              Text#756 "Business"
+                              Image#757
+                          View#758
+                            View#759
+                              View#760
+                                Pressable#761 [paper-story-/pub/texture/asian-markets-fall-sharply-in-japan-south-korea-and-taiwan-in-tech-led-sell-off-pub8f24ce5ce] (press)
+                                  Text#762 "Asian markets fall sharply in Japan, South Korea and Taiwan in tech-led sell-off"
+                                View#763
+                                  Pressable#764 [paper-play-/pub/texture/asian-markets-fall-sharply-in-japan-south-korea-and-taiwan-in-tech-led-sell-off-pub8f24ce5ce] label="Play from Asian markets fall sharply in Japan, South Korea and Taiwan in tech-led sell-off" (press)
+                                    View#765
+                                      Image#766
+                                      Text#767 "Play"
+                                  Pressable#768 [paper-queue-/pub/texture/asian-markets-fall-sharply-in-japan-south-korea-and-taiwan-in-tech-led-sell-off-pub8f24ce5ce] label="Add Asian markets fall sharply in Japan, South Korea and Taiwan in tech-led sell-off to the queue" (press)
+                                    View#769
+                                      Image#770
+                                      Text#771 "Queue"
+                          View#772
+                            View#773
+                            View#774
+                              View#775
+                                Pressable#776 [paper-story-/pub/texture/bank-of-korea-raises-rates-to-3-25-lifts-2027-growth-outlook-to-4-1-as-ai-chip-boom-heats-econom-pube945f9814] (press)
+                                  Text#777 "Bank of Korea raises rates to 3.25%, lifts 2027 growth outlook to 4.1% as AI chip boom heats economy"
+                                View#778
+                                  Pressable#779 [paper-play-/pub/texture/bank-of-korea-raises-rates-to-3-25-lifts-2027-growth-outlook-to-4-1-as-ai-chip-boom-heats-econom-pube945f9814] label="Play from Bank of Korea raises rates to 3.25%, lifts 2027 growth outlook to 4.1% as AI chip boom heats economy" (press)
+                                    View#780
+                                      Image#781
+                                      Text#782 "Play"
+                                  Pressable#783 [paper-queue-/pub/texture/bank-of-korea-raises-rates-to-3-25-lifts-2027-growth-outlook-to-4-1-as-ai-chip-boom-heats-econom-pube945f9814] label="Add Bank of Korea raises rates to 3.25%, lifts 2027 growth outlook to 4.1% as AI chip boom heats economy to the queue" (press)
+                                    View#784
+                                      Image#785
+                                      Text#786 "Queue"
+                          View#787
+                            View#788
+                            View#789
+                              View#790
+                                Pressable#791 [paper-story-/pub/texture/norse-atlantic-warns-its-financial-situation-is-critical-as-shares-plunge-78-pub3da0eb2dc] (press)
+                                  Text#792 "Norse Atlantic warns finances are 'critical' and seeks emergency funding as shares sink 76%"
+                                View#793
+                                  Pressable#794 [paper-play-/pub/texture/norse-atlantic-warns-its-financial-situation-is-critical-as-shares-plunge-78-pub3da0eb2dc] label="Play from Norse Atlantic warns finances are 'critical' and seeks emergency funding as shares sink 76%" (press)
+                                    View#795
+                                      Image#796
+                                      Text#797 "Play"
+                                  Pressable#798 [paper-queue-/pub/texture/norse-atlantic-warns-its-financial-situation-is-critical-as-shares-plunge-78-pub3da0eb2dc] label="Add Norse Atlantic warns finances are 'critical' and seeks emergency funding as shares sink 76% to the queue" (press)
+                                    View#799
+                                      Image#800
+                                      Text#801 "Queue"
+                          View#802
+                            View#803
+                            View#804
+                              View#805
+                                Pressable#806 [paper-story-/pub/texture/two-thirds-of-fed-regional-banks-backed-a-rate-hike-ahead-of-the-october-meeting-minutes-reveal-pub8909351f6] (press)
+                                  Text#807 "Two-thirds of Fed regional banks backed a rate hike ahead of the October meeting, minutes reveal"
+                                View#808
+                                  Pressable#809 [paper-play-/pub/texture/two-thirds-of-fed-regional-banks-backed-a-rate-hike-ahead-of-the-october-meeting-minutes-reveal-pub8909351f6] label="Play from Two-thirds of Fed regional banks backed a rate hike ahead of the October meeting, minutes reveal" (press)
+                                    View#810
+                                      Image#811
+                                      Text#812 "Play"
+                                  Pressable#813 [paper-queue-/pub/texture/two-thirds-of-fed-regional-banks-backed-a-rate-hike-ahead-of-the-october-meeting-minutes-reveal-pub8909351f6] label="Add Two-thirds of Fed regional banks backed a rate hike ahead of the October meeting, minutes reveal to the queue" (press)
+                                    View#814
+                                      Image#815
+                                      Text#816 "Queue"
+                  View#817
+                    View#818
+                      View#819 [paper-band-river-health]
+                        View#820
+                          Pressable#821 [paper-more-health] (press)
+                            View#822
+                              Text#823 "Health"
+                              Image#824
+                          View#825
+                            View#826
+                              View#827
+                                Pressable#828 [paper-story-/pub/texture/frances-drug-agency-warns-that-ai-health-advice-has-already-caused-medication-errors-pubd511750c7] (press)
+                                  Text#829 "France's drug agency warns that AI health advice has already caused medication errors"
+                                View#830
+                                  Pressable#831 [paper-play-/pub/texture/frances-drug-agency-warns-that-ai-health-advice-has-already-caused-medication-errors-pubd511750c7] label="Play from France's drug agency warns that AI health advice has already caused medication errors" (press)
+                                    View#832
+                                      Image#833
+                                      Text#834 "Play"
+                                  Pressable#835 [paper-queue-/pub/texture/frances-drug-agency-warns-that-ai-health-advice-has-already-caused-medication-errors-pubd511750c7] label="Add France's drug agency warns that AI health advice has already caused medication errors to the queue" (press)
+                                    View#836
+                                      Image#837
+                                      Text#838 "Queue"
+                          View#839
+                            View#840
+                            View#841
+                              View#842
+                                Pressable#843 [paper-story-/pub/texture/most-french-regions-enter-pre-epidemic-influenza-status-pubb30176d0f] (press)
+                                  Text#844 "Most French regions enter pre-epidemic influenza status"
+                                View#845
+                                  Pressable#846 [paper-play-/pub/texture/most-french-regions-enter-pre-epidemic-influenza-status-pubb30176d0f] label="Play from Most French regions enter pre-epidemic influenza status" (press)
+                                    View#847
+                                      Image#848
+                                      Text#849 "Play"
+                                  Pressable#850 [paper-queue-/pub/texture/most-french-regions-enter-pre-epidemic-influenza-status-pubb30176d0f] label="Add Most French regions enter pre-epidemic influenza status to the queue" (press)
+                                    View#851
+                                      Image#852
+                                      Text#853 "Queue"
+                  Text#854 "60 stories · pull down to refresh"
+                  View#855
+      View#4 [deck-slot-radio:]
+        View#301 [page-placard-radio:]
+          Text#302 "Autoradio"
+          Text#303 "Autoradio"
+      View#12 [deck-slot-textures:]
+        View#13 [page-placard-textures:]
+          Text#14 "Textures"
+          Text#15 "Textures"
+  View#16 [bar-stack]
+    View#304 [signedout-banner]
+      Text#305 [signedout-message] "Signing in on Android is not available yet."
+    View#22 [bar]
+      View#23
+      View#24
+      View#25
+      View#26
+      View#306
+        Text#307 [page-indicator] "On: Front page · 6 in the deck" label="On Front page. 6 pages in the deck"
+      View#29
+        Pressable#30 [bar-mark] label="Open the launcher" (press)
+          View#31
+            View#32 [mark]
+              View#33 [mark-glyph] label="TetraMark"
+                Svg#34
+                  SvgPolygon#35
+                  SvgPolygon#36
+                  SvgPolygon#37
+        TextInput#38 [bar-field] value="" label="Ask about this page…" (input, submit, focus, blur)
+        Pressable#39 [bar-mic] label="Hands-free off. Turn it on" (press)
+          View#40
+            View#41
+              Image#42
+              Text#43 "Voice off"
+        Pressable#44 [bar-play] label="Play the edition" (press)
+          View#45
+            Image#46
+            Text#47 "Play"
+t=0 hc did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading state lockTick
+t=0 hb did not use its kept answer: identifying argument 1 differs from the one it was kept for, reading state hbTick
+t=0 rpulse did not use its kept answer: identifying argument 3 differs from the one it was kept for, reading state radioTick
+t=0 tc did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading resource vp (holding a fresh answer)
+t=0 tx did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading resource vp (holding a fresh answer)
+t=0 th did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading resource vp (holding a fresh answer)
+t=0 thl did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading resource vp (holding a fresh answer)
+t=0 brun's kept answer is waiting for its identifying arguments
+t=0 bi's kept answer is waiting for its identifying arguments
+t=0 acs's kept answer is waiting for its identifying arguments
+t=0 pfront did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading state paperWidth
+t=0 tlist's kept answer is waiting for its identifying arguments
+t=0 fsList's kept answer is waiting for its identifying arguments
+t=0 fvInfo's kept answer is waiting for its identifying arguments
+t=0 mbx's kept answer is waiting for its identifying arguments
+t=0 msy's kept answer is waiting for its identifying arguments
+t=0 mmsg's kept answer is waiting for its identifying arguments
+t=0 mnote's kept answer is waiting for its identifying arguments
+t=0 qv's kept answer is waiting for its identifying arguments
+t=0 rpfacts's kept answer is waiting for its identifying arguments
+t=0 rp's kept answer is waiting for its identifying arguments
+t=0 lbList's kept answer is waiting for its identifying arguments
+t=0 ldInfo's kept answer is waiting for its identifying arguments
+t=0 ldChap's kept answer is waiting for its identifying arguments
+t=0 ldFound's kept answer is waiting for its identifying arguments
+t=0 edInfo's kept answer is waiting for its identifying arguments
+t=0 micperm's kept answer is waiting for its identifying arguments
+t=0 podNow's kept answer is waiting for its identifying arguments
+t=0 podHead's kept answer is waiting for its identifying arguments
+t=0 podShow's kept answer is waiting for its identifying arguments
+t=0 podEp's kept answer is waiting for its identifying arguments
+t=0 rdoc's kept answer is waiting for its identifying arguments
+t=0 lnc's kept answer is waiting for its identifying arguments
+t=0 psr's kept answer is waiting for its identifying arguments
+t=0 preq shows its kept answer from the last session
+t=0 preqd shows its kept answer from the last session
+t=0 pgs shows its kept answer from the last session
+t=0 bf shows its kept answer from the last session
+t=0 ds shows its kept answer from the last session
+t=0 rnote shows its kept answer from the last session
+t=0 au shows its kept answer from the last session
+t=0 pl shows its kept answer from the last session
+t=0 siv shows its kept answer from the last session
+t=0 ri shows its kept answer from the last session
+t=0 epicks shows its kept answer from the last session
+t=0 rfollow shows its kept answer from the last session
+t=0 raim shows its kept answer from the last session
+t=0 mfr shows its kept answer from the last session
+t=0 mcmp shows its kept answer from the last session
+t=0 acctInfo shows its kept answer from the last session
+t=0 cmpt shows its kept answer from the last session
+t=0 sfacts shows its kept answer from the last session
+t=0 learnt shows its kept answer from the last session
+t=0 act shows its kept answer from the last session
+t=0 about shows its kept answer from the last session
+t=0 bld shows its kept answer from the last session
+t=0 delv shows its kept answer from the last session
+t=0 ovoice shows its kept answer from the last session
+t=0 ob shows its kept answer from the last session
+t=0 ep shows its kept answer from the last session
+t=0 vc shows its kept answer from the last session
+t=0 trec shows its kept answer from the last session
+t=0 tp shows its kept answer from the last session
+t=0 nb shows its kept answer from the last session
+t=0 ldFollow shows its kept answer from the last session
+t=0 ldFollowAt shows its kept answer from the last session
+t=0 cvraw shows its kept answer from the last session
+t=0 cv shows its kept answer from the last session
+t=0 voicep shows its kept answer from the last session
+t=0 rask shows its kept answer from the last session
+t=0 rserved shows its kept answer from the last session
+t=0 lrn shows its kept answer from the last session
+t=0 cons shows its kept answer from the last session
+t=0 dl shows its kept answer from the last session
+t=0 podHome shows its kept answer from the last session
+t=0 shClips shows its kept answer from the last session
+t=0 hearClips shows its kept answer from the last session
+t=0 boot: 47 nodes, epoch 1
+t=0 hc shows its build-time answer until its source answers
+t=0 th shows its build-time answer until its source answers
+t=0 thl shows its build-time answer until its source answers
+t=0 hb shows its build-time answer until its source answers
+t=0 rpulse shows its build-time answer until its source answers
+t=0 brun shows its build-time answer until its source answers
+t=0 bi shows its build-time answer until its source answers
+t=0 acs shows its build-time answer until its source answers
+t=0 rdoc shows its build-time answer until its source answers
+t=0 tlist shows its build-time answer until its source answers
+t=0 fsList shows its build-time answer until its source answers
+t=0 fvInfo shows its build-time answer until its source answers
+t=0 mbx shows its build-time answer until its source answers
+t=0 msy shows its build-time answer until its source answers
+t=0 mmsg shows its build-time answer until its source answers
+t=0 mnote shows its build-time answer until its source answers
+t=0 tc shows its build-time answer until its source answers
+t=0 tx shows its build-time answer until its source answers
+t=0 qv shows its build-time answer until its source answers
+t=0 rpfacts shows its build-time answer until its source answers
+t=0 rp shows its build-time answer until its source answers
+t=0 lbList shows its build-time answer until its source answers
+t=0 ldInfo shows its build-time answer until its source answers
+t=0 ldChap shows its build-time answer until its source answers
+t=0 ldFound shows its build-time answer until its source answers
+t=0 edInfo shows its build-time answer until its source answers
+t=0 psr shows its build-time answer until its source answers
+t=0 micperm shows its build-time answer until its source answers
+t=0 podNow shows its build-time answer until its source answers
+t=0 podHead shows its build-time answer until its source answers
+t=0 podShow shows its build-time answer until its source answers
+t=0 podEp shows its build-time answer until its source answers
+t=0 display scale (4 asked again) → epoch 1 (+0 −0 ~0)
+t=0 trust roots: the platform certificate verifier
+t=0 preferences (4 asked again) → epoch 1 (+0 −0 ~0)
+t=0 root font size (0 asked again) → epoch 2 (+0 −0 ~46)
+t=0 viewport (4 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query hc: hostCaps
+t=0 console: api: native handle usable (answering hostCaps)
+t=0 query preq: autoradio.pageRequest (substituted)
+t=0 query preqd: pageRequested
+t=0 query pgs: pagesView
+t=0 query bf: autoradio.barFacts (substituted)
+t=0 query hb: heartbeat
+t=0 query ds: autoradio.deckState (substituted)
+t=0 query rnote: autoradio.radioNote (substituted)
+t=0 query rpulse: radioPulse
+t=0 query au: autoradio.choirAuth (substituted)
+t=0 query pl: autoradio.choirPlayer (substituted)
+t=0 query siv: signInView
+t=0 query ri: autoradio.radioView (substituted)
+t=0 query rfollow: autoradio.readerFollow (substituted)
+t=0 query raim: autoradio.readerAim (substituted)
+t=0 query tc: themeCards
+t=0 query tx: themeExtras
+t=0 query acctInfo: settingsAccount
+t=0 query cmpt: settingsComputer
+t=0 query sfacts: autoradio.settingsFacts (substituted)
+t=0 query learnt: learnedInfo
+t=0 query act: activityPage
+t=0 query about: aboutPage
+t=0 query bld: aboutBuild
+t=0 query delv: accountDeleteView
+t=0 query ovoice: autoradio.voiceSetupFacts (substituted)
+t=0 query vc: autoradio.voiceCards (substituted)
+t=0 query trec: autoradio.takesRecorder (substituted)
+t=0 query tp: takesPage
+t=0 query ldFollow: autoradio.importedFollow (substituted)
+t=0 query ldFollowAt: importedLocate
+t=0 query cvraw: autoradio.conversationEntries (substituted)
+t=0 query cv: conversationInfo
+t=0 query voicep: autoradio.voiceProfile (substituted)
+t=0 query rask: autoradio.retrievalAsk (substituted)
+t=0 query rserved: retrievalServe
+t=0 query lrn: learnPage
+t=0 query cons: consentView
+t=0 query dl: modelsPage
+t=0 query th: theme
+t=0 query thl: themeList
+t=0 query brun: barRun
+t=0 query bi: barInfo
+t=0 query acs: accountState
+t=0 query epicks: editionPicks
+t=0 query pfront: paperFront
+t=0 query tlist: texturesList
+t=0 query fsList: fileList
+t=0 query fvInfo: fileOpen
+t=0 query mbx: mailBox
+t=0 query mfr: mailFrame
+t=0 query msy: mailSync
+t=0 query mmsg: mailMessage
+t=0 query mcmp: mailCompose
+t=0 query mnote: mailNoteSelect
+t=0 query ob: onboardingPage
+t=0 query ep: editionTopics
+t=0 query qv: queueView
+t=0 query rpfacts: radioPageFacts
+t=0 query rp: radioPage
+t=0 query nb: notebookPageShared
+t=0 query lbList: importedList
+t=0 query ldInfo: importedDoc
+t=0 query ldChap: importedSection
+t=0 query ldFound: importedFind
+t=0 query edInfo: textureEditInfo
+t=0 query micperm: micPermission
+t=0 query podNow: podcastNow
+t=0 query podHead: podcastPlayhead
+t=0 query podHome: podcastHome
+t=0 query podShow: podcastShow
+t=0 query podEp: podcastEpisode
+t=0 query shClips: showClips
+t=0 query hearClips: storyClips
+t=0 query rdoc: readerDocShared
+t=0 query lnc: launcherData
+t=0 query psr: paperSearch
+t=0 continuation 1 (hc): executor token 1
+t=0 continuation 2 (preqd): executor token 2
+t=0 continuation 3 (pgs): executor token 3
+t=0 continuation 4 (th): executor token 23
+t=0 continuation 5 (thl): executor token 24
+t=0 continuation 6 (hb): executor token 4
+t=0 continuation 7 (rpulse): executor token 5
+t=0 continuation 8 (brun): executor token 25
+t=0 continuation 9 (bi): executor token 26
+t=0 continuation 10 (acs): executor token 27
+t=0 continuation 11 (siv): executor token 6
+t=0 continuation 12 (epicks): executor token 28
+t=0 continuation 13 (pfront): executor token 29
+t=0 continuation 14 (rdoc): executor token 58
+t=0 continuation 15 (tlist): executor token 30
+t=0 continuation 16 (lnc): executor token 59
+t=0 continuation 17 (fsList): executor token 31
+t=0 continuation 18 (fvInfo): executor token 32
+t=0 continuation 19 (mbx): executor token 33
+t=0 continuation 20 (mfr): executor token 34
+t=0 continuation 21 (msy): executor token 35
+t=0 continuation 22 (mmsg): executor token 36
+t=0 continuation 23 (mcmp): executor token 37
+t=0 continuation 24 (mnote): executor token 38
+t=0 continuation 25 (tc): executor token 7
+t=0 continuation 26 (tx): executor token 8
+t=0 continuation 27 (acctInfo): executor token 9
+t=0 continuation 28 (cmpt): executor token 10
+t=0 continuation 29 (learnt): executor token 11
+t=0 continuation 30 (act): executor token 12
+t=0 continuation 31 (about): executor token 13
+t=0 continuation 32 (bld): executor token 14
+t=0 continuation 33 (delv): executor token 15
+t=0 continuation 34 (ob): executor token 39
+t=0 continuation 35 (ep): executor token 40
+t=0 continuation 36 (qv): executor token 41
+t=0 continuation 37 (rpfacts): executor token 42
+t=0 continuation 38 (rp): executor token 43
+t=0 continuation 39 (tp): executor token 16
+t=0 continuation 40 (nb): executor token 44
+t=0 continuation 41 (lbList): executor token 45
+t=0 continuation 42 (ldInfo): executor token 46
+t=0 continuation 43 (ldChap): executor token 47
+t=0 continuation 44 (ldFound): executor token 48
+t=0 continuation 45 (ldFollowAt): executor token 17
+t=0 continuation 46 (edInfo): executor token 49
+t=0 continuation 47 (cv): executor token 18
+t=0 continuation 48 (rserved): executor token 19
+t=0 continuation 49 (psr): executor token 60
+t=0 continuation 50 (lrn): executor token 20
+t=0 continuation 51 (cons): executor token 21
+t=0 continuation 52 (micperm): executor token 50
+t=0 continuation 53 (dl): executor token 22
+t=0 continuation 54 (podNow): executor token 51
+t=0 continuation 55 (podHead): executor token 52
+t=0 continuation 56 (podHome): executor token 53
+t=0 continuation 57 (podShow): executor token 54
+t=0 continuation 58 (podEp): executor token 55
+t=0 continuation 59 (shClips): executor token 56
+t=0 continuation 60 (hearClips): executor token 57
+t=0 data_ready (77 asked again) → epoch 2 (+0 −0 ~0)
+t=0 modules bound here: autoradio
+t=0 query bf: autoradio.barFacts (native)
+t=0 request 61 (bf): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query au: autoradio.choirAuth (native)
+t=0 request 62 (au): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query pl: autoradio.choirPlayer (native)
+t=0 request 63 (pl): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query cvraw: autoradio.conversationEntries (native)
+t=0 request 64 (cvraw): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query ds: autoradio.deckState (native)
+t=0 request 65 (ds): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query ldFollow: autoradio.importedFollow (native)
+t=0 request 66 (ldFollow): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query preq: autoradio.pageRequest (native)
+t=0 request 67 (preq): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query rnote: autoradio.radioNote (native)
+t=0 request 68 (rnote): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query ri: autoradio.radioView (native)
+t=0 request 69 (ri): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query raim: autoradio.readerAim (native)
+t=0 request 70 (raim): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query rfollow: autoradio.readerFollow (native)
+t=0 request 71 (rfollow): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query rask: autoradio.retrievalAsk (native)
+t=0 request 72 (rask): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query sfacts: autoradio.settingsFacts (native)
+t=0 request 73 (sfacts): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query trec: autoradio.takesRecorder (native)
+t=0 request 74 (trec): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query vc: autoradio.voiceCards (native)
+t=0 request 75 (vc): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query voicep: autoradio.voiceProfile (native)
+t=0 request 76 (voicep): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 query ovoice: autoradio.voiceSetupFacts (native)
+t=0 request 77 (ovoice): POST exact-native:
+t=0 changed (1 asked again) → epoch 2 (+0 −0 ~0)
+t=0 hc: the reply asks for one more request
+t=0 continuation 78 (hc): executor token 1
+t=0 fulfil 1 (hc) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 6 ms] → epoch 2 (+0 −0 ~0)
+t=0 storage failed: stat app:/data/signout-pending: ENOENT filesystem: No such file or directory (os error 2)
+t=0 hc: the reply asks for one more request
+t=0 continuation 79 (hc): executor token 1
+t=0 fulfil 78 (hc) [HTTP 204, 0 bytes; wall 0 ms] → epoch 2 (+0 −0 ~0)
+t=0 storage failed: stat app:/data/account-stamp: ENOENT filesystem: No such file or directory (os error 2)
+t=0 hc: the reply asks for one more request
+t=0 continuation 80 (hc): executor token 1
+t=0 fulfil 79 (hc) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 1 ms] → epoch 2 (+0 −0 ~0)
+t=0 storage failed: readFile app:/data/pending-revoke: ENOENT filesystem: No such file or directory (os error 2)
+t=0 hc: the reply asks for one more request
+t=0 continuation 81 (hc): executor token 1
+t=0 fulfil 80 (hc) [HTTP 204, 0 bytes; wall 0 ms] → epoch 2 (+0 −0 ~0)
+t=0 console: AUTORADIO js heartbeat n=1 t=0
+t=0 console: api: session found=false key=false computer=false
+t=0 hc answered: equal to its build-time answer
+t=0 acs did not use its kept answer: identifying argument 1 differs from the one it was kept for, reading state lockTick and resource hc (holding a fresh answer) and resource au (holding a fresh answer) and resource hpg (holding a fresh answer) and resource siv (holding an admitted kept answer) and state so
+t=0 store exact.kept.hc
+t=0 fulfil 81 (hc) [HTTP 204, 0 bytes; wall 0 ms] → epoch 2 (+0 −0 ~0)
+t=0 preqd: the reply asks for one more request
+t=0 continuation 82 (preqd): executor token 2
+t=0 fulfil 2 (preqd) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 16 ms] → epoch 2 (+0 −0 ~0)
+t=0 pgs: the reply asks for one more request
+t=0 continuation 83 (pgs): executor token 3
+t=0 fulfil 3 (pgs) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 17 ms] → epoch 2 (+0 −0 ~0)
+t=0 th: the reply asks for one more request
+t=0 continuation 84 (th): executor token 23
+t=0 fulfil 4 (th) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 18 ms] → epoch 2 (+0 −0 ~0)
+t=0 thl: the reply asks for one more request
+t=0 continuation 85 (thl): executor token 24
+t=0 fulfil 5 (thl) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 22 ms] → epoch 2 (+0 −0 ~0)
+t=0 hb answered: equal to its build-time answer
+t=0 store exact.kept.hb
+t=0 fulfil 6 (hb) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 23 ms] → epoch 2 (+0 −0 ~0)
+t=0 rpulse: the reply asks for one more request
+t=0 request 86 (rpulse): POST exact-native:
+t=0 fulfil 7 (rpulse) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 27 ms] → epoch 2 (+0 −0 ~0)
+t=0 brun answered: equal to its build-time answer
+t=0 bi did not use its kept answer: identifying argument 2 differs from the one it was kept for, reading resource brun (holding a fresh answer)
+t=0 store exact.kept.brun
+t=0 fulfil 8 (brun) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 29 ms] → epoch 2 (+0 −0 ~0)
+t=0 bi answered: equal to its build-time answer
+t=0 query micperm: micPermission
+t=0 forget request 52 (micperm)
+t=0 request 87 (micperm): POST exact-native:
+t=0 micperm shows its kept answer from the last session
+t=0 store exact.kept.bi
+t=0 fulfil 9 (bi) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 32 ms] → epoch 2 (+0 −0 ~0)
+t=0 acs answered: replaces its build-time answer
+t=0 query tlist: texturesList
+t=0 query fsList: fileList
+t=0 query fvInfo: fileOpen
+t=0 query mbx: mailBox
+t=0 query msy: mailSync
+t=0 query mmsg: mailMessage
+t=0 query mnote: mailNoteSelect
+t=0 query lbList: importedList
+t=0 query ldInfo: importedDoc
+t=0 query ldChap: importedSection
+t=0 query ldFound: importedFind
+t=0 query edInfo: textureEditInfo
+t=0 query rdoc: readerDocShared
+t=0 forget request 14 (rdoc)
+t=0 forget request 15 (tlist)
+t=0 forget request 17 (fsList)
+t=0 forget request 18 (fvInfo)
+t=0 forget request 19 (mbx)
+t=0 forget request 21 (msy)
+t=0 forget request 22 (mmsg)
+t=0 forget request 24 (mnote)
+t=0 forget request 41 (lbList)
+t=0 forget request 42 (ldInfo)
+t=0 forget request 43 (ldChap)
+t=0 forget request 44 (ldFound)
+t=0 forget request 46 (edInfo)
+t=0 store exact.kept.acs
+t=0 fulfil 10 (acs) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 37 ms] → epoch 3 (+0 −3 ~2)
+t=0 fulfil 11 (siv) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 49 ms] → epoch 3 (+0 −0 ~0)
+t=0 epicks: the reply asks for one more request
+t=0 continuation 88 (epicks): executor token 28
+t=0 fulfil 12 (epicks) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 51 ms] → epoch 3 (+0 −0 ~0)
+t=0 pfront: the reply asks for one more request
+t=0 request 89 (pfront): GET https://choir.news/api/platform/publications/front?limit=100
+t=0 fulfil 13 (pfront) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 53 ms] → epoch 3 (+0 −0 ~0)
+t=0 lnc: the reply asks for one more request
+t=0 continuation 90 (lnc): executor token 59
+t=0 fulfil 16 (lnc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 55 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 20 (mfr) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 56 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 23 (mcmp) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 60 ms] → epoch 3 (+0 −0 ~0)
+t=0 tc: the reply asks for one more request
+t=0 continuation 91 (tc): executor token 7
+t=0 fulfil 25 (tc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 64 ms] → epoch 3 (+0 −0 ~0)
+t=0 tx: the reply asks for one more request
+t=0 continuation 92 (tx): executor token 8
+t=0 fulfil 26 (tx) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 67 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 27 (acctInfo) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 68 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 28 (cmpt) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 72 ms] → epoch 3 (+0 −0 ~0)
+t=0 learnt: the reply asks for one more request
+t=0 continuation 93 (learnt): executor token 11
+t=0 fulfil 29 (learnt) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 75 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 30 (act) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 77 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 31 (about) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 80 ms] → epoch 3 (+0 −0 ~0)
+t=0 bld: the reply asks for one more request
+t=0 request 94 (bld): GET https://choir.news/health
+t=0 fulfil 32 (bld) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 84 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 33 (delv) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 85 ms] → epoch 3 (+0 −0 ~0)
+t=0 ob: the reply asks for one more request
+t=0 continuation 95 (ob): executor token 39
+t=0 fulfil 34 (ob) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 89 ms] → epoch 3 (+0 −0 ~0)
+t=0 ep: the reply asks for one more request
+t=0 continuation 96 (ep): executor token 40
+t=0 fulfil 35 (ep) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 90 ms] → epoch 3 (+0 −0 ~0)
+t=0 qv answered: equal to its build-time answer
+t=0 store exact.kept.qv
+t=0 fulfil 36 (qv) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 91 ms] → epoch 3 (+0 −0 ~0)
+t=0 rpfacts: the reply asks for one more request
+t=0 request 97 (rpfacts): POST exact-native:
+t=0 fulfil 37 (rpfacts) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 96 ms] → epoch 3 (+0 −0 ~0)
+t=0 rp answered: equal to its build-time answer
+t=0 store exact.kept.rp
+t=0 fulfil 38 (rp) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 98 ms] → epoch 3 (+0 −0 ~0)
+t=0 tp: the reply asks for one more request
+t=0 continuation 98 (tp): executor token 16
+t=0 fulfil 39 (tp) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 102 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 40 (nb) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 104 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 45 (ldFollowAt) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 108 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 47 (cv) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 111 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 48 (rserved) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 114 ms] → epoch 3 (+0 −0 ~0)
+t=0 psr answered: equal to its build-time answer
+t=0 fulfil 49 (psr) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 118 ms] → epoch 3 (+0 −0 ~0)
+t=0 lrn: the reply asks for one more request
+t=0 request 99 (lrn): POST exact-native:
+t=0 fulfil 50 (lrn) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 121 ms] → epoch 3 (+0 −0 ~0)
+t=0 cons: the reply asks for one more request
+t=0 continuation 100 (cons): executor token 21
+t=0 fulfil 51 (cons) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 123 ms] → epoch 3 (+0 −0 ~0)
+t=0 dl: the reply asks for one more request
+t=0 continuation 101 (dl): executor token 22
+t=0 fulfil 53 (dl) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 124 ms] → epoch 3 (+0 −0 ~0)
+t=0 podNow answered: equal to its build-time answer
+t=0 query podHead: podcastPlayhead
+t=0 query podShow: podcastShow
+t=0 query podEp: podcastEpisode
+t=0 forget request 55 (podHead)
+t=0 forget request 57 (podShow)
+t=0 forget request 58 (podEp)
+t=0 store exact.kept.podNow
+t=0 fulfil 54 (podNow) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 125 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 56 (podHome) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 132 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 59 (shClips) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 136 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 61 (bf) [HTTP 200, 29 bytes; wall 151 ms] refused: Data { resource: "bf", error: Failed(Error, "autoradio.barFacts: NotSupportedError", "NotSupportedError") }
+t=0 request 61 (bf) failed and is no longer pending: it keeps its last value: autoradio.barFacts: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 60 (hearClips) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 149 ms] → epoch 3 (+0 −0 ~0)
+t=0 preqd: the reply asks for one more request
+t=0 request 102 (preqd): POST exact-native:
+t=0 fulfil 82 (preqd) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 131 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 62 (au) [HTTP 200, 29 bytes; wall 167 ms] refused: Data { resource: "au", error: Failed(Error, "autoradio.choirAuth: NotSupportedError", "NotSupportedError") }
+t=0 request 62 (au) failed and is no longer pending: it keeps its last value: autoradio.choirAuth: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 63 (pl) [HTTP 200, 29 bytes; wall 174 ms] refused: Data { resource: "pl", error: Failed(Error, "autoradio.choirPlayer: NotSupportedError", "NotSupportedError") }
+t=0 request 63 (pl) failed and is no longer pending: it keeps its last value: autoradio.choirPlayer: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 64 (cvraw) [HTTP 200, 29 bytes; wall 182 ms] refused: Data { resource: "cvraw", error: Failed(Error, "autoradio.conversationEntries: NotSupportedError", "NotSupportedError") }
+t=0 request 64 (cvraw) failed and is no longer pending: it keeps its last value: autoradio.conversationEntries: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 65 (ds) [HTTP 200, 29 bytes; wall 191 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=0 request 65 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 66 (ldFollow) [HTTP 200, 29 bytes; wall 211 ms] refused: Data { resource: "ldFollow", error: Failed(Error, "autoradio.importedFollow: NotSupportedError", "NotSupportedError") }
+t=0 request 66 (ldFollow) failed and is no longer pending: it keeps its last value: autoradio.importedFollow: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 67 (preq) [HTTP 200, 29 bytes; wall 218 ms] refused: Data { resource: "preq", error: Failed(Error, "autoradio.pageRequest: NotSupportedError", "NotSupportedError") }
+t=0 request 67 (preq) failed and is no longer pending: it keeps its last value: autoradio.pageRequest: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 68 (rnote) [HTTP 200, 29 bytes; wall 226 ms] refused: Data { resource: "rnote", error: Failed(Error, "autoradio.radioNote: NotSupportedError", "NotSupportedError") }
+t=0 request 68 (rnote) failed and is no longer pending: it keeps its last value: autoradio.radioNote: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 69 (ri) [HTTP 200, 29 bytes; wall 232 ms] refused: Data { resource: "ri", error: Failed(Error, "autoradio.radioView: NotSupportedError", "NotSupportedError") }
+t=0 request 69 (ri) failed and is no longer pending: it keeps its last value: autoradio.radioView: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 70 (raim) [HTTP 200, 29 bytes; wall 235 ms] refused: Data { resource: "raim", error: Failed(Error, "autoradio.readerAim: NotSupportedError", "NotSupportedError") }
+t=0 request 70 (raim) failed and is no longer pending: it keeps its last value: autoradio.readerAim: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 71 (rfollow) [HTTP 200, 29 bytes; wall 240 ms] refused: Data { resource: "rfollow", error: Failed(Error, "autoradio.readerFollow: NotSupportedError", "NotSupportedError") }
+t=0 request 71 (rfollow) failed and is no longer pending: it keeps its last value: autoradio.readerFollow: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 72 (rask) [HTTP 200, 29 bytes; wall 244 ms] refused: Data { resource: "rask", error: Failed(Error, "autoradio.retrievalAsk: NotSupportedError", "NotSupportedError") }
+t=0 request 72 (rask) failed and is no longer pending: it keeps its last value: autoradio.retrievalAsk: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 73 (sfacts) [HTTP 200, 29 bytes; wall 249 ms] refused: Data { resource: "sfacts", error: Failed(Error, "autoradio.settingsFacts: NotSupportedError", "NotSupportedError") }
+t=0 request 73 (sfacts) failed and is no longer pending: it keeps its last value: autoradio.settingsFacts: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 74 (trec) [HTTP 200, 29 bytes; wall 253 ms] refused: Data { resource: "trec", error: Failed(Error, "autoradio.takesRecorder: NotSupportedError", "NotSupportedError") }
+t=0 request 74 (trec) failed and is no longer pending: it keeps its last value: autoradio.takesRecorder: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 75 (vc) [HTTP 200, 29 bytes; wall 257 ms] refused: Data { resource: "vc", error: Failed(Error, "autoradio.voiceCards: NotSupportedError", "NotSupportedError") }
+t=0 request 75 (vc) failed and is no longer pending: it keeps its last value: autoradio.voiceCards: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 76 (voicep) [HTTP 200, 29 bytes; wall 261 ms] refused: Data { resource: "voicep", error: Failed(Error, "autoradio.voiceProfile: NotSupportedError", "NotSupportedError") }
+t=0 request 76 (voicep) failed and is no longer pending: it keeps its last value: autoradio.voiceProfile: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 fulfil 77 (ovoice) [HTTP 200, 29 bytes; wall 265 ms] refused: Data { resource: "ovoice", error: Failed(Error, "autoradio.voiceSetupFacts: NotSupportedError", "NotSupportedError") }
+t=0 request 77 (ovoice) failed and is no longer pending: it keeps its last value: autoradio.voiceSetupFacts: NotSupportedError
+t=0 a failed request (0 asked again) → epoch 3 (+0 −0 ~0)
+t=0 rpulse: the reply asks for one more request
+t=0 request 103 (rpulse): POST exact-native:
+t=0 fulfil 86 (rpulse) [HTTP 200, 29 bytes; wall 227 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 87 (micperm) [HTTP 200, 29 bytes; wall 225 ms] → epoch 3 (+0 −0 ~0)
+t=0 rpfacts answered: equal to its build-time answer
+t=0 query lnc: launcherData
+t=0 forget request 90 (lnc)
+t=0 continuation 104 (lnc): executor token 88
+t=0 lnc shows its kept answer from the last session
+t=0 store exact.kept.rpfacts
+t=0 fulfil 97 (rpfacts) [HTTP 200, 29 bytes; wall 163 ms] → epoch 3 (+0 −0 ~0)
+t=0 lrn: the reply asks for one more request
+t=0 request 105 (lrn): POST exact-native:
+t=0 fulfil 99 (lrn) [HTTP 200, 29 bytes; wall 146 ms] → epoch 3 (+0 −0 ~0)
+t=0 preqd answered differently from its kept answer: the first frame showed the last session's value until its source answered
+t=0 store exact.kept.preqd
+t=0 fulfil 102 (preqd) [HTTP 200, 29 bytes; wall 127 ms] → epoch 3 (+0 −0 ~0)
+t=0 console: radio: pulse restored=false ready=true started=false onAir=no write=false hold=true ahead=0 inFlight=false lost=0
+t=0 rpulse answered: equal to its build-time answer
+t=0 store exact.kept.rpulse
+t=0 fulfil 103 (rpulse) [HTTP 200, 29 bytes; wall 23 ms] → epoch 3 (+0 −0 ~0)
+t=0 fulfil 105 (lrn) [HTTP 200, 29 bytes; wall 22 ms] → epoch 3 (+0 −0 ~0)
+t=0.0014169999999467109 pfront: the reply asks for one more request
+t=0.0014169999999467109 continuation 106 (pfront): executor token 29
+t=0.0014169999999467109 fulfil 89 (pfront) [HTTP 200, 93008 bytes; wall 718 ms; delivery wait 18 ms] → epoch 3 (+0 −0 ~0)
+t=0.0014169999999467109 fulfil 94 (bld) [HTTP 200, 3443 bytes; wall 356 ms; delivery wait 383 ms] → epoch 3 (+0 −0 ~0)
+t=0.0014169999999467109 pgs answered differently from its kept answer: the first frame showed the last session's value until its source answered
+t=0.0014169999999467109 query acs: accountState
+t=0.0014169999999467109 query epicks: editionPicks
+t=0.0014169999999467109 query pfront: paperFront
+t=0.0014169999999467109 query tlist: texturesList
+t=0.0014169999999467109 query fvInfo: fileOpen
+t=0.0014169999999467109 query mbx: mailBox
+t=0.0014169999999467109 query mfr: mailFrame
+t=0.0014169999999467109 query msy: mailSync
+t=0.0014169999999467109 query mmsg: mailMessage
+t=0.0014169999999467109 query mcmp: mailCompose
+t=0.0014169999999467109 query ob: onboardingPage
+t=0.0014169999999467109 query lbList: importedList
+t=0.0014169999999467109 query ldInfo: importedDoc
+t=0.0014169999999467109 query edInfo: textureEditInfo
+t=0.0014169999999467109 query podHome: podcastHome
+t=0.0014169999999467109 query podShow: podcastShow
+t=0.0014169999999467109 query podEp: podcastEpisode
+t=0.0014169999999467109 query shClips: showClips
+t=0.0014169999999467109 query hearClips: storyClips
+t=0.0014169999999467109 query rdoc: readerDocShared
+t=0.0014169999999467109 forget request 88 (epicks)
+t=0.0014169999999467109 continuation 107 (epicks): executor token 90
+t=0.0014169999999467109 forget request 106 (pfront)
+t=0.0014169999999467109 continuation 108 (pfront): executor token 91
+t=0.0014169999999467109 forget request 95 (ob)
+t=0.0014169999999467109 continuation 109 (ob): executor token 99
+t=0.0014169999999467109 store exact.kept.pgs
+t=0.0014169999999467109 store exact.kept.acs
+t=0.0014169999999467109 store exact.kept.tlist
+t=0.0014169999999467109 store exact.kept.fvInfo
+t=0.0014169999999467109 store exact.kept.mbx
+t=0.0014169999999467109 store exact.kept.mfr
+t=0.0014169999999467109 store exact.kept.msy
+t=0.0014169999999467109 store exact.kept.mmsg
+t=0.0014169999999467109 store exact.kept.mcmp
+t=0.0014169999999467109 store exact.kept.lbList
+t=0.0014169999999467109 store exact.kept.ldInfo
+t=0.0014169999999467109 store exact.kept.edInfo
+t=0.0014169999999467109 store exact.kept.podHome
+t=0.0014169999999467109 store exact.kept.podShow
+t=0.0014169999999467109 store exact.kept.podEp
+t=0.0014169999999467109 store exact.kept.shClips
+t=0.0014169999999467109 store exact.kept.hearClips
+t=0.0014169999999467109 store exact.kept.rdoc
+t=0.0014169999999467109 fulfil 83 (pgs) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 676 ms] → epoch 4 (+40 −3 ~1)
+t=0.0014169999999467109 tc: the reply asks for one more request
+t=0.0014169999999467109 continuation 110 (tc): executor token 7
+t=0.0014169999999467109 fulfil 91 (tc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 709 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 storage failed: readFile app:/data/theme-choice.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.0014169999999467109 tc: the reply asks for one more request
+t=0.0014169999999467109 continuation 111 (tc): executor token 7
+t=0.0014169999999467109 fulfil 110 (tc) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 learnt: the reply asks for one more request
+t=0.0014169999999467109 continuation 112 (learnt): executor token 11
+t=0.0014169999999467109 fulfil 93 (learnt) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 storage failed: readFile app:/data/what-i-told-the-paper.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.0014169999999467109 fulfil 112 (learnt) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 cons: the reply asks for one more request
+t=0.0014169999999467109 continuation 113 (cons): executor token 21
+t=0.0014169999999467109 fulfil 100 (cons) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 lnc: the reply asks for one more request
+t=0.0014169999999467109 continuation 114 (lnc): executor token 88
+t=0.0014169999999467109 fulfil 104 (lnc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 storage failed: readFile app:/data/consent.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.0014169999999467109 storage failed: readFile app:/data/edition-topics.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.0014169999999467109 storage failed: readFile app:/data/onboarding.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.0014169999999467109 cons: the reply asks for one more request
+t=0.0014169999999467109 request 115 (cons): POST exact-native:
+t=0.0014169999999467109 fulfil 113 (cons) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 fulfil 115 (cons) [HTTP 200, 29 bytes; wall 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 tp: the reply asks for one more request
+t=0.0014169999999467109 continuation 116 (tp): executor token 16
+t=0.0014169999999467109 fulfil 98 (tp) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 23 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 ob: the reply asks for one more request
+t=0.0014169999999467109 request 117 (ob): POST exact-native:
+t=0.0014169999999467109 fulfil 109 (ob) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 23 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 store exact.kept.ob
+t=0.0014169999999467109 fulfil 117 (ob) [HTTP 200, 29 bytes; wall 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 storage failed: readFile app:/data/takes.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.0014169999999467109 console: paper: list front stories=100
+t=0.0014169999999467109 fulfil 116 (tp) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 23 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 dl: the reply asks for one more request
+t=0.0014169999999467109 request 118 (dl): POST exact-native:
+t=0.0014169999999467109 fulfil 101 (dl) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 84 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 store exact.kept.pfront
+t=0.0014169999999467109 fulfil 108 (pfront) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 21 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 fulfil 118 (dl) [HTTP 200, 29 bytes; wall 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 tc: the reply asks for one more request
+t=0.0014169999999467109 continuation 119 (tc): executor token 7
+t=0.0014169999999467109 fulfil 111 (tc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 57 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 lnc: the reply asks for one more request
+t=0.0014169999999467109 continuation 120 (lnc): executor token 88
+t=0.0014169999999467109 fulfil 114 (lnc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 58 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 storage failed: readdir app:/data/themes: ENOENT filesystem: No such file or directory (os error 2)
+t=0.0014169999999467109 storage failed: stat app:/data/edition-topics.json: ENOENT filesystem: No such file or directory (os error 2)
+t=0.0014169999999467109 console: themes: the system scheme the app reports is "light"
+t=0.0014169999999467109 tc answered: equal to its build-time answer
+t=0.0014169999999467109 fulfil 119 (tc) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 4 (+0 −0 ~0)
+t=0.0014169999999467109 background: storage (0 waiting)
+t=0.0014169999999467109 background: done (1 operations)
+t=0.0014169999999467109 th answered: replaces its build-time answer
+t=0.0014169999999467109 fulfil 84 (th) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 5 (+0 −0 ~6)
+t=0.0014169999999467109 thl answered: equal to its build-time answer
+t=0.0014169999999467109 fulfil 85 (thl) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 46 ms] → epoch 5 (+0 −0 ~0)
+t=0.0014169999999467109 tx answered: replaces its build-time answer
+t=0.0014169999999467109 fulfil 92 (tx) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 48 ms] → epoch 5 (+0 −0 ~0)
+t=0.0014169999999467109 fulfil 96 (ep) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 71 ms] → epoch 5 (+0 −0 ~0)
+t=0.0014169999999467109 store exact.kept.epicks
+t=0.0014169999999467109 fulfil 107 (epicks) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 74 ms] → epoch 5 (+0 −0 ~0)
+t=0.0014169999999467109 lnc answered differently from its kept answer: the first frame showed the last session's value until its source answered
+t=0.0014169999999467109 store exact.kept.lnc
+t=0.0014169999999467109 fulfil 120 (lnc) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 71 ms] → epoch 5 (+0 −0 ~0)
+t=1 timer row=26 kind=0 nominal_ms=1.000 cutoff_ms=1.000 commit_ms=1.000
+t=1 request 122 (rhm): POST exact-native:
+t=1 timer row=28 kind=0 nominal_ms=1.000 cutoff_ms=1.000 commit_ms=1.000
+t=1 advance → 2 timers fired, epoch 5
+t=1 rhm: the reply asks for one more request
+t=1 request 123 (rhm): POST exact-native:
+t=1 fulfil 122 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 124 (rhm): POST exact-native:
+t=1 fulfil 123 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 continuation 125 (rhm): executor token 112
+t=1 fulfil 124 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 crypto: the driver seeds this launch's randomness (seed 1), so each launch at that seed draws the same bytes; --seed <n> draws others (LLP 1069.005 D2b)
+t=1 rhm: the reply asks for one more request
+t=1 request 126 (rhm): POST exact-native:
+t=1 fulfil 125 (rhm) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 127 (rhm): POST exact-native:
+t=1 fulfil 126 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 128 (rhm): POST exact-native:
+t=1 fulfil 127 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 129 (rhm): POST exact-native:
+t=1 fulfil 128 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 130 (rhm): POST exact-native:
+t=1 fulfil 129 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 131 (rhm): GET https://choir.news/api/platform/publications/front?limit=60
+t=1 fulfil 130 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 console: lap: bridge: front list received
+t=1 rhm: the reply asks for one more request
+t=1 continuation 132 (rhm): executor token 112
+t=1 fulfil 131 (rhm) [HTTP 200, 56622 bytes; wall 312 ms; delivery wait 9 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 133 (rhm): POST exact-native:
+t=1 fulfil 132 (rhm) [HTTP 200, 0 bytes; wall 0 ms; delivery wait 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 134 (rhm): POST exact-native:
+t=1 fulfil 133 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 console: radio: pump starts p-0000000000003c327bbf3da0; deck item none
+t=1 rhm: the reply asks for one more request
+t=1 request 135 (rhm): POST exact-native:
+t=1 fulfil 134 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 136 (rhm): POST exact-native:
+t=1 fulfil 135 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 137 (rhm): POST exact-native:
+t=1 fulfil 136 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 138 (rhm): POST exact-native:
+t=1 fulfil 137 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 139 (rhm): POST exact-native:
+t=1 fulfil 138 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 140 (rhm): POST exact-native:
+t=1 fulfil 139 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 141 (rhm): POST exact-native:
+t=1 fulfil 140 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 142 (rhm): POST exact-native:
+t=1 fulfil 141 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 rhm: the reply asks for one more request
+t=1 request 143 (rhm): POST exact-native:
+t=1 fulfil 142 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 console: radio: hold: 4 ahead on the sheet, the deck holds 0, playing nothing
+t=1 fulfil 143 (rhm) [HTTP 200, 29 bytes; wall 20 ms] → epoch 5 (+0 −0 ~0)
+t=1 background: storage (0 waiting)
+t=1 background: done (2 operations)
+t=10 timer row=18 kind=0 nominal_ms=10.000 cutoff_ms=10.000 commit_ms=10.000
+t=10 timer row=31 kind=0 nominal_ms=10.000 cutoff_ms=10.000 commit_ms=10.000
+t=16.666666666666668 timer row=24 kind=6 nominal_ms=16.667 cutoff_ms=16.667 commit_ms=16.667
+t=33.333333333333336 timer row=24 kind=6 nominal_ms=33.333 cutoff_ms=33.333 commit_ms=33.333
+t=50 timer row=24 kind=6 nominal_ms=50.000 cutoff_ms=50.000 commit_ms=50.000
+t=59.087625000000116 advance → 5 timers fired, epoch 8
+t=66.66666666666667 timer row=24 kind=6 nominal_ms=66.667 cutoff_ms=66.667 commit_ms=66.667
+t=83.33333333333333 timer row=24 kind=6 nominal_ms=83.333 cutoff_ms=83.333 commit_ms=83.333
+t=100 timer row=24 kind=6 nominal_ms=100.000 cutoff_ms=100.000 commit_ms=100.000
+t=100.00141699999995 query hc: hostCaps
+t=100.00141699999995 query acs: accountState
+t=100.00141699999995 store exact.kept.hc
+t=100.00141699999995 store exact.kept.acs
+t=100.00141699999995 timer row=7 kind=0 nominal_ms=100.001 cutoff_ms=100.001 commit_ms=100.001
+t=116.66666666666667 timer row=24 kind=6 nominal_ms=116.667 cutoff_ms=116.667 commit_ms=116.667
+t=133.33333333333334 timer row=24 kind=6 nominal_ms=133.333 cutoff_ms=133.333 commit_ms=133.333
+t=150 timer row=24 kind=6 nominal_ms=150.000 cutoff_ms=150.000 commit_ms=150.000
+t=166.66666666666666 timer row=24 kind=6 nominal_ms=166.667 cutoff_ms=166.667 commit_ms=166.667
+t=183.33333333333334 timer row=24 kind=6 nominal_ms=183.333 cutoff_ms=183.333 commit_ms=183.333
+t=200 timer row=24 kind=6 nominal_ms=200.000 cutoff_ms=200.000 commit_ms=200.000
+t=216.66666666666666 timer row=24 kind=6 nominal_ms=216.667 cutoff_ms=216.667 commit_ms=216.667
+t=233.33333333333334 timer row=24 kind=6 nominal_ms=233.333 cutoff_ms=233.333 commit_ms=233.333
+t=250 timer row=24 kind=6 nominal_ms=250.000 cutoff_ms=250.000 commit_ms=250.000
+t=266.6666666666667 timer row=24 kind=6 nominal_ms=266.667 cutoff_ms=266.667 commit_ms=266.667
+t=283.3333333333333 timer row=24 kind=6 nominal_ms=283.333 cutoff_ms=283.333 commit_ms=283.333
+t=300 timer row=24 kind=6 nominal_ms=300.000 cutoff_ms=300.000 commit_ms=300.000
+t=316.6666666666667 timer row=24 kind=6 nominal_ms=316.667 cutoff_ms=316.667 commit_ms=316.667
+t=333.3333333333333 timer row=24 kind=6 nominal_ms=333.333 cutoff_ms=333.333 commit_ms=333.333
+t=350 timer row=24 kind=6 nominal_ms=350.000 cutoff_ms=350.000 commit_ms=350.000
+t=366.6666666666667 timer row=24 kind=6 nominal_ms=366.667 cutoff_ms=366.667 commit_ms=366.667
+t=383.3333333333333 timer row=24 kind=6 nominal_ms=383.333 cutoff_ms=383.333 commit_ms=383.333
+t=400 timer row=24 kind=6 nominal_ms=400.000 cutoff_ms=400.000 commit_ms=400.000
+t=416.6666666666667 timer row=24 kind=6 nominal_ms=416.667 cutoff_ms=416.667 commit_ms=416.667
+t=1000 query ds: autoradio.deckState (native)
+t=1000 query rpulse: radioPulse
+t=1000 request 146 (ds): POST exact-native:
+t=1000 request 147 (rpulse): POST exact-native:
+t=1000 timer row=2 kind=0 nominal_ms=1000.000 cutoff_ms=1000.000 commit_ms=1000.000
+t=1000 advance → 24 timers fired, epoch 24
+t=1000 fulfil 146 (ds) [HTTP 200, 29 bytes; wall 20 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=1000 request 146 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=1000 release autoradio.deckState {"tick":0.0}: no reader asks with it
+t=1000 a failed request (0 asked again) → epoch 24 (+0 −0 ~0)
+t=1000 rpulse: the reply asks for one more request
+t=1000 request 148 (rpulse): POST exact-native:
+t=1000 fulfil 147 (rpulse) [HTTP 200, 29 bytes; wall 20 ms; delivery wait 2 ms] → epoch 24 (+0 −0 ~0)
+t=1000 console: radio: pulse restored=true ready=true started=true onAir=yes write=true hold=false ahead=4 inFlight=false lost=0
+t=1000 query brun: barRun
+t=1000 query bi: barInfo
+t=1000 query qv: queueView
+t=1000 query rpfacts: radioPageFacts
+t=1000 query podNow: podcastNow
+t=1000 request 149 (rpfacts): POST exact-native:
+t=1000 request 150 (podNow): POST exact-native:
+t=1000 store exact.kept.rpulse
+t=1000 store exact.kept.brun
+t=1000 store exact.kept.bi
+t=1000 store exact.kept.qv
+t=1000 fulfil 148 (rpulse) [HTTP 200, 29 bytes; wall 20 ms] → epoch 24 (+0 −0 ~0)
+t=1000 query rp: radioPage
+t=1000 store exact.kept.rpfacts
+t=1000 store exact.kept.rp
+t=1000 fulfil 149 (rpfacts) [HTTP 200, 29 bytes; wall 20 ms] → epoch 25 (+86 −2 ~5)
+t=1000 store exact.kept.podNow
+t=1000 fulfil 150 (podNow) [HTTP 200, 29 bytes; wall 20 ms; delivery wait 34 ms] → epoch 25 (+0 −0 ~0)
+t=1001 request 151 (rwm): POST exact-native:
+t=1001 timer row=27 kind=0 nominal_ms=1001.000 cutoff_ms=1001.000 commit_ms=1001.000
+t=1001 advance → 1 timer fired, epoch 25
+t=1882.4709580000003 console: lap: radioWrite: start
+t=1882.4709580000003 rwm: the reply asks for one more request
+t=1882.4709580000003 request 152 (rwm): POST exact-native:
+t=1882.4709580000003 fulfil 151 (rwm) [HTTP 200, 29 bytes; wall 3 ms] → epoch 25 (+0 −0 ~0)
+t=1882.4709580000003 console: lap: radioWrite: radio ready
+t=1882.4709580000003 fulfil 152 (rwm) [HTTP 200, 29 bytes; wall 3 ms] → epoch 25 (+0 −0 ~0)
+t=2000 query ds: autoradio.deckState (native)
+t=2000 query rpulse: radioPulse
+t=2000 request 153 (ds): POST exact-native:
+t=2000 request 154 (rpulse): POST exact-native:
+t=2000 timer row=2 kind=0 nominal_ms=2000.000 cutoff_ms=2000.000 commit_ms=2000.000
+t=2000 advance → 1 timer fired, epoch 25
+t=2152.1210000000005 fulfil 153 (ds) [HTTP 200, 29 bytes; wall 1 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=2152.1210000000005 request 153 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=2152.1210000000005 release autoradio.deckState {"tick":1.0}: no reader asks with it
+t=2152.1210000000005 a failed request (0 asked again) → epoch 25 (+0 −0 ~0)
+t=2152.1210000000005 store exact.kept.rpulse
+t=2152.1210000000005 fulfil 154 (rpulse) [HTTP 200, 29 bytes; wall 1 ms; delivery wait 2 ms] → epoch 25 (+0 −0 ~0)
+t=3000 query ds: autoradio.deckState (native)
+t=3000 query rpulse: radioPulse
+t=3000 request 155 (ds): POST exact-native:
+t=3000 request 156 (rpulse): POST exact-native:
+t=3000 timer row=2 kind=0 nominal_ms=3000.000 cutoff_ms=3000.000 commit_ms=3000.000
+t=3000 advance → 1 timer fired, epoch 25
+t=3023.7979580000006 fulfil 155 (ds) [HTTP 200, 29 bytes; wall 1 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=3023.7979580000006 request 155 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=3023.7979580000006 release autoradio.deckState {"tick":2.0}: no reader asks with it
+t=3023.7979580000006 a failed request (0 asked again) → epoch 25 (+0 −0 ~0)
+t=3023.7979580000006 console: radio: pulse restored=true ready=true started=true onAir=yes write=false hold=false ahead=4 inFlight=false lost=0
+t=3023.7979580000006 store exact.kept.rpulse
+t=3023.7979580000006 fulfil 156 (rpulse) [HTTP 200, 29 bytes; wall 1 ms; delivery wait 2 ms] → epoch 25 (+0 −0 ~0)
+t=5000 query hb: heartbeat
+t=5000 console: AUTORADIO js heartbeat n=2 t=0
+t=5000 store exact.kept.hb
+t=5000 timer row=1 kind=0 nominal_ms=5000.000 cutoff_ms=5000.000 commit_ms=5000.000
+t=5003.638083 advance → 1 timer fired, epoch 25
+t=6000 press view 30 (toggleLauncher) → epoch 26 (+127 −4 ~5)
+t=6001 timer row=26 kind=0 nominal_ms=6001.000 cutoff_ms=6001.000 commit_ms=6001.000
+t=6017.666666666667 timer row=24 kind=6 nominal_ms=6017.667 cutoff_ms=6017.667 commit_ms=6017.667
+t=6034.333333333333 timer row=24 kind=6 nominal_ms=6034.333 cutoff_ms=6034.333 commit_ms=6034.333
+t=6051 timer row=24 kind=6 nominal_ms=6051.000 cutoff_ms=6051.000 commit_ms=6051.000
+t=6067.666666666667 timer row=24 kind=6 nominal_ms=6067.667 cutoff_ms=6067.667 commit_ms=6067.667
+t=6075.471792 advance → 5 timers fired, epoch 30
+t=6084.333333333333 timer row=24 kind=6 nominal_ms=6084.333 cutoff_ms=6084.333 commit_ms=6084.333
+t=6101 timer row=24 kind=6 nominal_ms=6101.000 cutoff_ms=6101.000 commit_ms=6101.000
+t=6117.666666666667 timer row=24 kind=6 nominal_ms=6117.667 cutoff_ms=6117.667 commit_ms=6117.667
+t=6134.333333333333 timer row=24 kind=6 nominal_ms=6134.333 cutoff_ms=6134.333 commit_ms=6134.333
+t=6151 timer row=24 kind=6 nominal_ms=6151.000 cutoff_ms=6151.000 commit_ms=6151.000
+t=6167.666666666667 timer row=24 kind=6 nominal_ms=6167.667 cutoff_ms=6167.667 commit_ms=6167.667
+t=6184.333333333333 timer row=24 kind=6 nominal_ms=6184.333 cutoff_ms=6184.333 commit_ms=6184.333
+t=6201 timer row=24 kind=6 nominal_ms=6201.000 cutoff_ms=6201.000 commit_ms=6201.000
+t=6201.1393339999995 advance → 8 timers fired, epoch 38
+t=6217.666666666667 timer row=24 kind=6 nominal_ms=6217.667 cutoff_ms=6217.667 commit_ms=6217.667
+t=6234.333333333333 timer row=24 kind=6 nominal_ms=6234.333 cutoff_ms=6234.333 commit_ms=6234.333
+t=6251 timer row=24 kind=6 nominal_ms=6251.000 cutoff_ms=6251.000 commit_ms=6251.000
+t=6267.666666666667 timer row=24 kind=6 nominal_ms=6267.667 cutoff_ms=6267.667 commit_ms=6267.667
+t=6284.333333333333 timer row=24 kind=6 nominal_ms=6284.333 cutoff_ms=6284.333 commit_ms=6284.333
+t=6301 timer row=24 kind=6 nominal_ms=6301.000 cutoff_ms=6301.000 commit_ms=6301.000
+t=6304.539542 advance → 6 timers fired, epoch 44
+t=6317.666666666667 timer row=24 kind=6 nominal_ms=6317.667 cutoff_ms=6317.667 commit_ms=6317.667
+t=6334.333333333333 timer row=24 kind=6 nominal_ms=6334.333 cutoff_ms=6334.333 commit_ms=6334.333
+t=6351 timer row=24 kind=6 nominal_ms=6351.000 cutoff_ms=6351.000 commit_ms=6351.000
+t=6367.666666666667 timer row=24 kind=6 nominal_ms=6367.667 cutoff_ms=6367.667 commit_ms=6367.667
+t=6384.333333333333 timer row=24 kind=6 nominal_ms=6384.333 cutoff_ms=6384.333 commit_ms=6384.333
+t=6401 timer row=24 kind=6 nominal_ms=6401.000 cutoff_ms=6401.000 commit_ms=6401.000
+t=6417.346792 advance → 6 timers fired, epoch 44
+t=6600 continuation 157 (pms): executor token 154
+t=6600 press view 198 (openPage) → epoch 45 (+7 −251 ~7)
+t=6600 -exact-exit-animation: refused on Android (LLP 1063): the painter reads the live tree, so a removed node leaves at once; keep it mounted and fade it on a leaving state instead
+t=6600 pms: the reply asks for one more request
+t=6600 continuation 158 (pms): executor token 154
+t=6600 fulfil 157 (pms) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 1 ms] → epoch 45 (+0 −0 ~0)
+t=6600 pms: the reply asks for one more request
+t=6600 request 159 (pms): POST exact-native:
+t=6600 fulfil 158 (pms) [HTTP 204, 0 bytes; wall 0 ms; delivery wait 1 ms] → epoch 45 (+0 −0 ~0)
+t=6600 query pgs: pagesView
+t=6600 query acs: accountState
+t=6600 query epicks: editionPicks
+t=6600 query pfront: paperFront
+t=6600 query tlist: texturesList
+t=6600 query fvInfo: fileOpen
+t=6600 query mbx: mailBox
+t=6600 query mfr: mailFrame
+t=6600 query msy: mailSync
+t=6600 query mmsg: mailMessage
+t=6600 query mcmp: mailCompose
+t=6600 query ob: onboardingPage
+t=6600 query lbList: importedList
+t=6600 query ldInfo: importedDoc
+t=6600 query edInfo: textureEditInfo
+t=6600 query podHome: podcastHome
+t=6600 query podShow: podcastShow
+t=6600 query podEp: podcastEpisode
+t=6600 query shClips: showClips
+t=6600 query hearClips: storyClips
+t=6600 query rdoc: readerDocShared
+t=6600 store exact.kept.pgs
+t=6600 store exact.kept.acs
+t=6600 store exact.kept.epicks
+t=6600 store exact.kept.pfront
+t=6600 store exact.kept.tlist
+t=6600 store exact.kept.fvInfo
+t=6600 store exact.kept.mbx
+t=6600 store exact.kept.mfr
+t=6600 store exact.kept.msy
+t=6600 store exact.kept.mmsg
+t=6600 store exact.kept.mcmp
+t=6600 store exact.kept.ob
+t=6600 store exact.kept.lbList
+t=6600 store exact.kept.ldInfo
+t=6600 store exact.kept.edInfo
+t=6600 store exact.kept.podHome
+t=6600 store exact.kept.podShow
+t=6600 store exact.kept.podEp
+t=6600 store exact.kept.shClips
+t=6600 store exact.kept.hearClips
+t=6600 store exact.kept.rdoc
+t=6600 fulfil 159 (pms) [HTTP 200, 29 bytes; wall 18 ms] → epoch 46 (+548 −3 ~1)
+t=6600 query pfront: paperFront
+t=6600 store exact.kept.pfront
+t=6600 resize view 310 (paperFit) → epoch 47 (+37 −39 ~2)
+t=6610 timer row=18 kind=0 nominal_ms=6610.000 cutoff_ms=6610.000 commit_ms=6610.000
+t=6610 timer row=31 kind=0 nominal_ms=6610.000 cutoff_ms=6610.000 commit_ms=6610.000
+t=6661.771707999998 advance → 2 timers fired, epoch 47
+t=6700 query hc: hostCaps
+t=6700 query acs: accountState
+t=6700 store exact.kept.hc
+t=6700 store exact.kept.acs
+t=6700 timer row=7 kind=0 nominal_ms=6700.000 cutoff_ms=6700.000 commit_ms=6700.000
+t=6735.665166999999 advance → 1 timer fired, epoch 47
+t=8023.797958000001 query ds: autoradio.deckState (native)
+t=8023.797958000001 query rpulse: radioPulse
+t=8023.797958000001 request 160 (ds): POST exact-native:
+t=8023.797958000001 request 161 (rpulse): POST exact-native:
+t=8023.797958000001 timer row=3 kind=0 nominal_ms=8023.798 cutoff_ms=8023.798 commit_ms=8023.798
+t=8023.797958000001 advance → 1 timer fired, epoch 47
+t=8085.825874999999 fulfil 160 (ds) [HTTP 200, 29 bytes; wall 3 ms] refused: Data { resource: "ds", error: Failed(Error, "autoradio.deckState: NotSupportedError", "NotSupportedError") }
+t=8085.825874999999 request 160 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+t=8085.825874999999 release autoradio.deckState {"tick":3.0}: no reader asks with it
+t=8085.825874999999 a failed request (0 asked again) → epoch 47 (+0 −0 ~0)
+t=8085.825874999999 store exact.kept.rpulse
+t=8085.825874999999 fulfil 161 (rpulse) [HTTP 200, 29 bytes; wall 3 ms; delivery wait 2 ms] → epoch 47 (+0 −0 ~0)
+t=10000 query hb: heartbeat
+t=10000 console: AUTORADIO js heartbeat n=3 t=0
+t=10000 store exact.kept.hb
+t=10000 timer row=1 kind=0 nominal_ms=10000.000 cutoff_ms=10000.000 commit_ms=10000.000
+t=10033.016916999999 advance → 1 timer fired, epoch 47
+  app: Android screen before launch: Awake, keyguard hidden
+  app: --------- beginning of main
+  app: exact: canvas 1080x2400 px, scale 3.375, boot 75.8 ms
+  app: extension call 22: org.json.JSONException: No value for extension
+  app: extension call 23: org.json.JSONException: No value for extension
+  app: exact: request 61 (bf) failed and is no longer pending: it keeps its last value: autoradio.barFacts: NotSupportedError
+  app: exact: request 62 (au) failed and is no longer pending: it keeps its last value: autoradio.choirAuth: NotSupportedError
+  app: exact: request 63 (pl) failed and is no longer pending: it keeps its last value: autoradio.choirPlayer: NotSupportedError
+  app: exact: request 64 (cvraw) failed and is no longer pending: it keeps its last value: autoradio.conversationEntries: NotSupportedError
+  app: exact: request 65 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 24: org.json.JSONException: No value for extension
+  app: exact: request 66 (ldFollow) failed and is no longer pending: it keeps its last value: autoradio.importedFollow: NotSupportedError
+  app: exact: request 67 (preq) failed and is no longer pending: it keeps its last value: autoradio.pageRequest: NotSupportedError
+  app: exact: request 68 (rnote) failed and is no longer pending: it keeps its last value: autoradio.radioNote: NotSupportedError
+  app: exact: request 69 (ri) failed and is no longer pending: it keeps its last value: autoradio.radioView: NotSupportedError
+  app: exact: request 70 (raim) failed and is no longer pending: it keeps its last value: autoradio.readerAim: NotSupportedError
+  app: exact: request 71 (rfollow) failed and is no longer pending: it keeps its last value: autoradio.readerFollow: NotSupportedError
+  app: exact: request 72 (rask) failed and is no longer pending: it keeps its last value: autoradio.retrievalAsk: NotSupportedError
+  app: exact: request 73 (sfacts) failed and is no longer pending: it keeps its last value: autoradio.settingsFacts: NotSupportedError
+  app: exact: request 74 (trec) failed and is no longer pending: it keeps its last value: autoradio.takesRecorder: NotSupportedError
+  app: exact: request 75 (vc) failed and is no longer pending: it keeps its last value: autoradio.voiceCards: NotSupportedError
+  app: exact: request 76 (voicep) failed and is no longer pending: it keeps its last value: autoradio.voiceProfile: NotSupportedError
+  app: exact: request 77 (ovoice) failed and is no longer pending: it keeps its last value: autoradio.voiceSetupFacts: NotSupportedError
+  app: extension call 25: org.json.JSONException: No value for extension
+  app: extension call 26: org.json.JSONException: No value for extension
+  app: extension call 27: org.json.JSONException: No value for extension
+  app: extension call 28: org.json.JSONException: No value for extension
+  app: extension call 29: org.json.JSONException: No value for extension
+  app: extension call 30: org.json.JSONException: No value for extension
+  app: extension call 31: org.json.JSONException: No value for extension
+  app: extension call 32: org.json.JSONException: No value for extension
+  app: extension call 33: org.json.JSONException: No value for extension
+  app: extension call 34: org.json.JSONException: No value for extension
+  app: extension call 35: org.json.JSONException: No value for extension
+  app: extension call 36: org.json.JSONException: No value for extension
+  app: extension call 37: org.json.JSONException: No value for extension
+  app: extension call 38: org.json.JSONException: No value for extension
+  app: extension call 39: org.json.JSONException: No value for extension
+  app: extension call 40: org.json.JSONException: No value for extension
+  app: extension call 41: org.json.JSONException: No value for extension
+  app: extension call 42: org.json.JSONException: No value for extension
+  app: extension call 43: org.json.JSONException: No value for extension
+  app: extension call 44: org.json.JSONException: No value for extension
+  app: extension call 45: org.json.JSONException: No value for extension
+  app: extension call 46: org.json.JSONException: No value for extension
+  app: extension call 47: org.json.JSONException: No value for extension
+  app: extension call 48: org.json.JSONException: No value for extension
+  app: extension call 49: org.json.JSONException: No value for extension
+  app: extension call 50: org.json.JSONException: No value for extension
+  app: extension call 52: org.json.JSONException: No value for extension
+  app: exact: request 146 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 54: org.json.JSONException: No value for extension
+  app: extension call 55: org.json.JSONException: No value for extension
+  app: extension call 56: org.json.JSONException: No value for extension
+  app: extension call 57: org.json.JSONException: No value for extension
+  app: extension call 58: org.json.JSONException: No value for extension
+  app: extension call 60: org.json.JSONException: No value for extension
+  app: exact: request 153 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 63: org.json.JSONException: No value for extension
+  app: exact: request 155 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
+  app: extension call 65: org.json.JSONException: No value for extension
+  app: extension call 67: org.json.JSONException: No value for extension
+  app: exact: request 160 (ds) failed and is no longer pending: it keeps its last value: autoradio.deckState: NotSupportedError
