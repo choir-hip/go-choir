@@ -38,6 +38,16 @@ backfilled from the commit and nobody re-read the evidence for this page.
 Backfilled on 2026-11-23 from 2026-11-20. In that span main took 241 commits:
 169 docs-only and 72 that change behavior.
 
+## 2026-11-26: current-main Autoradio 1 runs signed out on the Motorola (yellow; lane `android-a0`)
+
+What: Exact's Android dependency lock and verification metadata are committed, and the current shared app is built as `news.choir.autoradio.lab.one` version 1.0 on the physical Motorola. The rerunnable A0 drive opens the launcher, Paper and a story, fetches 100 front stories and records the native gaps: 39 substituted reads across 17 package sources and 48 Apple-style app-module calls with no Android extension. The older `.lab` install is unchanged.
+
+Why: the owner, 2026-11-25: "goal is to build autoradio 1 for the connected android." The first native build stopped at Exact's Maven lock gate; the generated lockfiles are required for any later Android build.
+
+Proof: package-manager and `apksigner` readback, APK SHA-256 `46b18be1...941ac6`, and the physical Exact-agent drive in `docs/evidence/android-a0-2026-11-26/`. The wrapper's whole shared suite passed 1,782 tests with 1 skip; CI's shared-code job passed. CI run `45761096260` is red only on the pre-existing expired E1 switch-registry gate, so staging deploy was skipped; no server behavior changed.
+
+Replaced: the pre-train Android probe as the starting point. Undo: revert the lockfiles/evidence commit and reinstall the previous lab APK; no phone data is migrated.
+
 ## 2026-11-26: Autoradio has a guarded Android build route (yellow; lane `android-build-harness`)
 
 What: `stage-app.sh` and `build-lab.sh` now accept `android`. Android staging refreshes the shared Exact package without staging or deleting the Apple model/xcframework artifacts. `exact-env.sh` passes the JDK, Android SDK, selected serial and platform-tools through its clean environment, and gives Android the app's version 1.0 plus a monotonically increasing default build number. `exact-guard.sh` keeps production/dev identities refused and requires every development Android build or drive to run in the one lead build tree.

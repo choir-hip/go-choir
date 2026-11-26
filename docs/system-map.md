@@ -313,6 +313,13 @@ owner's phone. See the [submission checkpoint](ship/submission-checklist.md#subm
 and [launch measurements](problems/radio-restore-empty-after-let-go-2026-11-25.md)
 for the playback and Desk work that remains.
 
+Android A0 (2026-11-26): current main built `news.choir.autoradio.lab.one`
+version 1.0 and ran it on the physical Motorola. The signed-out Paper fetched
+100 stories and a story opened; 39 native reads were substituted and 48
+Apple-style extension calls failed. This proves the shared Android host and
+build route, not feature parity. The Kotlin package, auth, audio and voice are
+still missing. Artifact: `docs/evidence/android-a0-2026-11-26/`.
+
 Key paths: `mobile/AutoradioLab/app.ts`, `radio-runtime.ts`,
 `radio-bridge.ts`, `mobile/AutoradioKit/`, `docs/reference/exact/deck.md`,
 `scripts/check-autoradio-native-boundary`, `mobile/scripts/proof-real.sh`.

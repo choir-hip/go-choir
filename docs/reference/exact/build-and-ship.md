@@ -263,7 +263,15 @@ and its xcframeworks untouched. `exact.sh` passes `JAVA_HOME`, `ANDROID_HOME`,
 number of whole minutes since 2026-01-01 UTC unless `EXACT_BUILD_NUMBER` is
 given. Production and `dev` identities remain refused, and every development
 Android build/drive outside the build tree is refused before Exact runs.
-[unrun: current-main physical-phone proof is station A0.]
+
+[run, 2026-11-26] The first current-main build stopped because Exact requires
+`gradle.lockfile` and `gradle-verification.xml` for the passkey Maven graph.
+`exact.sh android --write-locks` generated both; they are tracked in
+`mobile/AutoradioLab`. The same command built and installed versionName 1.0 on
+`ZY22H5K8QR`. The physical drive fetched 100 front stories and opened a story;
+39 native reads were substituted and 48 Apple-style extension calls failed, so
+this is a signed-out baseline, not parity. Artifact and command:
+`docs/evidence/android-a0-2026-11-26/`.
 
 ## Signing and device install (free provisioning)
 
