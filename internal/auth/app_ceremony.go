@@ -32,8 +32,10 @@ import (
 // `app` is a bundle id from internal/appids, never free text. The credential is
 // the WebAuthn response exactly as the web posts it. The origin a native iOS
 // passkey reports is https://<the relying party id> (Apple Developer Forums;
-// Exact's passkeys manifest `clientOrigin.ios`), which is the one origin
-// AUTH_RP_ORIGINS already lists; no origin is added for the app.
+// Exact's passkeys manifest `clientOrigin.ios`), which is one origin
+// AUTH_RP_ORIGINS lists. An Android app reports `android:apk-key-hash:<base64url
+// of the signing certificate's SHA-256>` (Credential Manager), and that origin
+// is listed too, for the package the association file names.
 //
 // Rate bounds are the existing classes: begin 10 a minute and finish 30 a
 // minute per address. A discoverable challenge has no user row to hang on, so

@@ -152,8 +152,8 @@ stations:
     class: red
     review: two seats on a frozen candidate
     depends_on: [A0]
-    carrier: none yet
-    status: pending
+    carrier: .lane/trees/android-auth
+    status: working
   - id: A2
     name: Kotlin deck and background audio
     scope: 'implement the existing deckState/deckPlay/deckEnqueue/deckAct/deckAck contract with Media3, speech playback, media session, audio focus, interruption/route handling, durable journal and background playback; patch Exact only if the pinned Android host truly lacks the required media-service path'
@@ -233,16 +233,16 @@ owner_rulings:
     read_as: 'the old Motorola is the baseline; larger-phone models are a later ladder, not a reason to skip the baseline'
 now:
   status: working
-  slice: 'A3: basic source WebView and external hand-off proved; remaining platform seams open'
-  source_ref: origin/main 02a9a1dafda4854070ce1ab200501d8dc1460a06
+  slice: 'A1: Android passkey association, accepted origin and shared account boundary; local candidate only, staging and owner biometric action pending'
+  source_ref: origin/main c7b1ed39e0e3ec688921ab56f48cba7cff8c0a78
   deploy_identity: staging proxy/platform 16f04df4d1dcda2b4a2777968c27926dfed485ba
   candidate:
-    id: android-web-proof
-    state: proved
-    ref: .lane/trees/android-web-proof
-    base: origin/main 02a9a1dafda4854070ce1ab200501d8dc1460a06
+    id: android-auth
+    state: rehearsing
+    ref: .lane/trees/android-auth
+    base: origin/main c7b1ed39e0e3ec688921ab56f48cba7cff8c0a78
     digest: none
-    scope: [scripts/proofs/android-a3-web-view.sh, docs/evidence/android-a3-web-view-2026-11-26, docs/changes.md, docs/current-architecture.md, docs/system-map.md, docs/reference/exact/native-modules.md]
+    scope: [internal/appids, internal/auth, internal/proxy, cmd/auth, nix/node-b.nix, mobile/AutoradioLab, mobile/AutoradioKit, mobile/exact-package, mobile/scripts/gen-exact-interface.py, scripts/autoradio-native-ceiling.txt, scripts/proofs, docs]
   conjecture:
     id: Android-parity-bridge
     calibration_claim: C254
@@ -262,9 +262,9 @@ now:
   belief:
     believed_state: 'Exact already supplies the shared Android host, Media3 background service and passkey package; the missing work is the package-first Kotlin ExactExtension, Android auth association, and verified model runtimes'
     main_uncertainty: 'how much of the current train is alive on the physical phone, whether background media needs an Exact patch, and which local model configuration fits and performs acceptably'
-    next_observation: 'A3 file/audio hand-off, reader follow/aim and podcast clip location on ZY22H5K8QR; A1/A2/A5/A6 proceed in their own lanes'
-  blocker_or_risk: 'adb is not on PATH; the system passkey/biometric prompt may not be drivable by adb; CoreML model bundles are not Android artifacts; Exact Android background media and model fitness are unproved; only one native build may run at a time'
-  next_action: 'land the A3 physical WebView evidence, then continue the remaining A3 platform seams while A1 auth, A2 deck and A5/A6 model work proceed in parallel'
+    next_observation: 'A1 two-seat frozen review, staging assetlinks/origin proof, then d@e passkey sign-in, relaunch and sign-out on ZY22H5K8QR with the owner completing the system biometric sheet'
+  blocker_or_risk: 'the system passkey/biometric prompt may not be drivable by adb and the Motorola had no enrolled fingerprint/face at the A0 read; A1 is locally built but not deployed or device-proved; CoreML model bundles are not Android artifacts; Exact Android background media and model fitness are unproved; only one native build may run at a time'
+  next_action: 'freeze and review the android-auth candidate with two seats; after the lead lands and deploys it, run scripts/proofs/android-a1-account-boundary.py in qa-mac with the owner present for the biometric action'
 weak_measures:
   - name: required native calls answering a substitute
     kind: gate

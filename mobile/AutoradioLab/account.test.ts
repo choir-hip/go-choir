@@ -18,9 +18,10 @@
 //  S10 a different account's key at launch (the stamp) wipes the old data first; the same account, or a phone with no key, keeps it.
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
-import { accountSignOut, adoptKey, retryPendingRevoke, PENDING_REVOKE_FILE, REVOKE_PENDING_NOTE, REVOKE_NOID_NOTE, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
+import { accountSignOut, accountNative, adoptKey, retryPendingRevoke, PENDING_REVOKE_FILE, REVOKE_PENDING_NOTE, REVOKE_NOID_NOTE, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
 import { createHash } from 'node:crypto';
-import { authedJSON, bindNative, resetSeam, SignedOutError } from './api.ts';
+import { authedJSON, bindNative, bindStore, resetSeam, SignedOutError } from './api.ts';
+import { COMPUTER_ID_NAME, KEY_ID_NAME, KEY_NAME } from './app-signin.ts';
 import { ContentStore } from './content.ts';
 import { VectorStore } from './search.ts';
 import { clipAct, remembered as clipsRemembered } from './clips.ts';
@@ -50,7 +51,7 @@ describe('accountSignOut', () => {
     const { storage } = memFs();
     const n = { available: true, later: async (r: { op: string }) => { order.push(`native:${r.op}`); return { done: true }; } };
     const r = await accountSignOut(storage, undefined, n as never, { wipes: [{ name: 'a', run: async () => { order.push('wipe:a'); } }] });
-    expect(order).toEqual(['native:signOut', 'wipe:a']);
+    expect(order).toEqual(['native:accountStores', 'native:signOut', 'wipe:a']);   // the capability probe, then the sign-out
     expect(r).toMatchObject({ done: true, failed: '', message: '' });
   });
   test('S2 a native answer that says not done wipes nothing shared', async () => {
@@ -59,11 +60,109 @@ describe('accountSignOut', () => {
   });
   test('S7 no native module: refuses and wipes nothing', async () => {
     const order: string[] = [];
-    for (const n of [null, undefined, { available: false, later: async () => ({}) }]) {
+    for (const n of [null, undefined]) {
       const r = await accountSignOut(memFs().storage, undefined, n as never, { wipes: [{ name: 'a', run: async () => { order.push('wipe:a'); } }] });
       expect(r.done).toBe(false);
     }
     expect(order).toEqual([]);
+  });
+  test('S20 an Android host with no native account stores signs out shared-only: secrets go, absence is verified, revoke precedes wipes', async () => {
+    resetSeam();
+    const order: string[] = [];
+    const items = new Map<string, string>([[KEY_NAME, 'choir_sk_test-shared-only-not-real'], [KEY_ID_NAME, 'ak_shared'], [COMPUTER_ID_NAME, 'comp-old']]);
+    const store = {
+      get: (n: string) => items.get(n) ?? null,
+      set: (n: string, v: string) => { items.set(n, v); },
+      forget: (n: string) => { order.push(`forget:${n}`); items.delete(n); },
+    };
+    bindStore(store);
+    let nativeCalls = 0;
+    const n = { available: true, later: async () => { nativeCalls++; throw new Error('must not call native'); } };
+    const r = await accountSignOut(memFs().storage, store, n as never, {
+      platform: 'android',
+      wipes: [{ name: 'a', run: async () => { order.push('wipe:a'); } }],
+      revoke: async () => { order.push('revoke'); return 'revoked'; },
+    });
+    expect(r.done).toBe(true);
+    expect(nativeCalls).toBe(0);
+    expect([...items.keys()]).toEqual([]);
+    expect(order).toEqual([`forget:${KEY_NAME}`, `forget:${KEY_ID_NAME}`, `forget:${COMPUTER_ID_NAME}`, 'revoke', 'wipe:a']);
+  });
+  test('S21 shared-only sign-out fails closed when the secret store cannot prove the key is gone', async () => {
+    resetSeam();
+    const order: string[] = [];
+    const items = new Map<string, string>([[KEY_NAME, 'choir_sk_test-still-present-not-real'], [KEY_ID_NAME, 'ak_shared']]);
+    const store = {
+      get: (n: string) => items.get(n) ?? null,
+      set: (n: string, v: string) => { items.set(n, v); },
+      forget: () => { throw new Error('locked'); },
+    };
+    bindStore(store);
+    const m = memFs();
+    const r = await accountSignOut(m.storage, store, { available: true, later: async () => { throw new Error('must not call native'); } } as never, {
+      platform: 'android',
+      wipes: [{ name: 'a', run: async () => { order.push('wipe:a'); } }],
+      revoke: async () => { order.push('revoke'); return 'revoked'; },
+    });
+    expect(r.done).toBe(false);
+    expect(order).toEqual([]);
+    expect(items.has(KEY_NAME)).toBe(true);
+    expect(m.files.has(PENDING_FILE)).toBe(true);
+  });
+  test('S21b shared-only sign-out fails closed when the secret store cannot be read back', async () => {
+    resetSeam();
+    const order: string[] = [];
+    const items = new Map<string, string>([[KEY_NAME, 'choir_sk_test-locked-not-real']]);
+    let forgotten = false;
+    const store = {
+      get: (n: string) => { if (forgotten) throw new Error('locked'); return items.get(n) ?? null; },
+      set: (n: string, v: string) => { items.set(n, v); },
+      forget: () => { forgotten = true; },                 // the delete itself succeeds; the read back is the lock
+    };
+    bindStore(store);
+    const m = memFs();
+    const r = await accountSignOut(m.storage, store, { available: true, later: async () => { throw new Error('must not call native'); } } as never, {
+      platform: 'android',
+      wipes: [{ name: 'a', run: async () => { order.push('wipe:a'); } }],
+      revoke: async () => { order.push('revoke'); return 'revoked'; },
+    });
+    expect(r.done).toBe(false);
+    expect(order).toEqual([]);
+    expect(m.files.has(PENDING_FILE)).toBe(true);
+  });
+  test('S23 a locked key-id read still revokes the key it could read', async () => {
+    resetSeam();
+    const key = 'choir_sk_test-held-partial-not-real';
+    const items = new Map<string, string>([[KEY_NAME, key]]);
+    let idReads = 0;
+    const store = {
+      get: (n: string) => { if (n === KEY_ID_NAME && idReads++ === 0) throw new Error('locked'); return items.get(n) ?? null; },
+      set: (n: string, v: string) => { items.set(n, v); },
+      forget: (n: string) => { items.delete(n); },
+    };
+    bindStore(store);
+    let held: { key: string; id: string } | null = null;
+    const r = await accountSignOut(memFs().storage, store, { available: true, later: async () => { throw new Error('must not call native'); } } as never, {
+      platform: 'android',
+      wipes: [{ name: 'a', run: async () => undefined }],
+      revoke: async (h) => { held = h; return 'revoked'; },
+    });
+    expect(r.done).toBe(true);
+    expect(held).toEqual({ key, id: '' });                     // the revoke looks the id up from the key
+  });
+  test('S22 the account adapter: Android is shared-only, Apple uses its module, a missing or unanswering module refuses', async () => {
+    let calls = 0;
+    const later = async (r: { op: string }) => { calls++; return r.op === 'accountStores' ? { available: true } : { done: true }; };
+    const android = await accountNative({ available: true, later }, 'android');
+    expect(await android.signOut()).toBe(true);
+    expect(await android.wipe()).toBe(true);
+    expect(calls).toBe(0);                                            // the platform decides: no probe, no native call
+    expect(await (await accountNative({ available: true, later }, 'ios')).signOut()).toBe(true);
+    expect(calls).toBe(2);                                            // the capability probe and the sign-out
+    expect(await (await accountNative(null, 'ios')).signOut()).toBe(false);
+    expect(await (await accountNative(undefined, 'android')).wipe()).toBe(false);
+    const unanswering = { available: true, later: async () => { throw new Error('NotSupportedError'); } };
+    expect(await (await accountNative(unanswering, 'ios')).signOut()).toBe(false);   // not shared-only: the old refusal
   });
   test('S3 a throwing wipe does not stop the rest and is named; the marker stays for the next launch', async () => {
     const order: string[] = []; const m = memFs();
@@ -168,6 +267,7 @@ let W: World;
 const newWorld = (key: World['key'] = 'present', value = 'test-key-A-not-real'): World => ({ key, value, swift: true, native: [], killInNative: false, hang: false, lateRelease: null });
 /** The app module as the model of the phone: the Keychain item (3 answers), the Swift stores, and sign-out's two native steps (key delete, then Swift wipe). */
 const phone = () => ({ available: true, later: async (r: { op: string; keyId?: string }) => {
+  if (r.op === 'accountStores') return { available: true };
   if (r.op === 'keystate') return { state: W.key };
   if (r.op === 'session') return W.key === 'present' ? { found: true, value: W.value, computerId: '' } : { found: false };
   if (r.op === 'signOut') {

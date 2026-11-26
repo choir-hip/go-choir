@@ -122,7 +122,7 @@ public final class AutoradioModule: ExactPackage {
         owner = PlatformSessionOwner(context: context) { [weak self] s in self?.context.log("AUTORADIO \(s)"); NSLog("AUTORADIO %@", s); ConsoleFile.write("AUTORADIO \(s)") }
         #endif
         runtime = LabRuntime(supportDir: support, session: owner, emptyProgramme: true)
-        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirAuth", "barFacts", "radioView"]) } }
+        runtime.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "barFacts", "radioView"]) } }
         HandsFreeSwitch.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["barFacts"], now: true) } }
         // The listener path: sign-in (Keychain), the front page, the real stages.
         let appKeys: KeyStore = KeychainKeyStore()
@@ -133,7 +133,7 @@ public final class AutoradioModule: ExactPackage {
         }
         #endif
         choir = ChoirApp(runtime: runtime, keys: appKeys)
-        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "choirAuth", "barFacts", "radioView"]) } }
+        choir.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["choirPlayer", "barFacts", "radioView"]) } }
         // The spine's objects.
         // The phone's copy of the computer's text (stories, documents, files) is shared code (AutoradioLab/content-run.ts); nothing here opens it. Radio demand is player state, copied across every two seconds.
         Task { @MainActor in
@@ -217,7 +217,6 @@ public final class AutoradioModule: ExactPackage {
         let state = { [unowned self] in self.json(self.runtime.snapshot()) }
         if let h = handlers[name] { h(args, reply); return }
         switch name {
-        case "choirAuth": reply(json(choir.authView()))
         case "choirPlayer": reply(json(choir.playerView()))
         case "choirRefresh": Task { [choir] in await choir?.refresh() }; reply(state())
         case "choirTalkCancel": runtime.cancelTalk(); reply(state())      // Cancel beside Send while listening: discard, call nothing

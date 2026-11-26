@@ -94,6 +94,19 @@ export function forgetCredentials(): void {
   for (const name of [KEY_NAME, KEY_ID_NAME, COMPUTER_ID_NAME]) { try { secrets.forget(name); } catch { /* absent */ } }
 }
 
+/** All three Exact secrets are absent (a sign-out's verification). A read that throws is not absent. */
+export async function credentialsAbsent(): Promise<boolean> {
+  const r = credentials();
+  if (!r || r.available === false) return false;
+  for (const account of KEYCHAIN_ACCOUNTS) {
+    try {
+      const answer = (await r.later({ op: 'get', account })) as { found?: unknown; unreadable?: unknown } | null;
+      if (answer?.found !== false || answer.unreadable === true) return false;   // a store that could not be read is not "absent"
+    } catch { return false; }
+  }
+  return true;
+}
+
 /** The credential source over the secret store: the three ops the readers below use. A read that throws (a Keychain that is locked before the first unlock) is `unreadable`, never "absent". */
 function storeSource(store: SecretStore): NativeReader {
   const read = (name: string): string | null => { const v = store.get(name); return typeof v === 'string' && v !== '' ? v : null; };
@@ -105,7 +118,7 @@ function storeSource(store: SecretStore): NativeReader {
         if (r.op === 'session') { const k = read(KEY_NAME); return k === null ? { found: false } : { found: true, value: k, computerId: read(COMPUTER_ID_NAME) ?? '' }; }
         if (r.op === 'get' && r.account && r.account in SECRET_OF) { const v = read(SECRET_OF[r.account]); return v === null ? { found: false } : { found: true, value: v }; }
         return { found: false };
-      } catch { return r.op === 'keystate' ? { state: 'unreadable' } : { found: false }; }
+      } catch { return r.op === 'keystate' ? { state: 'unreadable' } : r.op === 'get' ? { found: false, unreadable: true } : { found: false }; }
     },
   };
 }

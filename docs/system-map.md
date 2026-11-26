@@ -329,8 +329,19 @@ still missing. Artifacts: `docs/evidence/android-a0-2026-11-26/`,
 native-call inventory is
 [`docs/reference/AUTORADIO-ANDROID-PARITY.md`](reference/AUTORADIO-ANDROID-PARITY.md).
 
-Key paths: `mobile/AutoradioLab/app.ts`, `radio-runtime.ts`,
-`radio-bridge.ts`, `mobile/AutoradioKit/`, `docs/reference/exact/deck.md`,
+Android A1 candidate (2026-11-26, lane `android-auth`, not deployed): the
+lab-one package/certificate now has one canonical record, a public assetlinks
+file and one accepted APK-hash origin. Shared TypeScript owns the auth view and
+the shared-only Android sign-out path; Apple keeps its native voice-store wipe.
+Local tests pass. The Motorola had no enrolled fingerprint/face at the A0 read,
+so the final passkey/biometric action is still the owner's and A1 is not
+complete. The rerunnable harness is
+`scripts/proofs/android-a1-account-boundary.py`.
+
+Key paths: `mobile/AutoradioLab/app.ts`, `account.ts`, `account-state.ts`,
+`radio-runtime.ts`, `radio-bridge.ts`, `mobile/AutoradioKit/`,
+`internal/appids/`, `internal/proxy/assetlinks.go`,
+`docs/reference/exact/deck.md`, `docs/reference/exact/passkeys.md`,
 `scripts/check-autoradio-native-boundary`, `mobile/scripts/proof-real.sh`.
 
 Not true, though a reader would assume it:
@@ -466,8 +477,9 @@ One line each; source in brackets.
   [3][4][1][2].
 - Self-development unexercised for 13 days across 1,138 commits; default
   mode is apply with no human seat [5].
-- The phone's account boundary does not work; the train fails its own
-  proof; no run page exists on the web; public routes have no rate limit
+- Android's account boundary is built in lane `android-auth` but not deployed
+  or device-proved; the owner's biometric action remains. The train fails its
+  own proof; no run page exists on the web; public routes have no rate limit
   [6][7][CH].
 - Hands-free voice and on-device models are unproved on a device [6].
 - No single list of live work; 518 lane branches, none listed; the

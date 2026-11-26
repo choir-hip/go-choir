@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { begin, keepKey, KEY_ID_NAME, KEY_NAME, COMPUTER_ID_NAME, PASSKEY_APP_IDS, passkeySupport, resetAttempt, signInCancel, signInReset, signInRun, signInView, step, type SignInEnv, type View } from './app-signin.ts';
+import { begin, keepKey, KEY_ID_NAME, KEY_NAME, COMPUTER_ID_NAME, PASSKEY_APP_IDS, ANDROID_PASSKEY_APP_IDS, passkeySupport, resetAttempt, signInCancel, signInReset, signInRun, signInView, step, type SignInEnv, type View } from './app-signin.ts';
 
 const ORIGIN = 'https://choir.news';
 const KEY_A = 'choir_sk_test-key-a-not-real', KEY_B = 'choir_sk_test-key-b-not-real';
@@ -272,12 +272,18 @@ describe('keeping the key', () => {
 });
 
 describe('where passkeys can work', () => {
-  test('the paid-team apps on Apple can; the free-team lab app and Android cannot, each for its own reason', () => {
+  test('the paid-team apps on Apple can; the free-team lab app cannot', () => {
     expect(passkeySupport('news.choir.autoradio', 'ios')).toBe('');
     expect(passkeySupport('news.choir.autoradio.lab.one', 'ios')).toBe('');
     expect(passkeySupport('news.choir.autoradio.lab', 'ios')).toBe('app');
     expect(passkeySupport('news.choir.autoradio.lab', 'macos')).toBe('app');
+  });
+  test('Android allows only lab-one and refuses every other package identity', () => {
+    expect(ANDROID_PASSKEY_APP_IDS).toEqual(['news.choir.autoradio.lab.one']);
+    expect(passkeySupport('news.choir.autoradio.lab.one', 'android')).toBe('');
+    expect(passkeySupport('news.choir.autoradio.lab', 'android')).toBe('android');
     expect(passkeySupport('news.choir.autoradio', 'android')).toBe('android');
+    expect(passkeySupport('evil.example', 'android')).toBe('android');
   });
   test('the web build and an undecided host are not gated by the app id', () => {
     expect(passkeySupport('news.choir.autoradio.lab', 'web')).toBe('');

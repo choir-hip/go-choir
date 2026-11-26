@@ -10,11 +10,11 @@ import { activityPage } from './activity.ts';
 import { onboardingPage, onboardingAct, liveEnv as onboardingEnv } from './onboarding.ts';
 import * as cards from './cards.ts';
 import { aboutBuild } from './about.ts';
-import { accountSignOut, adoptKey, settleAccount } from './account.ts';
+import { accountNative, accountSignOut, adoptKey, settleAccount } from './account.ts';
 import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
-import { accountState } from './account-state.ts';
+import { accountState, choirAuthState } from './account-state.ts';
 import { APP_ID } from './app-id.ts';
 import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
 import { info as conversationInfo } from './conversation.ts';
@@ -134,7 +134,7 @@ const signInEnv = (store: Store): SignInEnv => ({
 });
 // Delete account (account-delete.ts): the same passkey screen, a POST with the app's key (api.ts), and the Account page's own sign-out once the server has accepted. A request that fails answers its
 // status (0 for no answer), never a body or a key.
-const deleteEnv = (store: Store, storage: Storage | undefined, native: unknown): DeleteEnv => ({
+const deleteEnv = (store: Store, storage: Storage | undefined, native: unknown, platform = ''): DeleteEnv => ({
   passkeys: credentials as never,
   post: async (path, body) => {
     try { const r = await authedJSON(path, { method: 'POST', ...(body === undefined ? {} : { body }) }); return { status: 200, body: r.body }; }
@@ -145,7 +145,7 @@ const deleteEnv = (store: Store, storage: Storage | undefined, native: unknown):
     }
   },
   hasKey: async () => (await keyState()).state === 'present',
-  signOut: () => accountSignOut(storage, store as never, native as never),
+  signOut: () => accountSignOut(storage, store as never, native as never, { platform }),
   log: (l) => console.log(l),
 });
 let takesOverlay: ReturnType<typeof newTakes> | undefined;
@@ -162,7 +162,9 @@ const sources: Sources = {
   // First run (onboarding.ts): the step machine over the voice side's facts (`voiceSetupFacts`); one send per button.
   onboardingPage: ([voice, tick, top], _s, storage) => onboardingPage(voice, tick, top, onboardingEnv(storage)),
   onboardingAct: ([op, arg, topics, top], _s, storage) => onboardingAct(op, arg, topics, top, onboardingEnv(storage)),
-  // Sign-out: shared code leads (account.ts). The one native call is `{op: 'signOut'}` on the app module.
+  // Sign-out: shared code leads (account.ts). Apple uses the app module's `{op: 'signOut'}` for its native voice stores; an explicitly unavailable module uses the shared-only path.
+  // The former native choirAuth source: Exact secrets, shared by iOS and Android.
+  choirAuth: ([_tick, platform]) => { const p = String(platform ?? ''); if (p !== '') platformSeen = p; return choirAuthState(); },
   // The deck's open pages (pages.ts): the shared set, read when the native package has none (Android).
   conversationInfo: ([raw]) => conversationInfo(raw),
   // The bar (bar.ts): the native facts and the conversation's entries in, the bar's state out; the tick (a timed state's end, a sign-out) asks again.
@@ -249,9 +251,9 @@ const sources: Sources = {
   signInCancelDeletion: (_a, store) => signInCancelDeletion(signInEnv(store)),
   signInOpen: (_a, store) => signInReset(signInEnv(store)),
   signInView: ([_tick]) => signInView(),
-  accountSignOut: (_a, store, storage, native) => accountSignOut(storage, store, native as never),
+  accountSignOut: ([platform], store, storage, native) => { const p = String(platform ?? ''); if (p !== '') platformSeen = p; return accountSignOut(storage, store, native as never, { platform: platformSeen }); },
   // Delete account (account-delete.ts): one run; the view is read again while it is working.
-  accountDeleteRun: async (_a, store, storage, native) => { const v = await deleteRun(deleteEnv(store, storage, native)); return { phase: v.phase, rev: v.rev }; },
+  accountDeleteRun: async ([platform], store, storage, native) => { const p = String(platform ?? ''); if (p !== '') platformSeen = p; const v = await deleteRun(deleteEnv(store, storage, native, platformSeen)); return { phase: v.phase, rev: v.rev }; },
   accountDeleteOpen: () => { const v = deleteReset(); return { phase: v.phase, rev: v.rev }; },
   accountDeleteView: ([_key]) => deleteView(),
   podcastHome: ([q, address, tick], _store, storage) => podcastHome({ q, address, tick }, storage),
@@ -309,11 +311,19 @@ const sources: Sources = {
   mailAsk: ([address, question]) => mail.mailAsk(address, question),
 };
 // `bindStore` hands the signed-in seam (api.ts) the secret store of this answer, where the key is kept; it reads nothing here.
+let platformSeen = '';
+/** Tests that share a process: forget the platform an earlier answer saw. */
+export function resetPlatformSeen(): void { platformSeen = ''; }
 export const answer: Answer = async (source, args, store, storage, native) => {
   adoptNative(native as never, source);
   bindStore(store as never);
+  // The platform is the Contract's fact, passed to the sources that can change the account. Before one
+  // has answered, the native handle is probed; on Android that probe is NotSupported (native), so an
+  // unfinished sign-out waits for an account source rather than skipping Apple's native wipe.
+  if (source === 'accountState') { const p = String((args as unknown[])[3] ?? ''); if (p !== '') platformSeen = p; }
+  if (source === 'choirAuth') { const p = String((args as unknown[])[1] ?? ''); if (p !== '') platformSeen = p; }
   // The first answer after a launch finishes a sign-out that was cut short, or wipes another account's data (account.ts settleAccount).
-  if (source !== 'accountSignOut') await settleAccount(storage, store);
+  if (source !== 'accountSignOut') await settleAccount(storage, store, await accountNative(native as never, platformSeen), { platformKnown: platformSeen !== '' });
   // What demo mode (deleted 2026-11-20) left in the shared files of a phone that was in it (demo-leftovers.ts): one attempt per process, finished before the first source runs, so the
   // modules that keep the open pages and the recent files in memory load from the cleaned files. A failed write is retried at the next launch.
   if (source !== 'accountSignOut') await clearDemoLeftovers(storage);

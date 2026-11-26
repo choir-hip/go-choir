@@ -9,7 +9,7 @@
 // a timer armed by an answer that was let go throws (`timerOwner`, :1352-1366); letting an answer go clears its timers and rejects the fetches (here: native calls) it waits on (`__exact_forget`, :997-1002).
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { answer } from './app.ts';
+import { answer, resetPlatformSeen } from './app.ts';
 import { resetSettled, settleAccount, PENDING_FILE, STAMP_FILE } from './account.ts';
 import { resetDemoLeftovers } from './demo-leftovers.ts';
 import { hostMode, resetHost } from './host.ts';
@@ -33,7 +33,7 @@ beforeEach(() => {
     c?.timers.add(t);
     return t;
   }) as typeof setTimeout;
-  resetSeam(); resetSettled(); resetHost(); resetDemoLeftovers();
+  resetSeam(); resetSettled(); resetHost(); resetDemoLeftovers(); resetPlatformSeen();
 });
 afterEach(() => { for (const c of made) { for (const t of c.timers) realClear(t); c.timers.clear(); } made = []; globalThis.setTimeout = realSet; });      // an answer's timers end with it
 
@@ -103,6 +103,27 @@ describe('the launch settle under answer ownership', () => {
     await asCall(b, () => answer('answerDismissShared' as never, ['y'] as never, undefined as never, m.storage, native as never));
     expect(world.ops).toContain('signOut');
     expect(m.files.has('app:/data/takes.json')).toBe(false); expect(m.files.has(PENDING_FILE)).toBe(false); expect(m.files.has(STAMP_FILE)).toBe(false);
+  });
+
+  test('F6 a platform-known answer does not cache a launch run that started without the platform', async () => {
+    let open!: () => void;
+    const native = { available: true, later: async (r: { op: string }) => {
+      if (r.op === 'accountStores') throw new Error('NotSupportedError');
+      if (r.op === 'signOut' || r.op === 'wipe') { await new Promise<void>((res) => { open = res; }); throw new Error('NotSupportedError'); }
+      return {};
+    } };
+    const forgotten: string[] = [];
+    const store = { get: () => null, set: () => undefined, forget: (n: string) => { forgotten.push(n); } };
+    const m = memFs([PENDING_FILE, STAMP_FILE]);
+    const a = newCall('A');
+    const first = asCall(a, () => answer('answerDismissShared' as never, ['x'] as never, store as never, m.storage, native as never)).catch(() => undefined);
+    await tick(5);
+    const b = newCall('B');
+    const second = asCall(b, () => answer('choirAuth' as never, ['t', 'android'] as never, store as never, m.storage, native as never)).catch(() => undefined);
+    await tick(5); open(); await first; await second;
+    expect(m.files.has(PENDING_FILE)).toBe(false);          // the Android run finished the sign-out shared-only
+    expect(m.files.has(STAMP_FILE)).toBe(false);
+    expect(forgotten).toContain('choir.key');
   });
 
   test('F3 a settle that rejects is not kept: the next call reconciles again', async () => {

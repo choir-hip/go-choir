@@ -60,7 +60,6 @@ public final class ChoirApp: @unchecked Sendable {
         let legacySignIn = signIn
         Task.detached { await LegacyKey.retire(store: KeychainKeyStore(service: LegacyKey.service)) { id, key in await legacySignIn.revokeNow(keyID: id, key: key) } }
         #endif
-        signIn.onChange = { [weak self] in self?.onChange?() }
         // The deck is told what its engine says (it journals it; shared code reads the journal): a document that ran out of blocks, an engine lost mid-entry.
         runtime.player.onRanDry = { id, played in Task { @MainActor in Deck.shared.documentEnded(id: id, anyPlayed: played) } }
         runtime.player.onEngineLost = { _, _ in Task { @MainActor in Deck.shared.engineLost() } }
@@ -141,7 +140,7 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// After launch or sign-in: the computer's connection is warmed. Nothing plays here, and the paper's story list is shared code's (radio-bridge.ts).
     public func refresh() async {
-        guard signIn.current.signedIn else { onChange?(); return }
+        guard signIn.signedIn else { onChange?(); return }
         await ChoirEnvironment.shared.warm(baseURL: signIn.baseURL)
     }
 
@@ -238,7 +237,7 @@ public final class ChoirApp: @unchecked Sendable {
         let snap = runtime.snapshot()
         let p = runtime.player
         var v = ChoirPlayerView()
-        v.signedIn = signIn.current.signedIn
+        v.signedIn = signIn.signedIn
         lock.lock(); v.loading = loading; v.message = message; lock.unlock()
         let onAir = onMainThread { Deck.shared.current != nil || RadioBridge.shared.hasOnAir() }
         v.title = p.document.title
@@ -250,5 +249,4 @@ public final class ChoirApp: @unchecked Sendable {
         v.heard = snap.phase == "playing" ? "" : snap.transcript
         return v
     }
-    public func authView() -> ChoirAuthState { signIn.current }
 }

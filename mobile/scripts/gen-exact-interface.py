@@ -30,7 +30,6 @@ empty_state = {"running": False, "paused": True, "phase": "playing", "level": "p
                "configName": "", "blockIndex": 0, "blockCount": 0, "blockText": "", "residentMB": 0, "thermal": "nominal",
                "message": "", "micActive": False}
 names = [
-    src("choirAuth", "ChoirAuth", default={"signedIn": False, "baseURL": "", "status": "idle", "message": ""}),
     src("choirPlayer", "ChoirPlayer", default={"signedIn": False, "loading": False, "title": "", "passage": "",
         "playing": False, "talking": False, "heard": "", "message": ""}),
     snd("choirRefresh"),

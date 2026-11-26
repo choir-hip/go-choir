@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/yusefmosiah/go-choir/internal/appids"
 )
 
 // A software authenticator: enough of a platform passkey to run the phone
@@ -28,13 +30,25 @@ const (
 	testApp    = "news.choir.autoradio.lab.one"
 )
 
+func androidOrigin(t *testing.T) string {
+	t.Helper()
+	if len(appids.AndroidPasskeyApps) != 1 {
+		t.Fatalf("Android passkey apps = %d, want 1", len(appids.AndroidPasskeyApps))
+	}
+	origin, err := appids.AndroidAPKKeyHashOrigin(appids.AndroidPasskeyApps[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return origin
+}
+
 func appEnv(t *testing.T) *Handler {
 	t.Helper()
 	h, _ := testHandlerEnv(t)
 	cfg := *h.config
 	cfg.RPID = testRP
-	cfg.RPOrigins = []string{testOrigin}
-	wa, err := webauthn.New(&webauthn.Config{RPID: testRP, RPDisplayName: "go-choir test", RPOrigins: []string{testOrigin}})
+	cfg.RPOrigins = []string{testOrigin, androidOrigin(t)}
+	wa, err := webauthn.New(&webauthn.Config{RPID: testRP, RPDisplayName: "go-choir test", RPOrigins: cfg.RPOrigins})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,6 +341,57 @@ func TestAppCeremonyAcceptsOnlyTheRelyingPartyOrigin(t *testing.T) {
 	bad := p.assert(t, opts, "https://evil.example")
 	if rec := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, bad)); rec.Code == 200 {
 		t.Fatal("a wrong origin signed in")
+	}
+}
+
+// The deployed relying-party list carries the one Android signing identity.
+// Keep the Nix value tied to the canonical record rather than a second literal.
+func TestAndroidOriginMatchesTheDeployedAuthConfig(t *testing.T) {
+	raw, err := os.ReadFile("../../nix/node-b.nix")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `"AUTH_RP_ORIGINS=https://choir.news,` + androidOrigin(t) + `"`
+	if !strings.Contains(string(raw), want) {
+		t.Fatalf("nix/node-b.nix does not contain %s", want)
+	}
+}
+
+// Android's origin is accepted for the same fixed app label and the same
+// ceremony. The label remains client-supplied metadata, not an origin binding.
+func TestAppCeremonyAcceptsTheConfiguredAndroidOrigin(t *testing.T) {
+	h := appEnv(t)
+	p := newSoftPasskey(t)
+	if rec := createAccount(t, h, "android@example.com", p, androidOrigin(t)); rec.Code != 200 {
+		t.Fatalf("Android create = %d: %s", rec.Code, rec.Body.String())
+	}
+	opts := decodeMap(t, postJSON(h.HandleAppLoginBegin, map[string]string{}))
+	if rec := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, p.assert(t, opts, androidOrigin(t)))); rec.Code != 200 {
+		t.Fatalf("Android login = %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// Another APK signing certificate is another origin. It must fail on both
+// ceremonies even though its syntax is a valid android:apk-key-hash value.
+func TestAppCeremonyRefusesAnotherAndroidCertificate(t *testing.T) {
+	h := appEnv(t)
+	wrong := "android:apk-key-hash:4-l2fGQqL4ZLKXBJvel8CDbLWNXOUW_-en2hH2_snqc"
+	p := newSoftPasskey(t)
+	if rec := createAccount(t, h, "wrong-android@example.com", p, wrong); rec.Code == 200 {
+		t.Fatal("another Android certificate created an account")
+	}
+	good := newSoftPasskey(t)
+	if rec := createAccount(t, h, "good-android@example.com", good, androidOrigin(t)); rec.Code != 200 {
+		t.Fatalf("the canonical Android origin was refused: %s", rec.Body.String())
+	}
+	user, _ := h.store.GetUserByEmail("good-android@example.com")
+	before := countKeys(t, h, user.ID)
+	opts := decodeMap(t, postJSON(h.HandleAppLoginBegin, map[string]string{}))
+	if rec := postJSON(h.HandleAppLoginFinish, appFinishBody(testApp, good.assert(t, opts, wrong))); rec.Code == 200 {
+		t.Fatal("another Android certificate signed in")
+	}
+	if after := countKeys(t, h, user.ID); after != before {
+		t.Fatalf("wrong Android certificate minted keys: %d -> %d", before, after)
 	}
 }
 

@@ -188,6 +188,27 @@ from the lane reports; `scripts/build-lab.sh` always syncs the kit and runs the
 whole `ios` verb, and no run of an app following the web loop is recorded). The
 pages follow Exact's grain; the logic does not.
 
+## Android auth boundary (2026-11-26, lane `android-auth`)
+
+The A1 candidate keeps one shared authority for account state. `choirAuth` is
+an `app.ts` source over Exact's secret store (`account-state.ts`), not an Apple
+package source with an Android `signedIn:false` substitute. The package still
+exports the four-field `ChoirAuth` shape; the Contract resource carries the
+sign-in/sign-out/foreground tick that the old native `context.changed` carried.
+Apple's native player/bar/radio notifications and voice-store sign-out remain.
+An explicitly unavailable native module takes the shared-only sign-out path:
+forget and verify the Exact secrets, revoke on the server, then wipe shared
+stores. A missing module still refuses [run: shared tests and Contract build].
+
+Android passkeys use the pinned `@exact/passkeys` implementation [src]. The
+candidate trusts only `news.choir.autoradio.lab.one` and its A0 debug
+certificate, serves Digital Asset Links at `/.well-known/assetlinks.json`, and
+accepts the matching `android:apk-key-hash:` origin. The app label in the finish
+body is unchanged and is not an authorization. See
+[exact/passkeys.md](exact/passkeys.md) for the derivation and evidence marks.
+Staging and the physical biometric/device-credential action are [unrun]; A1 is
+not complete.
+
 ## Pin move, 2026-11-17 (76cd50f9e to de212e671)
 
 What was done (read, not built: **[src]** unless marked; the first builds at the new pin are the lead's):

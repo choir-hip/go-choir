@@ -4,7 +4,7 @@ export const WORDS = {
   radioSignedOut: 'This is the public paper. Sign in to hear your own programme.',
   noSignIn: 'This is the public paper. Signing in is not available on this device yet.',
   noPasskeyApp: 'Passkeys do not work in this test build: its provisioning profile cannot carry the passkey entitlement. Use the App Store app to sign in.',
-  noPasskeyAndroid: 'Signing in on Android is not available yet.',
+  noPasskeyAndroid: 'Passkeys are available on Android only in the Autoradio 1 Dev build.',
   locked: 'Unlock your phone to continue.',
   unknown: 'Could not check your sign-in just now. Try again in a moment.',
   rejected: "This phone's sign-in is no longer accepted. Sign in again.",

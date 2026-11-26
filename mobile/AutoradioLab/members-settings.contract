@@ -81,5 +81,5 @@ members Autoradio
     send delOpen = accountDeleteOpen()
     delTick = delTick + 1
   action confirmDelete
-    send delRun = accountDeleteRun()
+    send delRun = accountDeleteRun(hpg.platform)
     delTick = delTick + 1

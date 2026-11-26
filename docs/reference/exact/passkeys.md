@@ -29,8 +29,18 @@ Part of [EXACT.md](../EXACT.md). Read against the pinned checkout `f53347503` (`
   4. on a development build, Settings > Developer > Associated Domains Development turned on, or the phone reads the file through Apple's CDN, which can lag a deploy by hours.
      A development build signs `webcredentials:choir.news?mode=developer` (Exact `host/apple/presence.mjs`, `associatedDomains`), so with the switch off the phone asks Apple's CDN and passkey sign-in fails with "The app could not be verified for choir.news" (a `SecurityError`) although the server answers `/auth/app/login/begin` with 200. Seen 2026-11-24: the owner turned the switch on and sign-in worked.
 - The simulator drives no passkey sheet; `getClientCapabilities` there answers by the host's default. **The sheet is seen only on a device** [unrun].
-- Android (`packages/passkeys/android/Passkeys.kt`) exists and takes `assetlinks.json` and the app's certificate fingerprints. **Not wired for Autoradio**: the server accepts no `android:apk-key-hash:`
-  origin yet, so the app offers no sign-in on `exactPage().platform == 'android'` (`passkeySupport`) and says so; the shared sign-in code needs no other change once the origin is accepted [unrun].
+- Android (`packages/passkeys/android/Passkeys.kt`) exists and takes `assetlinks.json` and the app's certificate fingerprints [src]. Autoradio's A1 candidate wires only
+  `news.choir.autoradio.lab.one`, signed with the A0 debug certificate SHA-256
+  `dfe9767c642a2f864b297049bde97c0836cb58d5ce516ffe7a7da11f6fec9ea7`.
+  `internal/appids` derives the origin by base64url-encoding those 32 digest
+  bytes directly (no second hash):
+  `android:apk-key-hash:3-l2fGQqL4ZLKXBJvel8CDbLWNXOUW_-en2hH2_snqc`.
+  The proxy serves public GET/HEAD `/.well-known/assetlinks.json` with
+  `delegate_permission/common.get_login_creds` only (A1 needs passkeys, not App Links); `AUTH_RP_ORIGINS` accepts that
+  one origin beside `https://choir.news`. `passkey-apps.json` allows only
+  lab-one on Android; another package identity offers no sign-in. The finish
+  route's `app` field remains the same client-supplied label, not a new
+  authorization check [run: local route/ceremony tests; unrun: device].
 
 ## A fresh assertion for account deletion
 
@@ -52,14 +62,25 @@ Deletion uses the same `credentials.get` with options from `POST /auth/account/d
   calls cannot be handed a key by shared code per call without a rewrite of the turn engine, and the item is already where Swift can read it. Swift **writes** the key at no time any more.
 - A read of a locked Keychain (before the first unlock after a restart) throws; `api.ts` answers `unreadable`, never "signed out" (`account-state.ts`).
 - No presence policy (Face ID) on the key tonight (`secret.keep choir.key user-presence` would need `@exact/local-auth` and a lock the voice code cannot meet).
-- Not done: Exact's store on Android keeps AES-GCM files wrapped by the Keystore [doc]; the Android app has no voice code, so nothing there reads the key but shared code.
+- Android's ordinary secrets are AES-GCM files under
+  `<filesDir>/data/exact/<app id>/secrets-encrypted/<name>`, wrapped by an
+  `AndroidKeyStore` AES key scoped to the secret root
+  (`host/android/canvas/.../Secrets.kt`, `host/painted/src/secret_files.rs`) [src].
+  The store needs no biometric prompt; Credential Manager's passkey sheet is a
+  separate platform action. The Android app has no voice code, so only shared
+  code reads the key. A1's Android sign-out (the Contract's `platform == 'android'`: this host has no
+  native account stores) forgets all three Exact secrets, reads each back and
+  requires `absent`, then revokes the server key and wipes shared stores. An
+  Apple build uses its app module's native stores; a missing handle still refuses
+  [run: shared regression tests; unrun: device].
 
 ## What is proved
 
 - [run] `bun test` in `mobile/AutoradioLab` (the whole suite, with `@exact/passkeys` stubbed by `exact-stubs-preload.ts`), `contract build app.contract`, and `test web` (including `signin.test.contract`: the screen
   opens, the consent line and the links are there; a new account asks for the mailed code before the passkey screen). The web bundle built with the real package's web implementation.
-- [run] The Go side with a software authenticator: creation, discoverable sign-in, replay, wrong origins, fixed app list, cap (`internal/auth/app_ceremony_test.go`).
-- [unrun] On a device: the passkey sheet itself, the origin AuthenticationServices writes, Associated Domains with the explicit profile, the Keychain item shared between Exact's store and the voice code,
+- [run] The Go side with a software authenticator: creation, discoverable sign-in, replay, wrong origins, fixed app list, cap (`internal/auth/app_ceremony_test.go`). A1 adds the canonical Android origin and wrong-APK-hash refusal.
+- [run] A1 local candidate: exact assetlinks route/methods/body, shared `choirAuth` over Exact secrets, the Android package identity gate, the Contract platform's shared-only sign-out/wipe with a read-back of all three secrets, the native-boundary checker and the Contract build (shared suite 1,817/0). The whole candidate suite is recorded in `docs/changes.md`.
+- [unrun] On a device: the Android passkey/biometric sheet, d@e sign-in, relaunch, authenticated read, sign-out and file-name-only proof that the Exact secrets/account copy are gone. The Motorola had no enrolled fingerprint/face at the A0 read, so the final sheet is an owner action. Also unrun on Apple: the origin AuthenticationServices writes, Associated Domains with the explicit profile, the Keychain item shared between Exact's store and the voice code,
   the same passkey in Safari at choir.news.
 
 ## What the server's `app` field is, and is not

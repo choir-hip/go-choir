@@ -1,14 +1,21 @@
 // What the app says about the account, from the facts: the stored key as three answers (api.ts keyState), whether the server refused it (a 401), and whether there is anywhere to read a key from (the secret store of an answer). One list of words (words.ts). "Unreadable" is NOT signed out: a key that cannot be read yet (locked before the first unlock) says "Unlock your phone to continue", offers no
 // sign-in and wipes nothing (account.ts reconcile never wipes on unreadable); the contract re-asks it when the app comes back to the front and every few seconds while locked, so it cannot stick.
 // A bridge error, or no answer from a native package yet, is "unknown": nothing is shown. A host with no secret store at all cannot sign in: "noSignIn", no button.
-import { keyState, hasCredentialSource, rejectedDigest } from './api.ts';
+import { keyState, hasCredentialSource, rejectedDigest, ORIGIN } from './api.ts';
 import { WORDS } from './words.ts';
 import { APP_ID } from './app-id.ts';
 import { passkeySupport } from './app-signin.ts';
 
 export { WORDS };
 export type AccountView = { state: string; message: string; action: string };
+export type ChoirAuthState = { signedIn: boolean; baseURL: string; status: string; message: string };
 const view = (state: string, message: string, action: string): AccountView => ({ state, message, action });
+
+/** The former Apple package source, now shared: read the Exact secret store through api.ts and keep the same four-field shape. An unreadable key is not signed in here; accountState below says "locked" and wipes nothing. */
+export async function choirAuthState(): Promise<ChoirAuthState> {
+  const k = await keyState();
+  return { signedIn: k.state === 'present', baseURL: ORIGIN, status: k.state === 'unreadable' ? 'locked' : 'idle', message: '' };
+}
 
 /** `_tick`: changes when something that can change the answer happened (a sign-in or sign-out, a page change, the app returning to the front, a request the server refused). `host`: the host fact
  * the contract already holds (`hc.mode`, decided in host.ts after its bounded wait): "none" (no native package: no sign-in here), "native", or "" (not decided yet). This source never waits itself

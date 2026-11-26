@@ -39,7 +39,7 @@ import { wipeRecent, RECENT_FILE } from './recent-pages.ts';
 import { wipeSteer, STEER_FILE } from './steer.ts';
 import { wipeRadio, SHEET_FILE, SHEET_BAD_FILE } from './radio-bridge.ts';
 import { DEMO_MARKER } from './demo-leftovers.ts';
-import { accountGeneration, announceGeneration, authedJSON, authedURL, forgetCredentials, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, HTTPError, type KeyState } from './api.ts';
+import { credentialsAbsent, accountGeneration, announceGeneration, authedJSON, authedURL, forgetCredentials, nextGeneration, resetSession, beginSignOut, abortSignOut, keyState, nativeLater, HTTPError, type KeyState } from './api.ts';
 import { forgetOldCopy } from './mail-store.ts';
 import { keepKey, KEY_ID_NAME, KEY_NAME } from './app-signin.ts';
 import { wipePicks, PICKS_FILE } from './edition-picks.ts';
@@ -117,7 +117,7 @@ export async function wipeAll(storage: Storage | undefined, store: Store | undef
   return failed;
 }
 
-export type SignOutNative = { available?: boolean; later(request: { op: 'signOut' | 'wipe'; gen?: number; keyId?: string }): Promise<unknown> };
+export type SignOutNative = { available?: boolean; later?(request: { op: 'signOut' | 'wipe' | 'accountStores'; gen?: number; keyId?: string }): Promise<unknown> };
 export type SignOutResult = { done: boolean; failed: string; message: string; epoch: number };
 /** A deadline, not a limit: a native sign-out that never answers leaves the page retryable. */
 export const NATIVE_DEADLINE_MS = 30000;
@@ -170,6 +170,33 @@ export function nativeOf(later: ((r: { op: string; gen?: number }) => Promise<un
     return Promise.race([p, timeout(ms).then(() => { timedOut = true; return false; })]);
   };
   return { signOut: (l) => call('signOut', l), wipe: (l) => call('wipe', l) };
+}
+
+/** Whether the app module keeps native account stores. Apple's does (voice takes, open pages, mail key);
+ *  Android's answers `accountStores: {available: false}` because Exact's secrets are the whole account.
+ *  Only an explicit false chooses the shared-only path; a module that cannot answer is treated as
+ *  keeping them, so an unavailable Apple module still refuses rather than silently skipping its wipe. */
+export async function accountStores(native: SignOutNative | null | undefined): Promise<boolean> {
+  if (!native?.later) return true;
+  try {
+    const a = (await native.later({ op: 'accountStores' })) as { available?: unknown } | null;
+    return a?.available !== false;
+  } catch { return true; }
+}
+
+/** Reconcile's native half. A missing handle still refuses. The caller has already read the key state:
+ *  finish keeps it absent, account-change keeps the new key. */
+export async function accountNative(native: SignOutNative | null | undefined, platform = ''): Promise<Native> {
+  if (!native) return nativeOf(null);
+  if (platform === 'android') return { signOut: async () => true, wipe: async () => true };   // this host has no native account stores: Exact's secrets are the whole account
+  if (!(await accountStores(native))) return { signOut: async () => true, wipe: async () => true };
+  return nativeOf(native.later ? (r) => native.later!({ op: r.op as 'signOut' | 'wipe', gen: r.gen }) : null);
+}
+
+/** Shared-only sign-out has no native answer to verify the Keychain/Keystore delete. Forget all three Exact secrets and read each one back; anything other than absent fails closed. */
+async function sharedCredentialsGone(): Promise<boolean> {
+  forgetCredentials();
+  return await credentialsAbsent();
 }
 
 export type Reconciled = { action: Action; failed: string[] };
@@ -246,7 +273,7 @@ export async function reconcile(storage: Storage | undefined, store: Store | und
 // ---- sign-out
 
 /** The key a sign-out is about to let go of, read before native clears it. */
-const heldKey = (store: Store | undefined): HeldKey | null => { const key = store?.get(KEY_NAME) ?? ''; return key ? { key, id: store?.get(KEY_ID_NAME) ?? '' } : null; };
+const heldKey = (store: Store | undefined): HeldKey | null => { if (!store) return null; let key = ''; try { key = store.get(KEY_NAME) ?? ''; } catch { return null; } if (!key) return null; let id = ''; try { id = store.get(KEY_ID_NAME) ?? ''; } catch { /* revoke looks the id up from the key */ } return { key, id }; };   // a locked store: the sign-out continues without an id and fails closed at the read-back
 export type HeldKey = { key: string; id: string };
 /** How the server revoke ended: revoked (or the server says it is gone), not reached (the id is kept to retry), or no id could be found. */
 export type RevokeResult = 'revoked' | 'pending' | 'noid';
@@ -344,7 +371,7 @@ export async function retryPendingRevoke(storage: Storage | undefined, store: St
 /** The sign-out: the result carries the wipe counter (a monotonic value the contract passes on to the sources that keep state in memory). */
 export async function accountSignOut(
   storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
-  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void; revoke?: RevokeHeld; held?: HeldKey | null } = {},
+  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void; revoke?: RevokeHeld; held?: HeldKey | null; platform?: string } = {},
 ): Promise<SignOutResult> {
   const r = await signOutInner(storage, store, native, opts);
   return { ...r, epoch: wipes };
@@ -352,9 +379,10 @@ export async function accountSignOut(
 
 async function signOutInner(
   storage: Storage | undefined, store: Store | undefined, native: SignOutNative | null | undefined,
-  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void; revoke?: RevokeHeld; held?: HeldKey | null } = {},
+  opts: { wipes?: Wipe[]; deadlineMs?: number; crash?: (step: string) => void; revoke?: RevokeHeld; held?: HeldKey | null; platform?: string } = {},
 ): Promise<Omit<SignOutResult, 'epoch'>> {
   if (!native || native.available === false) return { done: false, failed: '', message: 'Sign-out needs the app’s own module, which is not here. Nothing was changed.' };
+  const sharedOnly = opts.platform === 'android' || !(await accountStores(native));
   const step = opts.crash ?? ((): void => undefined);
   // The marker first: if the app dies after the key is gone and before the wipes are finished, the next launch finishes them (and if the key is still there, it clears it).
   const token = signoutToken();
@@ -373,7 +401,15 @@ async function signOutInner(
   step('begun');
   let late = false;
   let nativeDone: Promise<unknown>;
-  try { nativeDone = native.later({ op: 'signOut', gen: accountGeneration(), keyId: held?.id || undefined }); } catch { nativeDone = Promise.resolve({ done: false }); }
+  if (sharedOnly) {
+    if (!(await sharedCredentialsGone())) {
+      abortSignOut(true);
+      return { done: false, failed: '', message: 'Sign-out did not finish. Try again.' };
+    }
+    nativeDone = Promise.resolve({ done: true });
+  } else {
+    try { nativeDone = native.later ? native.later({ op: 'signOut', gen: accountGeneration(), keyId: held?.id || undefined }) : Promise.resolve({ done: false }); } catch { nativeDone = Promise.resolve({ done: false }); }
+  }
   const wipes = opts.wipes ?? DATA_WIPES;
   // A native call that outlives the deadline keeps its continuation: if it answers done:true later, the shared stores are wiped then and the marker goes.
   nativeDone.then(async (r) => {
@@ -399,7 +435,7 @@ async function signOutInner(
   if (result === 'revoked' && held?.id) await dropPending(storage, held.id);
   else if (result === 'pending') note = REVOKE_PENDING_NOTE;
   else if (result === 'noid') note = REVOKE_NOID_NOTE;
-  forgetCredentials();                                                          // the native half deleted the Keychain items; the store's own state agrees
+  if (!sharedOnly) forgetCredentials();                                           // the native half deleted the Keychain items; shared-only already forgot and verified them before the revoke
   const run = wipes.map((w) => ({ ...w, run: async (s: Storage | undefined, st: Store | undefined) => { step('wipe:' + w.name); return w.run(s, st); } }));
   const failed = [...(await wipeAll(storage, store, run)), ...(opts.wipes ? [] : await leftovers(storage))];
   step('wiped');
@@ -414,6 +450,7 @@ async function signOutInner(
 // arms no timer of its own (the pending-revoke retry is bounded by its requests' `exactTimeout`). While a run is in flight a later answer waits on it (one reconcile at a time: the wipes run once).
 type SettleRun = { result: Reconciled; sure: boolean; counted?: boolean };
 let settledValue: Reconciled | null = null;
+let settlingKnown: boolean | null = null;   // whether the in-flight settle run knew the platform
 let settling: Promise<SettleRun> | null = null;
 let settleEpoch = 0;
 let unsureRuns = 0;
@@ -431,27 +468,36 @@ async function settleRun(storage: Storage | undefined, store: Store | undefined,
 }
 
 /** The first answer after a launch waits for this: it is `reconcile` with the app module's native ops, once per launch (and again after `adoptKey`). */
-export async function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater())): Promise<Reconciled> {
+export async function settleAccount(storage: Storage | undefined, store: Store | undefined, native: Native = nativeOf(nativeLater()), opts: { platformKnown?: boolean } = {}): Promise<Reconciled> {
   for (;;) {
     if (settledValue) return settledValue;
     const epoch = settleEpoch;
-    const mine = !settling;
-    const run = settling ?? (settling = settleRun(storage, store, native));
+    // A caller that knows the platform does not join a run that started without it; otherwise the run's
+    // own knowledge decides whether a native failure may be cached.
+    const mine = !settling || (opts.platformKnown !== false && settlingKnown === false);
+    if (mine) { settling = settleRun(storage, store, native); settlingKnown = opts.platformKnown !== false; }
+    const run = settling as Promise<SettleRun>;
+    const known = settlingKnown !== false;
     let out: SettleRun;
     try { out = await run; } catch (e) {
-      if (settling === run) settling = null;                                    // not kept: the next answer reconciles again
+      if (settling === run) { settling = null; settlingKnown = null; }                                    // not kept: the next answer reconciles again
       if (mine) throw e;
       continue;                                                                  // another answer's run failed: this answer runs its own
     }
-    if (settling === run) settling = null;
+    if (settling === run) { settling = null; settlingKnown = null; }
     if (epoch !== settleEpoch) return out.result;                               // a sign-in reset it meanwhile: this answer goes on with what it saw, the next one reconciles the new key
     if (!out.sure && !out.counted) { out.counted = true; unsureRuns += 1; }
-    if (out.sure || unsureRuns >= UNSURE_RUNS_KEPT) { settledValue = out.result; unsureRuns = 0; return out.result; }
+    if (out.sure || unsureRuns >= UNSURE_RUNS_KEPT) {
+      // A native half that failed before the platform was known may be Android's absent app module: do not
+      // cache it; the next answer, after an account source names the platform, reconciles again.
+      if (!known && out.result.failed.includes('native')) { if (mine) return out.result; continue; }
+      settledValue = out.result; unsureRuns = 0; return out.result;
+    }
     if (mine) return out.result;                                                 // its own run, as before; not kept for the others
   }
 }
 /** For tests. */
-export function resetSettled(): void { settledValue = null; settling = null; unsureRuns = 0; settleEpoch += 1; }
+export function resetSettled(): void { settledValue = null; settling = null; settlingKnown = null; unsureRuns = 0; settleEpoch += 1; }
 
 /** Keep the key a sign-in made and have the account reconciled again at the next answer: the new key may be another account's (the old one was refused), and `settleAccount` runs once per launch otherwise, so the old account's stored data would be read under the new key. `reconcile` then sees a stamp that is not this key's and wipes. */
 export function adoptKey(store: { set(n: string, v: string): void; forget(n: string): void }, key: string, keyId: string): void {

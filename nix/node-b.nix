@@ -1033,7 +1033,7 @@ in
         "AUTH_PORT=8081"
         "AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"
         "AUTH_RP_ID=choir.news"
-        "AUTH_RP_ORIGINS=https://choir.news"
+        "AUTH_RP_ORIGINS=https://choir.news,android:apk-key-hash:3-l2fGQqL4ZLKXBJvel8CDbLWNXOUW_-en2hH2_snqc"
         "AUTH_JWT_PRIVATE_KEY_PATH=${authSigningDir}/ed25519-key"
         "AUTH_ACCESS_TOKEN_TTL=5m"
         "AUTH_REFRESH_TOKEN_TTL=720h"

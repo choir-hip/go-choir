@@ -646,19 +646,6 @@
   },
   "names": [
     {
-      "source": "choirAuth",
-      "live": true,
-      "answers": "ChoirAuth",
-      "substitute": {
-        "default": {
-          "signedIn": false,
-          "baseURL": "",
-          "status": "idle",
-          "message": ""
-        }
-      }
-    },
-    {
       "source": "choirPlayer",
       "live": true,
       "answers": "ChoirPlayer",

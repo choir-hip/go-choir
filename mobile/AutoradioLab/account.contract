@@ -1,6 +1,6 @@
-// The integrator's members of the root: the Choir sign-in and the player (the voice lab page, its stages, parameters, trace and
-// audio switch are gone: owner, 2026-11-19, "get rid of lab pages").
-use choirAuth, choirPlayer from "@choir/autoradio"
+// The integrator's members of the root: the shared Choir sign-in state and the native player (the voice lab page, its stages, parameters, trace and
+// audio switch are gone: owner, 2026-11-19, "get rid of lab pages"). choirAuth is answered by app.ts; only its shape comes from the package.
+use choirPlayer from "@choir/autoradio"
 use choirRefresh from "@choir/autoradio"
 use ChoirAuth, ChoirPlayer from "@choir/autoradio"
 use LabState, SettingsAck from "@choir/autoradio"
@@ -8,8 +8,9 @@ use SignOutResult, SignInView, SignInEnd from "./account-types.contract"
 use AccountView, HostPage from "./account-state-types.contract"
 
 members Autoradio
-  resource au = choirAuth() as shape ChoirAuth else empty()
+  resource au = choirAuth(`${sivTick}|${signedOutTick}|${lockTick}|${delKey}|${hpg.visibilityState}|${hpg.hasFocus}`, hpg.platform) as shape ChoirAuth else empty()
   resource pl = choirPlayer() as shape ChoirPlayer else empty()
+  // choirAuth is shared, so its argument is the refresh tick the native source used to receive through context.changed: sign-in/out progress, the completed wipe epoch and foreground/unlock reads.
   // What the app says about the account (account-state.ts): asked again when anything that can change it happened: a sign-in or a sign-out, a page change, the app coming back to the front (the phone
   // unlocked: a key that could not be read yet is read again). An unreadable key is "locked", never "signed out".
   resource hpg = exactPage() as shape HostPage else empty()
@@ -47,7 +48,7 @@ members Autoradio
   resource acs = accountState(`${au.signedIn}|${siv.phase}|${siv.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${hpg.platform}`, pg.top, hc.mode, hpg.platform) as shape AccountView else empty()
   mutation acct as shape LabState
   mutation racct as shape SettingsAck refreshes rpulse
-  // Sign-out is led by shared code (account.ts): one native call signs out natively, then every shared store is wiped.
+  // Sign-out is led by shared code (account.ts): Apple's native voice stores sign out first; Android's explicitly unavailable app module uses the shared-only path; then every shared store is wiped.
   mutation so as shape SignOutResult
   derive signOutNote = match so { case some(a) => a.message, case none => "" }
   // The wipe counter as the last sign-out answered it (account.ts wipeEpoch: bumped by every ATTEMPTED wipe, failed ones too, and by a late continuation's wipe); "" before any sign-out answered. It changes with
@@ -161,7 +162,7 @@ members Autoradio
     edDraft = ""
     edUrl = ""
     edCurLink = ""
-    send so = accountSignOut()
+    send so = accountSignOut(hpg.platform)
     // A signed-out phone starts the next sign-in from idle: the last attempt's done is not carried across.
     send signedOpen = signInOpen()
     sivTick = sivTick + 1
