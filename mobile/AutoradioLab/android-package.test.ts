@@ -90,8 +90,9 @@ describe('the Android Exact package', () => {
 
   test('P7 pinned Exact supplies the media service, focus and manifest assumptions', () => {
     const exact = process.env.EXACT2 ? resolve(process.env.EXACT2) : join(MOBILE, '.exact-src');
-    if (!existsSync(exact)) return;                                   // a tree without the pinned checkout cannot check it (CI has it)
-    const service = readFileSync(join(exact, 'host/android/app/src/playback/java/dev/exact/video/PlaybackService.kt'), 'utf8');
+    const servicePath = join(exact, 'host/android/app/src/playback/java/dev/exact/video/PlaybackService.kt');
+    if (!existsSync(servicePath)) return;                             // the pinned checkout is not in this tree (CI checks out the app, not Exact's source): nothing to check
+    const service = readFileSync(servicePath, 'utf8');
     expect(service).toContain('class PlaybackService : MediaSessionService()');
     expect(service).toContain('FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK');
     expect(service).toContain('START_NOT_STICKY');
