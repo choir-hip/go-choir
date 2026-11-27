@@ -1,0 +1,238 @@
+#!/usr/bin/env python3
+"""Find a document by its first line. Run as: python3 -I scripts/docs ... (or scripts/docs ...).
+
+Standing is one line near the top of a document: governing, built, undecided or superseded.
+A file's own first line is the authority; this tool only reads it. A document with no
+Standing line is shown as `unmarked`, never hidden.
+"""
+import argparse, os, re, subprocess, sys
+
+STANDINGS = ("governing", "built", "undecided", "superseded")
+KINDS = ("exists", "decided", "wanted", "happened")
+KEYS = ("kind", "scope", "settled-by", "replaced-by", "note")
+GROUP = {"governing": 0, "built": 1, "undecided": 2, "unmarked": 3, "superseded": 4}
+HEAD_LINES = 12
+MAX_FRONT = 1500  # a frontmatter longer than this is not read for a Standing line
+STAND_RE = re.compile(r"^(?:# )?Standing:\s*(.*)$")
+DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
+
+
+def parse_standing(text):
+    """'governing | kind: decided | ...' -> dict; the first word is the standing."""
+    parts = text.split(" | ")
+    d = {"standing": parts[0].strip(), "raw": text}
+    last = None
+    for p in parts[1:]:
+        k, sep, v = p.partition(":")
+        k = k.strip()
+        if sep and k in KEYS:
+            d[k] = v.strip()
+            last = k
+        elif last:
+            d[last] += " | " + p
+        else:
+            d.setdefault("junk", []).append(p)
+    return d
+
+
+YAML_LINE = re.compile(r"""^(\s+\S|-(\s|$)|[A-Za-z0-9_"'.\-][^:]*:(\s|$))""")
+FENCE_RE = re.compile(r"^ {0,3}(```|~~~)")
+
+
+def looks_like_frontmatter(lines):
+    """lines[0] is '---'. Real frontmatter has a closing '---' or '...' and only YAML between."""
+    for j in range(1, min(len(lines), MAX_FRONT)):
+        if lines[j].strip() in ("---", "..."):
+            return j
+        t = lines[j]
+        if t.strip() and not t.lstrip().startswith("#") and not YAML_LINE.match(t):
+            return None
+    return None
+
+
+def parse_head(lines):
+    """(title, [standing line texts]) from the head of a file given as a list of lines.
+
+    Real YAML frontmatter is skipped (its first lines are still read for a '# Standing:' comment, the
+    old goal files that are YAML only); then the next HEAD_LINES lines are the head. Lines inside a
+    fenced code block are ignored."""
+    title, stands = "", []
+    start = 0
+    if lines and lines[0].strip() == "---":
+        close = looks_like_frontmatter(lines)
+        if close is not None:
+            for line in lines[1:min(close, HEAD_LINES)]:
+                m = STAND_RE.match(line)
+                if m:
+                    stands.append(m.group(1))
+            start = close + 1
+    fence = None
+    for line in lines[start:start + HEAD_LINES]:
+        fm = FENCE_RE.match(line)
+        if fm:
+            fence = None if fence == fm.group(1) else (fence or fm.group(1))
+            continue
+        if fence:
+            continue
+        m = STAND_RE.match(line)
+        if m:
+            stands.append(m.group(1))
+        elif not title and line.startswith("# "):
+            title = line[2:].strip()
+    return title, stands
+
+
+def read_head(path):
+    """parse_head of a file; raises OSError when it cannot be read."""
+    lines = []
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for i, line in enumerate(f):
+            if i >= MAX_FRONT + HEAD_LINES:
+                break
+            lines.append(line.rstrip("\n"))
+    return parse_head(lines)
+
+
+def find_root():
+    d = os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(d)
+
+
+def scan(root, archive=False, errors=None):
+    base = os.path.join(root, "docs")
+    out = []
+    for dp, dns, fns in os.walk(base):
+        rel = os.path.relpath(dp, root)
+        if not archive and rel == os.path.join("docs", "archive"):
+            dns[:] = []
+            continue
+        for fn in fns:
+            if not fn.endswith(".md"):
+                continue
+            p = os.path.join(dp, fn)
+            try:
+                title, stands = read_head(p)
+            except OSError as e:
+                rel_p = os.path.relpath(p, root)
+                if errors is not None:
+                    errors.append("%s: cannot read (%s)" % (rel_p, e.strerror or e))
+                else:
+                    print("scripts/docs: skipped %s: cannot read (%s)" % (rel_p, e.strerror or e), file=sys.stderr)
+                continue
+            doc = {"path": os.path.relpath(p, root), "title": title, "nstand": len(stands)}
+            if stands:
+                doc.update(parse_standing(stands[0]))
+            else:
+                doc["standing"] = "unmarked"
+            m = DATE_RE.findall(fn)
+            doc["date"] = m[-1] if m else "0000-00-00"
+            out.append(doc)
+    return out
+
+
+def norm(s):
+    return re.sub(r"[-_/.]+", " ", s.lower())
+
+
+def matches(doc, words):
+    if doc["standing"] == "unmarked":
+        hay = norm(doc["path"] + " " + doc["title"])
+    else:
+        hay = norm(doc["path"] + " " + doc["title"] + " " + doc.get("raw", ""))
+    return all(norm(w) in hay for w in words)
+
+
+def order_key(doc):
+    # governing, built, undecided, unmarked, superseded; newest date in the file name first
+    g = GROUP.get(doc["standing"], 3)
+    d = doc["date"]
+    return (g, tuple(-ord(c) for c in d), doc["path"])
+
+
+def clip(s, n):
+    return s if len(s) <= n else s[: max(n - 1, 0)] + "…"
+
+
+def line(doc, width=160):
+    st = doc["standing"]
+    head = "%-10s %s  %s" % (st, doc["path"], clip(doc["title"], 50))
+    if st == "superseded":
+        # the way onward is never cut
+        tail = "  -> replaced-by: " + doc.get("replaced-by", "?")
+        if doc.get("scope"):
+            tail = "  (" + doc["scope"] + ")" + tail
+        return head + tail
+    if st == "unmarked":
+        return head + "  (no Standing line)"
+    tail = "  | " + doc["settled-by"] if doc.get("settled-by") else ""
+    room = width - len(head)
+    return head + clip(tail, room) if room > 12 else head
+
+
+def show(root, path):
+    p = path if os.path.isabs(path) else os.path.join(root, path)
+    try:
+        title, stands = read_head(p)
+    except OSError as e:
+        print("scripts/docs: cannot read %s: %s" % (path, e.strerror or e), file=sys.stderr)
+        return 2
+    if not stands:
+        print("%s: unmarked (no Standing line in the first %d lines)" % (path, HEAD_LINES))
+        return 1
+    for s in stands:
+        d = parse_standing(s)
+        print("path:       " + path)
+        print("title:      " + title)
+        print("standing:   " + d["standing"])
+        for k in KEYS:
+            if k in d:
+                print("%-11s %s" % (k + ":", d[k]))
+    return 0
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(
+        usage="scripts/docs [words ...] [--standing S] [--kind K] [--tsv] [--archive] | --show PATH",
+        description="Standing is one line near the top of a document: governing, built, undecided or superseded.\n"
+        "Superseded lines name their replacement; documents with no Standing line show as unmarked.\n"
+        "A file's own first line is the authority; this tool only reads it.",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("words", nargs="*", help="all must match the path, title or Standing line (case-insensitive)")
+    ap.add_argument("--standing", choices=STANDINGS + ("unmarked",))
+    ap.add_argument("--kind", choices=KINDS)
+    ap.add_argument("--show", metavar="PATH", help="print that file's Standing line parsed into fields")
+    ap.add_argument("--tsv", action="store_true", help="standing, kind, path, title, replaced-by, settled-by; tab separated")
+    ap.add_argument("--archive", action="store_true", help="include docs/archive")
+    ap.add_argument("--root", default=find_root(), help=argparse.SUPPRESS)
+    a = ap.parse_args(argv)
+    if a.show:
+        return show(a.root, a.show)
+    docs = scan(a.root, a.archive)
+    if not (a.words or a.standing or a.kind):
+        ap.print_usage(sys.stderr)
+        return 2
+    sel = []
+    for d in docs:
+        if a.standing and d["standing"] != a.standing:
+            continue
+        if a.kind and d.get("kind") != a.kind:
+            continue
+        if a.words and not matches(d, a.words):
+            continue
+        sel.append(d)
+    sel.sort(key=order_key)
+    for d in sel:
+        if a.tsv:
+            print("\t".join([d["standing"], d.get("kind", ""), d["path"], d["title"], d.get("replaced-by", ""), d.get("settled-by", "")]))
+        else:
+            print(line(d))
+    if not sel and not a.tsv:
+        print("no document matches", file=sys.stderr)
+    return 0 if sel else 1
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except BrokenPipeError:
+        sys.exit(0)

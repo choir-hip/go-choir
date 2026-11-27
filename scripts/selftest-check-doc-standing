@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+"""Selftest for scripts/check-doc-standing and scripts/docs. Run: python3 -I scripts/selftest-check-doc-standing
+
+Failure list (each has a failing and a passing case):
+  1 unknown standing            2 unknown kind            3 empty or missing settled-by
+  4 superseded without replaced-by      5 superseded replaced-by a missing path (none and a real path pass)
+  6 governing/built with settled-by: nothing (undecided may)      7 two Standing lines in one file
+  8 YAML comment form '# Standing:' parses
+  9 --base ratchet: a new docs/design or docs/definitions file with no Standing line fails; an old one,
+    a .ledger.md companion and a docs/notes file pass
+ 10 a date in the settled-by never fails
+ 11 scripts/docs: order governing, built, undecided, unmarked, superseded; newest date first inside a group;
+    superseded shows replaced-by; unmarked reported on path or title match only; archive excluded; --show; --tsv; no match exits 1
+"""
+import os, subprocess, sys, tempfile, shutil
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+CHECK = os.path.join(HERE, "check-doc-standing")
+DOCS = os.path.join(HERE, "docs")
+fails = []
+n = 0
+
+
+def run(args, root, tool=CHECK):
+    r = subprocess.run([sys.executable, "-I", tool] + args + ["--root", root], capture_output=True, text=True)
+    return r.returncode, r.stdout + r.stderr
+
+
+def expect(name, got, want_rc, out, must=None):
+    global n
+    n += 1
+    ok = got == want_rc and (must is None or must in out)
+    print(("ok   " if ok else "FAIL ") + name + " (rc %d, want %d)" % (got, want_rc))
+    if not ok:
+        fails.append(name)
+        print("     " + out.strip().replace("\n", "\n     ")[:600])
+
+
+def put(root, rel, text):
+    p = os.path.join(root, rel)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    open(p, "w").write(text)
+
+
+def fresh():
+    return tempfile.mkdtemp(prefix="docstanding-")
+
+
+def case(name, line, rc, must=None, extra=None):
+    root = fresh()
+    try:
+        put(root, "docs/design/target-2026-11-01.md", "# T\n\n" + line + "\n\ntext\n")
+        put(root, "docs/design/other-2026-11-02.md", "# O\n\nStanding: governing | kind: decided | settled-by: owner 2026-11-02 'x'\n")
+        for k, v in (extra or {}).items():
+            put(root, k, v)
+        got, out = run([], root)
+        expect(name, got, rc, out, must)
+    finally:
+        shutil.rmtree(root)
+
+
+G = "Standing: governing | kind: decided | settled-by: owner 2026-11-01 'yes'"
+case("good line passes", G, 0)
+case("1 unknown standing fails", "Standing: maybe | kind: decided | settled-by: x", 1, "standing")
+case("2 unknown kind fails", "Standing: governing | kind: dreamed | settled-by: x", 1, "kind")
+case("2b missing kind fails", "Standing: governing | settled-by: x", 1, "kind")
+case("3 missing settled-by fails", "Standing: governing | kind: decided", 1, "settled-by")
+case("3b empty settled-by fails", "Standing: governing | kind: decided | settled-by:  | note: n", 1, "settled-by")
+case("4 superseded without replaced-by fails", "Standing: superseded | kind: decided | settled-by: x", 1, "replaced-by")
+case("5 superseded replaced-by missing path fails", "Standing: superseded | kind: decided | settled-by: x | replaced-by: docs/design/gone.md", 1, "does not exist")
+case("5b superseded replaced-by none passes", "Standing: superseded | kind: decided | settled-by: x | replaced-by: none", 0)
+case("5c superseded replaced-by real path passes", "Standing: superseded | kind: decided | scope: in part | settled-by: x | replaced-by: docs/design/other-2026-11-02.md | note: n", 0)
+case("6 governing settled-by nothing fails", "Standing: governing | kind: decided | settled-by: nothing", 1, "nothing")
+case("6b built settled-by nothing fails", "Standing: built | kind: exists | settled-by: nothing", 1, "nothing")
+case("6c undecided settled-by nothing passes", "Standing: undecided | kind: wanted | settled-by: nothing", 0)
+case("7 two Standing lines fail", G + "\nStanding: undecided | kind: wanted | settled-by: nothing", 1, "two Standing")
+case("10 a date in settled-by passes", "Standing: governing | kind: decided | settled-by: owner 1999-01-01 'old'", 0)
+case("10b an indented example in a doc is ignored", "    Standing: bogus", 0)
+
+# 9: the --base ratchet through a throwaway git repo
+root = fresh()
+try:
+    def git(*a):
+        r = subprocess.run(["git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t"] + list(a), capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+    git("init", "-q", "-b", "main")
+    put(root, "docs/design/old-2026-10-01.md", "# Old\n\nno line\n")
+    git("add", "-A"); git("commit", "-q", "-m", "base")
+    git("checkout", "-q", "-b", "lane")
+    put(root, "docs/design/new-bad-2026-11-01.md", "# New\n\nno line\n")
+    put(root, "docs/design/new-bad-2026-11-01.ledger.md", "# ledger\n")
+    put(root, "docs/notes/new-note.md", "# note\n")
+    put(root, "docs/design/old-2026-10-01.md", "# Old\n\nchanged, still no line\n")
+    git("add", "-A"); git("commit", "-q", "-m", "lane")
+    got, out = run(["--base", "main"], root)
+    expect("9 added design without line fails with --base", got, 1, out, "new-bad-2026-11-01.md")
+    expect("9b ledger, notes and old files are not named", 0 if ("ledger" not in out and "new-note" not in out and "old-2026" not in out) else 1, 0, out)
+    got, out = run([], root)
+    expect("9c without --base the same tree passes", got, 0, out)
+    put(root, "docs/design/new-bad-2026-11-01.md", "# New\n\nStanding: undecided | kind: wanted | settled-by: nothing\n")
+    put(root, "docs/definitions/new-def-2026-11-02.md", "---\nid: x\n---\n# D\n\nStanding: undecided | kind: wanted | settled-by: nothing\n")
+    git("add", "-A"); git("commit", "-q", "-m", "fix")
+    got, out = run(["--base", "main"], root)
+    expect("9d added files with lines pass with --base", got, 0, out)
+    put(root, "docs/definitions/new-def2-2026-11-03.md", "---\nid: y\n---\n# D2\n")
+    git("add", "-A"); git("commit", "-q", "-m", "def2")
+    got, out = run(["--base", "main"], root)
+    expect("9e added definition without line fails", got, 1, out, "new-def2")
+    got, out = run(["--base", "nosuchref"], root)
+    expect("9f a base that does not resolve is an error", got, 2, out)
+finally:
+    shutil.rmtree(root)
+
+# 11: scripts/docs ordering and reporting
+root = fresh()
+try:
+    put(root, "docs/design/widget-2026-10-01.md", "# Widget old\n\nStanding: governing | kind: decided | settled-by: owner 2026-10-01\n")
+    put(root, "docs/design/widget-2026-11-01.md", "# Widget new\n\nStanding: governing | kind: decided | settled-by: owner 2026-11-01\n")
+    put(root, "docs/design/widget-built-2026-11-05.md", "# Widget built\n\nStanding: built | kind: exists | settled-by: current-architecture row\n")
+    put(root, "docs/design/widget-maybe-2026-11-06.md", "# Widget maybe\n\nStanding: undecided | kind: wanted | settled-by: nothing\n")
+    put(root, "docs/reports/widget-report-2026-11-07.md", "# Widget report\n\ntext\n")
+    put(root, "docs/design/widget-dead-2026-11-08.md", "# Widget dead\n\nStanding: superseded | kind: decided | settled-by: x | replaced-by: docs/design/widget-2026-11-01.md\n")
+    put(root, "docs/design/gadget-2026-11-09.md", "# Gadget\n\nStanding: governing | kind: decided | settled-by: owner says widget in passing\n")
+    put(root, "docs/design/body-only-2026-11-09.md", "# Other\n\nwidget appears only in the body\n")
+    put(root, "docs/archive/widget-old.md", "# Widget archived\n")
+    put(root, "docs/yaml-2026-11-10.md", "---\n# Standing: undecided | kind: wanted | settled-by: nothing\nid: widget\n")
+    got, out = run(["widget"], root, DOCS)
+    paths = [l.split()[1] for l in out.splitlines() if l.strip()]
+    # governing: gadget (its settled-by mentions widget; date 11-09 is newest), then the two widgets
+    want = ["docs/design/gadget-2026-11-09.md", "docs/design/widget-2026-11-01.md", "docs/design/widget-2026-10-01.md",
+            "docs/design/widget-built-2026-11-05.md", "docs/design/widget-maybe-2026-11-06.md", "docs/reports/widget-report-2026-11-07.md", "docs/design/widget-dead-2026-11-08.md"]
+    expect("11 order: governing, built, undecided, unmarked, superseded; newest first", got, 0 if paths == want else 9, out + "\nwant " + repr(want))
+    expect("11b unmarked is marked", got, 0, out, "unmarked   docs/reports/widget-report-2026-11-07.md")
+    expect("11c superseded shows replaced-by", got, 0, out, "replaced-by: docs/design/widget-2026-11-01.md")
+    expect("11d body-only and archive are not listed", 0 if ("body-only" not in out and "archive" not in out) else 1, 0, out)
+    # exact set: three undecided designs and no governing one, nothing else
+    put(root, "docs/design/vaulta-2026-10-01.md", "# Vault a\n\nStanding: undecided | kind: wanted | settled-by: nothing\n")
+    put(root, "docs/design/vaultb-2026-10-02.md", "# Vault b\n\nStanding: undecided | kind: wanted | settled-by: nothing\n")
+    put(root, "docs/vaultc-2026-10-03.md", "# Vault c\n\nStanding: undecided | kind: wanted | settled-by: nothing\n")
+    got, out = run(["vault"], root, DOCS)
+    pairs = [tuple(l.split()[:2]) for l in out.splitlines() if l.strip()]
+    expect("11l the vault-style query returns exactly three undecided documents", got, 0 if pairs == [("undecided", "docs/vaultc-2026-10-03.md"), ("undecided", "docs/design/vaultb-2026-10-02.md"), ("undecided", "docs/design/vaulta-2026-10-01.md")] else 9, out)
+    got, out = run(["widget", "--archive"], root, DOCS)
+    expect("11e --archive includes the archive", got, 0, out, "docs/archive/widget-old.md")
+    got, out = run(["--standing", "undecided"], root, DOCS)
+    expect("11f --standing lists undecided only (incl. YAML comment form)", got, 0 if out.count("undecided") >= 2 and "governing" not in out else 9, out)
+    got, out = run(["--kind", "exists"], root, DOCS)
+    expect("11g --kind", got, 0, out, "widget-built")
+    got, out = run(["widget", "--tsv"], root, DOCS)
+    expect("11h --tsv gadget row has every column", got, 0, out, "governing\tdecided\tdocs/design/gadget-2026-11-09.md\tGadget\t\towner says widget in passing\n")
+    expect("11h2 --tsv superseded row has replaced-by and settled-by", got, 0, out, "superseded\tdecided\tdocs/design/widget-dead-2026-11-08.md\tWidget dead\tdocs/design/widget-2026-11-01.md\tx\n")
+    expect("11h3 --tsv unmarked row has empty kind, replaced-by and settled-by", got, 0, out, "unmarked\t\tdocs/reports/widget-report-2026-11-07.md\tWidget report\t\t\n")
+    got, out = run(["--show", "docs/design/widget-dead-2026-11-08.md"], root, DOCS)
+    expect("11i --show parses fields", got, 0, out, "replaced-by: docs/design/widget-2026-11-01.md")
+    got, out = run(["--show", "docs/reports/widget-report-2026-11-07.md"], root, DOCS)
+    expect("11j --show on an unmarked file says so and exits 1", got, 1, out, "unmarked")
+    got, out = run(["zzzznomatch"], root, DOCS)
+    expect("11k no match exits 1", got, 1, out)
+finally:
+    shutil.rmtree(root)
+
+# the YAML-comment form on YAML-only files
+for name, line, rc, must in [("8 yaml-only file, comment form passes", "# Standing: undecided | kind: wanted | settled-by: nothing", 0, None),
+                             ("8b yaml-only file, bad kind fails", "# Standing: undecided | kind: nope | settled-by: nothing", 1, "kind")]:
+    root = fresh()
+    try:
+        put(root, "docs/definitions/yamlonly-2026-11-01.md", "---\n" + line + "\ndefinition_version: 5\nid: x\nitems:\n  - a\n")
+        got, out = run([], root)
+        expect(name, got, rc, out, must)
+    finally:
+        shutil.rmtree(root)
+
+# a goal file with a long frontmatter: the Standing line sits after it, with the title
+root = fresh()
+try:
+    put(root, "docs/definitions/goal-2026-11-01.md", "---\n" + "k: v\n" * 300 + "---\n\n# The goal\n\nStanding: governing | kind: wanted | settled-by: owner 2026-11-01\n")
+    got, out = run(["--show", "docs/definitions/goal-2026-11-01.md"], root, DOCS)
+    expect("13 Standing after frontmatter is read", got, 0, out, "title:      The goal")
+    put(root, "docs/definitions/goal-2026-11-02.md", "---\n# Standing: bogus | kind: wanted | settled-by: x\nid: y\n---\n")
+    got, out = run([], root)
+    expect("13b YAML-only comment form is checked", got, 1, out, "unknown standing")
+finally:
+    shutil.rmtree(root)
+
+# review round 2: fences, frontmatter detection, base from HEAD, replaced-by resolution, unreadable files
+root = fresh()
+try:
+    G2 = "Standing: governing | kind: decided | settled-by: owner 2026-11-01 'yes'"
+    put(root, "docs/design/fenced-2026-11-01.md", "# Fenced\n\n```\nStanding: undecided | kind: wanted | settled-by: nothing\n```\n\n" + G2 + "\n")
+    got, out = run([], root)
+    expect("14 a Standing line in a code fence is not a header (no 'two Standing lines')", got, 0, out)
+    got, out = run(["--show", "docs/design/fenced-2026-11-01.md"], root, DOCS)
+    expect("14b --show reads the real header, not the fenced one", got, 0, out, "standing:   governing")
+    put(root, "docs/design/fenced2-2026-11-02.md", "# F2\n\n~~~\n" + G2 + "\n~~~\n")
+    got, out = run(["--show", "docs/design/fenced2-2026-11-02.md"], root, DOCS)
+    expect("14c a tilde fence hides a header; the file is unmarked", got, 1, out, "unmarked")
+finally:
+    shutil.rmtree(root)
+
+root = fresh()
+try:
+    G2 = "Standing: governing | kind: decided | settled-by: owner 2026-11-01 'yes'"
+    # a horizontal rule on line 1, a closing rule later, prose between: not frontmatter
+    put(root, "docs/design/rule-2026-11-01.md", "---\n# The Title\n\nSome prose here that is not yaml.\n\n---\n\n" + G2 + "\n")
+    got, out = run(["--show", "docs/design/rule-2026-11-01.md"], root, DOCS)
+    expect("15 a leading rule is not frontmatter: the title is read", got, 0, out, "title:      The Title")
+    # a rule on line 1 and nothing closing it, with a header 40 lines down: not read
+    put(root, "docs/design/deep-2026-11-02.md", "---\n# Deep\n" + "filler\n" * 40 + G2 + "\n")
+    got, out = run(["--show", "docs/design/deep-2026-11-02.md"], root, DOCS)
+    expect("15b a header deep in a file is not the header", got, 1, out, "unmarked")
+    # real frontmatter closed by '...'
+    put(root, "docs/design/dots-2026-11-03.md", "---\nid: x\nitems:\n  - a\n...\n# Dots\n\n" + G2 + "\n")
+    got, out = run(["--show", "docs/design/dots-2026-11-03.md"], root, DOCS)
+    expect("15c frontmatter closed by '...' is skipped", got, 0, out, "title:      Dots")
+finally:
+    shutil.rmtree(root)
+
+# replaced-by resolution
+root = fresh()
+try:
+    def sup(rb):
+        return "# S\n\nStanding: superseded | kind: decided | settled-by: x | replaced-by: " + rb + "\n"
+    put(root, "docs/design/target-2026-11-01.md", "# T\n")
+    put(root, "docs/design/sub/inner.md", "# I\n")
+    put(root, "docs/design/s1.md", sup("target-2026-11-01.md"))
+    put(root, "docs/design/s2.md", sup("docs/design/target-2026-11-01.md#section"))
+    put(root, "docs/design/s3.md", sup("sub/inner.md"))
+    got, out = run([], root)
+    expect("16 relative to the file, docs/ from the root, and a #fragment all resolve", got, 0, out)
+    for name, rb, why in [("16b directory", "docs/design/sub", "not a file"), ("16c missing", "docs/design/nope.md", "does not exist"),
+                          ("16d absolute", "/etc/hosts", "absolute"), ("16e escapes the repo", "../../../outside.md", "escapes"),
+                          ("16f empty path (fragment only)", "#frag", "empty")]:
+        r2 = fresh()
+        try:
+            put(r2, "docs/design/target-2026-11-01.md", "# T\n")
+            put(r2, "docs/design/sub/inner.md", "# I\n")
+            put(r2, "docs/design/bad.md", sup(rb))
+            got, out = run([], r2)
+            expect(name + " fails", got, 1, out, why)
+        finally:
+            shutil.rmtree(r2)
+finally:
+    shutil.rmtree(root)
+
+# an unreadable file is an error in the check, exit 2 from --show, and a stderr line in the bulk query
+root = fresh()
+try:
+    put(root, "docs/design/ok-2026-11-01.md", "# Ok\n\nStanding: undecided | kind: wanted | settled-by: nothing\n")
+    put(root, "docs/design/locked-2026-11-02.md", "# Locked\n")
+    os.chmod(os.path.join(root, "docs/design/locked-2026-11-02.md"), 0)
+    if os.access(os.path.join(root, "docs/design/locked-2026-11-02.md"), os.R_OK):
+        print("skip 17 (running as a user that can read mode 000)")
+    else:
+        got, out = run([], root)
+        expect("17 check-doc-standing reports an unreadable file", got, 1, out, "locked-2026-11-02.md")
+        got, out = run(["--show", "docs/design/locked-2026-11-02.md"], root, DOCS)
+        expect("17b --show on an unreadable file exits 2", got, 2, out, "cannot read")
+        r = subprocess.run([sys.executable, "-I", DOCS, "ok", "--root", root], capture_output=True, text=True)
+        expect("17c the bulk query still lists the readable file", r.returncode, 0, r.stdout, "ok-2026-11-01.md")
+        expect("17d and names the unreadable one on stderr", 0 if "locked-2026-11-02.md" in r.stderr else 1, 0, r.stderr)
+    got, out = run(["--show", "docs/design/missing.md"], root, DOCS)
+    expect("17e --show on a missing file exits 2", got, 2, out, "cannot read")
+    os.chmod(os.path.join(root, "docs/design/locked-2026-11-02.md"), 0o644)
+finally:
+    shutil.rmtree(root)
+
+# the ratchet reads HEAD: renamed-in files count, odd names are not dropped, an uncommitted edit changes nothing
+root = fresh()
+try:
+    def git(*a):
+        r = subprocess.run(["git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t"] + list(a), capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+    git("init", "-q", "-b", "main")
+    put(root, "docs/notes/moved-2026-10-01.md", "# Moved\n\nlong enough body so the rename is detected as a rename, not an add\n" * 5)
+    git("add", "-A"); git("commit", "-q", "-m", "base")
+    git("checkout", "-q", "-b", "lane")
+    os.makedirs(os.path.join(root, "docs/design"))
+    git("mv", "docs/notes/moved-2026-10-01.md", "docs/design/moved-2026-10-01.md")
+    put(root, "docs/design/sp\u00e4ce name \u00fc-2026-11-01.md", "# Odd\n")
+    put(root, "docs/design/good-2026-11-02.md", "# Good\n\nStanding: undecided | kind: wanted | settled-by: nothing\n")
+    git("add", "-A"); git("commit", "-q", "-m", "lane")
+    got, out = run(["--base", "main"], root)
+    expect("18 a file moved into docs/design counts as added", got, 1, out, "moved-2026-10-01.md")
+    expect("18b a non-ASCII spaced name is reported, not dropped or quoted", got, 1, out, "sp\u00e4ce name \u00fc-2026-11-01.md")
+    # uncommitted: give the committed good file's header away and fix the odd ones on disk; HEAD decides
+    put(root, "docs/design/good-2026-11-02.md", "# Good\n")
+    put(root, "docs/design/moved-2026-10-01.md", "# Moved\n\nStanding: undecided | kind: wanted | settled-by: nothing\n")
+    got, out = run(["--base", "main"], root)
+    expect("18c an uncommitted edit that adds a header does not clear the verdict", got, 1, out, "moved-2026-10-01.md")
+    expect("18d an uncommitted edit that drops a header does not add a finding", 0 if "good-2026-11-02.md" not in out else 1, 0, out)
+    os.remove(os.path.join(root, "docs/design/good-2026-11-02.md"))
+    got, out = run(["--base", "main"], root)
+    expect("18e a committed file deleted on disk is still judged from HEAD (and good is fine)", got, 1, out, "moved-2026-10-01.md")
+finally:
+    shutil.rmtree(root)
+
+print("%d cases, %d failed" % (n, len(fails)))
+sys.exit(1 if fails else 0)

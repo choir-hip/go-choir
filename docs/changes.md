@@ -10,6 +10,16 @@ Proof: `scripts/selftest-land-timings` (the reader on a fixture, a line written 
 
 Replaced: nothing; landings were untimed. Undo: revert this commit. Without `land-timing.sh` beside them the two scripts run as before.
 
+## 2026-11-27: a document is found by its first line (yellow; lane `docs-query`)
+
+What: `scripts/docs <words>` searches every document's path, title and `Standing:` line and prints governing documents first, then undecided, built, superseded (with what replaced each) and unmarked. `scripts/check-doc-standing` checks every `Standing:` line's form and, with `--base`, requires one on any file added under `docs/design` or `docs/definitions`. Both are in `scripts/gates`; the report-only `scripts/doccheck` leaves the local gates.
+
+Why: twelve accepted designs were among the documents nobody loads, and a session rebuilt one of them (the resource fabric) from nothing on 2026-11-27. A reader that loads one file and then searches needs the search to answer "what governs this subject".
+
+Proof: `python3 -I scripts/selftest-check-doc-standing` -> `62 cases, 0 failed`; `scripts/check-doc-standing` -> `88 Standing lines ok`; fourteen subject queries each return the governing design first (`scripts/docs vault` returns three undecided designs and no governing one, which is true). Reviewed by seat 1 (six findings, all fixed). Not proved: that an agent starting cold uses the query.
+
+Replaced: finding a design by remembering its filename. Undo: revert this commit; the `Standing:` lines stay and are harmless. Follow-up: CI still runs the `doccheck` job.
+
 ## 2026-11-26: Android passkeys, the association file and the shared account boundary (red; lane `android-auth`)
 
 What: `/.well-known/assetlinks.json` is served publicly from the canonical Android record (`internal/appids.AndroidPasskeyApps`: package `news.choir.autoradio.lab.one`, the A0 debug certificate's SHA-256), and `internal/appids` derives the Credential Manager origin `android:apk-key-hash:3-l2fGQqL4ZLKXBJvel8CDbLWNXOUW_-en2hH2_snqc` from the same bytes. `AUTH_RP_ORIGINS` accepts that origin beside `https://choir.news`, and the auth ceremony's tests accept creation and discoverable assertion from it while refusing a wrong APK hash. `passkey-apps.json` names only the lab-one package for Android, so `passkeySupport` offers sign-in there and refuses another identity. The former Apple native `choirAuth` source is now shared TypeScript (`account-state.ts`) over Exact's secret store, keeping its four-field shape; the Apple package source, substitute and view are gone. The app module now answers `accountStores`: Apple says `{available: true}` (its native voice/take/mail stores), Android says `{available: false}`, so shared-only sign-out is an explicit capability, not a missing handle. Shared-only sign-out forgets all three Exact secrets, reads each back (an unreadable store fails closed), revokes the server key before the shared wipes, and a cold relaunch still signed out proves no usable key survived. `scripts/proofs/android-a1-account-boundary.py` drives the real Autoradio and passkeys implementations, clicks through to the passkey sheet, and never reads a secret.

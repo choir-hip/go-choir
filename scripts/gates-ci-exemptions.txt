@@ -7,6 +7,7 @@
 # fails the check.
 
 # Run by a CI gate job; not by scripts/gates or the land script.
+scripts/doccheck report-only: its default mode writes the report and exits 0 in every case, so it gates nothing and cost each landing 26 to 33 s; scripts/check-doc-standing replaces it as the docs gate
 scripts/selftest-guest-security-epoch takes 59 s on the Mac, over the budget; scripts/gates runs the check itself
 scripts/test-node-b-guest-release-retention.sh fails on macOS (BSD touch has no -d with this date form; 7 of 43 cases) and passes on the Linux runner
 scripts/test-guest-floor-commit-free needs nix to evaluate the guest under two commit stamps
