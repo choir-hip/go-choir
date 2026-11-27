@@ -144,6 +144,12 @@ version that needs it.
 | 1.7 | solid economics | metering; one unit of account; credits; people's own sources as the paid step; the organisation offer |
 | 1.8 | agentic red teaming, in full | self-development in good order |
 | 1.9 | integrations | the people's credentials vault; an MCP client in the computer; driving a computer from outside; a harness as a desk |
+| 1.10 | the four-stroke learning engine in everything | |
+| 1.11 | a week like this one: forgetting and deletion | |
+
+The schedule is adaptive (owner, 2026-11-27): everything is worked on at
+once, the versions are an order of emphasis and not a calendar, and the
+plan is redrawn as it is learned from. A deletion week recurs.
 
 What the table shows:
 

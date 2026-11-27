@@ -300,3 +300,10 @@ steps im forgetting?"
 **1.3 and the method.** "yes, 1.3 is discovery. and the point is to
 discover how all the other requirements order and sequence the roadmap of
 features"
+
+**Adaptive planning.** "the point is that the planning and scheduling is
+adaptive. the 10th week is four stroke learning engine imbuing everything.
+the 11th week is a week like this, where we actually work to forget
+everything. deletion. and yes, at some level the concept of weeks breaks
+down, because we are always working on everything all at once. thats why we
+do big picture planning"
