@@ -716,8 +716,6 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public var onPaused: (@Sendable (Bool) -> Void)?
     /// The yield level changed (a hands-free turn lowered or paused the programme): remote audio follows it.
     public var onLevel: (@Sendable (PlayLevel) -> Void)?
-    /// Where playback is, per segment (station P1): P2 observes it.
-    public let playback = SegmentTracker()
     /// Tests only: runs in the loop after its last look at the document and before the write that ends it (the window of review finding R3).
     var beforeLoopTail: (@Sendable () -> Void)?
     /// A playback loop is running (it ended dry, or was never started, when false).
@@ -729,7 +727,6 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public init(audio: LiveAudio, registry: StageRegistry, log: EventLog, configuration: LabConfiguration, document: ProgrammeDocument) {
         self.audio = audio; self.registry = registry; self.log = log; self.configuration = configuration
         self.st = Locked(State(document: document))
-        playback.paused(true)                   // the player starts paused
         installRemoteCommands()
     }
     public func setConfiguration(_ c: LabConfiguration) { lock.lock(); configuration = c; lock.unlock() }
@@ -748,10 +745,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         guard let m = await synthesize(text, with: cfg, why: &why, timed: false, allowFallback: false) else { return nil }
         return PreparedAudio(text: text, samples: m.samples, rate: m.rate)
     }
-    /// Per-document state dies with the document: the block index, where the loop ran dry (`resumeAt`), and the tracker's open and
-    /// closed segments.
+    /// Per-document state dies with the document: the block index and where the loop ran dry (`resumeAt`).
     public func setDocument(_ d: ProgrammeDocument) {
-        playback.documentReplaced()
         st.write { $0.document = d; $0.blockIndex = 0; $0.resumeAt = nil }
     }
 
@@ -767,14 +762,13 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         onNeedsSession?()
         onPaused?(false)
         if lvl != .pause { audio.programmePlay() }
-        playback.paused(false)
         if !hasLoop { start(at: at) }
         publishNowPlaying(); onChange?()
     }
     /// `reason` names who asked: every pause is on the console, never silent.
     public func pause(reason: String = "listener") {
         print("AUTORADIO paused reason=\(reason)")
-        st.write { $0.userPaused = true; $0.systemPause = reason == "system interruption" }; audio.programmePause(); playback.paused(true); publishNowPlaying(); onPaused?(true); onChange?()
+        st.write { $0.userPaused = true; $0.systemPause = reason == "system interruption" }; audio.programmePause(); publishNowPlaying(); onPaused?(true); onChange?()
     }
     public func next() {
         let (i, doc) = st.read { ($0.blockIndex, $0.document) }
@@ -844,7 +838,6 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// and nothing started it again.)
     func begin(at i: Int) {
         st.write { $0.userPaused = false; $0.systemPause = false }
-        playback.paused(false)
         start(at: i)
         publishNowPlaying(); onChange?()
     }
@@ -872,10 +865,9 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                         s.blockIndex = n
                         return (s.document.blocks[n], s.userPaused, s.level, s.document)
                     }
-                    guard let (block, paused, lvl, doc) = step else { break }
+                    guard let (block, paused, lvl, _) = step else { break }
                     self.audio.clearPlayhead(); self.onChange?(); self.publishNowPlaying()
                     if paused { self.audio.programmePause() } else if lvl != .pause { self.audio.programmePlay() }
-                    self.playback.unitBegan(n, in: doc)
                     let played = await self.playBlock(block, index: n)
                     if Task.isCancelled { break }
                     if self.engineLostFlag.write({ let v = $0; $0 = false; return v }) {
@@ -887,7 +879,6 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
                         break outer
                     }
                     if played { anyPlayed = true }
-                    self.playback.unitEnded(n, played: played, in: self.st.read { $0.document })
                     n += 1
                 }
                 if Task.isCancelled { break }
@@ -1113,7 +1104,6 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public func setLevel(_ l: PlayLevel) async {
         let paused = st.write { s -> Bool in s.level = l; return s.userPaused }
         if l == .pause { cancelLookahead() }          // the listener spoke: the voice is wanted for the answer, not for the next block
-        playback.cut(l == .pause)
         switch l {
         case .play: audio.setProgrammeVolume(1); if !paused { audio.programmePlay() }
         case .dip: audio.setProgrammeVolume(dipVolume)

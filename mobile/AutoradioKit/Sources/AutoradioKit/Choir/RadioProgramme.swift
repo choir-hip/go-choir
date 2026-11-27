@@ -6,8 +6,7 @@ import Foundation
 // the tests are ProgrammePlayerTests.swift and carry its numbers.
 //
 // What the phone does with a stretch: its lines are read by shared code (programme-model.ts StretchDecoder; the Swift decoder is a test helper now), make each segment into playback blocks (SegmentPrep), append
-// them to the document the player is playing (ProgrammeDocument.append, ProgrammePlayer.appendSegment), and tell observers where
-// playback is (SegmentTracker, in its own file). The server validates; the phone drops only what it cannot speak.
+// them to the document the player is playing (ProgrammeDocument.append, ProgrammePlayer.appendSegment). The server validates; the phone drops only what it cannot speak.
 
 // MARK: Segments
 

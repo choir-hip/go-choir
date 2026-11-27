@@ -4,63 +4,15 @@ import XCTest
 // Station P1, review round 1 (REPAIR): the failure cases the reviewer found, written before the repair. Each is numbered R1.. in the
 // repair list at the end of the P1 section of mobile/README.md. They fail on the tip 681ae12d9 and pass after the repair.
 
-final class RepairTrackerTests: XCTestCase {
-    final class Sink: @unchecked Sendable { var events: [PlaybackEvent] = []; var kinds: [PlaybackKind] { events.map(\.kind) } }
-    func make() -> (SegmentTracker, Sink) { let t = SegmentTracker(); let s = Sink(); t.observe { s.events.append($0) }; return (t, s) }
-    func threeBlocks(_ more: [String] = []) -> ProgrammeDocument { segmentedDocument(["A one.\n\nB two.\n\nC three."] + more) }
-
-    // R1: a multi-block segment whose first block got no voice: failed once, and nothing after it.
-    func testR1_FailedFirstBlockOfThreeIsNotReopenedByTheNextBlocks() {
-        let d = threeBlocks()
-        XCTAssertEqual(d.segments[0].blockCount, 3)
-        let (t, s) = make()
-        t.unitBegan(0, in: d); t.unitEnded(0, played: false, in: d)
-        t.unitBegan(1, in: d); t.unitEnded(1, played: true, in: d)
-        t.unitBegan(2, in: d); t.unitEnded(2, played: true, in: d)
-        XCTAssertEqual(s.kinds, [.segmentBegan, .blockBegan, .failed], "failed, never began again, never finished")
-    }
-
-    // R1: a finished segment whose last block is begun again (a replay) reports nothing, until another segment has begun.
-    func testR1_AFinishedSegmentStaysClosedUntilAnotherSegmentBegins() {
-        let d = threeBlocks(["Next."])
-        let (t, s) = make()
-        for u in 0..<3 { t.unitBegan(u, in: d); t.unitEnded(u, played: true, in: d) }
-        XCTAssertEqual(s.kinds.last, .finished)
-        // Round 2 (S1): begun again at or before the unit it closed on, the last block is a seek, which is a play: it is reported again.
-        let n = s.events.count
-        t.unitBegan(2, in: d); t.unitEnded(2, played: true, in: d)
-        XCTAssertEqual(Array(s.kinds[n...]), [.segmentBegan, .blockBegan, .finished])
-        t.unitBegan(3, in: d)                                              // another segment begins
-        XCTAssertEqual(s.kinds.suffix(2), [.segmentBegan, .blockBegan])
-        let m = s.events.count
-        t.unitBegan(0, in: d)                                              // and a return to the first is a real replay
-        XCTAssertEqual(s.kinds[m], .rewound); XCTAssertEqual(s.kinds[m + 1], .segmentBegan)
-    }
-
-    func testR1_AFailedSegmentReopensAfterTheDocumentIsReplaced() {
-        let d = threeBlocks()
-        let (t, s) = make()
-        t.unitBegan(0, in: d); t.unitEnded(0, played: false, in: d)
-        t.documentReplaced()
-        t.unitBegan(1, in: d)
-        XCTAssertEqual(s.kinds, [.segmentBegan, .blockBegan, .failed, .segmentBegan, .blockBegan])
-    }
-}
-
 final class RepairPlayerTests: XCTestCase {
-    final class Sink: @unchecked Sendable {
-        private let lock = NSLock(); private var e: [PlaybackEvent] = []
-        func add(_ x: PlaybackEvent) { lock.lock(); e.append(x); lock.unlock() }
-        var kinds: [String] { lock.lock(); defer { lock.unlock() }; return e.map { "\($0.kind.rawValue):\($0.segmentID.split(separator: "/").last ?? "")" } }
-    }
-    func makePlayer(voice: String = "stub-voice", doc: ProgrammeDocument) -> (ProgrammePlayer, Sink) {
+    func makePlayer(voice: String = "stub-voice", doc: ProgrammeDocument) -> (ProgrammePlayer, PlayerWatch) {
         let r = StageRegistry.builtIn()
         r.register(.voice, LongVoice.self) { LongVoice($0) }
         r.register(.voice, StubVoice.self) { StubVoice($0) }
         var cfg = StageRegistry.defaultConfiguration(); cfg.set(.voice, .init(id: voice))
-        let p = ProgrammePlayer(audio: virtualAudio(), registry: r, log: EventLog(clock: LabClock()), configuration: cfg, document: doc)
-        let s = Sink(); p.playback.observe { s.add($0) }
-        return (p, s)
+        let log = EventLog(clock: LabClock())
+        let p = ProgrammePlayer(audio: virtualAudio(), registry: r, log: log, configuration: cfg, document: doc)
+        return (p, PlayerWatch(log, p))
     }
     func prepared(_ n: Int, _ text: String = "More words.") -> PreparedSegment {
         SegmentPrep.prepare(IncomingSegment(stretchID: "st1", segmentID: "st1/\(n)", kind: "story", title: "T\(n)", text: text, cites: [], blockCount: nil))!
@@ -68,18 +20,17 @@ final class RepairPlayerTests: XCTestCase {
 
     // R2: ran dry, the listener pauses, a segment arrives, the listener plays: the new segment, not the old last block again.
     func testR2_DryPauseAppendPlayStartsAtTheFirstUnplayedBlock() async {
-        let (p, s) = makePlayer(doc: segmentedDocument(["One."]))
+        let (p, w) = makePlayer(doc: segmentedDocument(["One."]))
         p.play()
-        let a = await poll(10) { s.kinds.contains("finished:0") }; XCTAssertTrue(a)
+        let a = await poll(10) { w.ranDry.count == 1 }; XCTAssertTrue(a)
         let b = await poll(5) { !p.loopIsActive }; XCTAssertTrue(b, "the loop ended dry")
         p.pause()
         XCTAssertTrue(p.appendSegment(prepared(1), toDocument: "radio:t"))
         try? await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertEqual(s.kinds, ["segmentBegan:0", "blockBegan:0", "finished:0"], "paused: nothing plays")
+        XCTAssertEqual(w.air, [0], "paused: nothing plays"); XCTAssertEqual(w.ranDry.count, 1)
         p.play()
-        let c = await poll(10) { s.kinds.contains("finished:1") }; XCTAssertTrue(c)
-        XCTAssertEqual(s.kinds, ["segmentBegan:0", "blockBegan:0", "finished:0", "segmentBegan:1", "blockBegan:1", "finished:1"],
-                       "the old segment is not replayed or reported twice")
+        let c = await poll(10) { w.ranDry.count == 2 }; XCTAssertTrue(c)
+        XCTAssertEqual(w.air, [0, 1], "the old segment is not replayed or reported twice")
         XCTAssertEqual(p.blockIndex, 1)
     }
 
@@ -97,15 +48,16 @@ final class RepairPlayerTests: XCTestCase {
 
     // R3: a segment appended between the loop's last read and the write that ends it is played (a hook at the tail, no sleep).
     func testR3_AnAppendInTheTailWindowIsPlayed() async {
-        let (p, s) = makePlayer(doc: segmentedDocument(["One."]))
+        let (p, w) = makePlayer(doc: segmentedDocument(["One."]))
         let seg = prepared(1)
         let once = Locked(true)
         p.beforeLoopTail = { [unowned p] in
             if once.write({ o -> Bool in let was = o; o = false; return was }) { _ = p.appendSegment(seg, toDocument: "radio:t") }
         }
         p.play()
-        let ok = await poll(10) { s.kinds.contains("finished:1") }
-        XCTAssertTrue(ok, "the segment that arrived in the window was played: \(s.kinds)")
+        let ok = await poll(10) { !w.ranDry.isEmpty }
+        XCTAssertTrue(ok); XCTAssertEqual(w.air, [0, 1], "the segment that arrived in the window was played: \(w.air)")
+        XCTAssertEqual(w.ranDry.count, 1, "the loop carried on and ended dry once, after it")
     }
 }
 
