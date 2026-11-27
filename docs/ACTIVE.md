@@ -49,6 +49,15 @@ benchmark. The mission keeps Choir, web and iOS unchanged, implements only the
 missing Kotlin native seams in the shared Exact app, and proves the version 1.0
 APK on the phone. The Samsung remains out by default.
 
+Station state (2026-11-27): A0 inventory and A3's first web proof are recorded;
+A2 landed (`c7b1ed39e`) — the phone plays the station, survives Home and obeys
+the media session, proved on the Motorola; A1 landed (`774e87d2f`) — staging
+serves the Android association file and accepts the Credential Manager origin,
+and the d@e passkey sheet/relaunch/sign-out wait on the owner's biometric act
+(no fingerprint or face was enrolled at A0). Next: A4 mail secrecy, then A6's
+hands-free voice, then A7's parity matrix; A5's model benchmark is partly
+landed with the JNI/ONNX runtime.
+
 ## Live goal from 2026-11-22: storage efficiency
 
 The owner, 2026-11-22, after Node B's disk refused deploys and wakes: "the

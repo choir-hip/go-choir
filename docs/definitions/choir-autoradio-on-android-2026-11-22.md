@@ -153,7 +153,7 @@ stations:
     review: two seats on a frozen candidate
     depends_on: [A0]
     carrier: .lane/trees/android-auth
-    status: working
+    status: landed; owner passkey sheet pending
   - id: A2
     name: Kotlin deck and background audio
     scope: 'implement the existing deckState/deckPlay/deckEnqueue/deckAct/deckAck contract with Media3, speech playback, media session, audio focus, interruption/route handling, durable journal and background playback; patch Exact only if the pinned Android host truly lacks the required media-service path'
@@ -233,12 +233,12 @@ owner_rulings:
     read_as: 'the old Motorola is the baseline; larger-phone models are a later ladder, not a reason to skip the baseline'
 now:
   status: working
-  slice: 'A1: Android passkey association, accepted origin and shared account boundary; local candidate only, staging and owner biometric action pending'
+  slice: 'A1 landed: association file and accepted origin proved on staging; the d@e passkey sheet, relaunch and sign-out await the owner biometric action'
   source_ref: origin/main c7b1ed39e0e3ec688921ab56f48cba7cff8c0a78
   deploy_identity: staging proxy/platform 16f04df4d1dcda2b4a2777968c27926dfed485ba
   candidate:
     id: android-auth
-    state: rehearsing
+    state: landed
     ref: .lane/trees/android-auth
     base: origin/main c7b1ed39e0e3ec688921ab56f48cba7cff8c0a78
     digest: none
