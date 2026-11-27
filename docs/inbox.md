@@ -205,3 +205,7 @@ and that's not 0MC"
 if everyone who can talk has at least one choir computer. Like, if you buy
 an account just to talk, you're forced to get a choir computer, so
 naturally you'll find a use for that compute"
+
+**Talking is free; publishing a voice is paid.** "All users can talk to
+their phone. Obviously. You can do dictation, or talk to an on-device
+model. But only paid users can publish their voice."
