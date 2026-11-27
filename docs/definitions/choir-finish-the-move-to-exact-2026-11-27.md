@@ -214,7 +214,7 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: E6.3 (the order of sign-out, red) in its second review round; E1 waits on the build tree
+  slice: E6.3 (the order of sign-out, red) sent back three times; rebuilt once on a changed approach (docs/evidence/sign-out-gate-three-rounds-2026-11-27.md); E1 waits on the build tree
   source_ref: origin/main f0509f6a7
   deploy_identity: staging on f0509f6a7
   candidate:
