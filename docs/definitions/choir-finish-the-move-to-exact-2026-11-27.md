@@ -101,8 +101,8 @@ stations:
   class: orange
   review: one seat
   depends_on: [E0]
-  carrier: none yet
-  status: pending
+  carrier: 'origin/lane/exact-pin-upstream e2722cd6f: the pin at 8552d20f9 (1,366 commits on), patches 0002 and 0003 re-made and applying, one contract line respelled (swipeleft); prepared by reading, nothing compiled or run'
+  status: working
 - id: E2
   name: what counts as voice
   scope: 'a list, for the owner to rule on, of the files the voice list covers that the audit of 2026-11-24 says could move (turn policy, model configuration and choice, setup, the server-turn stages ChoirDesk and AutoradioDesk); until the ruling the list stands as it is'
@@ -188,6 +188,11 @@ decisions_for_the_owner:
   why: 'The seal is 72 lines of Swift and Android owes a Kotlin copy, so removing it serves the rule. It is also the only encryption the app adds to mail at rest. An unlanded commit removed it and I can find no words of the owner asking for that.'
   options: the seal goes and mail is stored plain under the platform's file protection; the seal stays as the one native cipher, with its reason beside it, and Android gets its copy; mail is not kept on the phone at all
   default: the seal stays; E4 is not built
+- id: D5
+  question: May the build tree (lane qa-mac) be moved to the new Exact pin while it holds the Android session's uncommitted work?
+  why: The move resets the one Exact checkout and re-applies the patches; that session edited patch 0003 itself, and the re-made 0003 differs from its edit.
+  options: the Android session commits its work first and then the tree moves; move it now and keep its 38 paths as they are; name a second build tree for the pin move
+  default: the tree is not moved; the pin waits on a branch
 owner_rulings:
 - on: 2026-11-27
   decision: order
@@ -204,7 +209,7 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: E1 (the pin), in preparation
+  slice: E1 prepared and waiting on the build tree; E5 on the present pin
   source_ref: origin/main 5844447d4
   deploy_identity: staging on 323df6f3b
   candidate:
@@ -233,9 +238,9 @@ now:
   belief:
     believed_state: 'the facts and the lane verdicts are on main and no code of this mission is built. A builder sent to delete non-voice Swift with no production reader (2026-11-27) deleted nothing: none of the 34 files is dead. SegmentTracker has no production observer but the voice engine feeds it at nine places and about fifteen player tests read through it; every BarState member has a production caller. So the 3,375 lines fall only by moving behaviour, not by deletion.'
     main_uncertainty: 'whether the two Android patches can be re-made on a current Exact, and how much of each remaining Swift file the shared code already duplicates'
-    next_observation: the pin preparation's patch and contract findings
-  blocker_or_risk: every native build is the lead's and one at a time, so moved pages can land faster than they can be tried on a device
-  next_action: 'E1 from the preparation lane (the lead''s native build); then E5 file by file, shared code first with its tests, the Swift deleted in the same change: SegmentTracker needs the player tests rewritten to assert on player state before it can go'
+    next_observation: 'the contract build and bun test on the new pin, once the build tree may move'
+  blocker_or_risk: 'the pin move can be verified only by moving the one Exact checkout, which lives in the build tree (lane qa-mac). That tree holds another session''s uncommitted Android work, 38 paths, among them its own edit of patch 0003. I have not moved it. The pin does not go to main unverified, because every lane checks its pin against the build tree.'
+  next_action: 'E5 on the present pin, file by file in lanes; E1''s build when the Android session''s work in the build tree is committed or the owner says to move it'
 receipts: []
 ---
 
