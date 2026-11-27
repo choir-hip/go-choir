@@ -92,8 +92,8 @@ stations:
   class: green
   review: none
   depends_on: []
-  carrier: the commit that adds this file
-  status: working
+  carrier: '71aa6bee6'
+  status: landed
 - id: E1
   name: the pin moves
   scope: 'mobile/exact.pin to a current upstream commit by the recipe in docs/reference/exact/build-and-ship.md; patches 0002 and 0003 re-made against the new scripts/agent-android.mjs or shown to be unnecessary upstream; the grammar and package-interface diff read against our contracts first; docs/reference/EXACT.md updated in the same change'
@@ -108,8 +108,8 @@ stations:
   class: green
   review: the owner
   depends_on: [E0]
-  carrier: none yet
-  status: pending
+  carrier: 'docs/evidence/what-counts-as-voice-2026-11-27.md, on main; waits on the owner (D2)'
+  status: landed
 - id: E3
   name: the lanes in flight
   scope: 'voice-models, voice-more, unified-voice-download, exact-rest, exr-r, account-boundary-l1 and the rest of move-b: each read, with its uncommitted paths, and given one verdict: land as it is, fold into a station here, or drop with the reason'
@@ -198,7 +198,7 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: E0
+  slice: E1 and E3, each with its own builder
   source_ref: origin/main 5844447d4
   deploy_identity: staging on 323df6f3b
   candidate:
