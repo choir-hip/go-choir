@@ -209,3 +209,10 @@ naturally you'll find a use for that compute"
 **Talking is free; publishing a voice is paid.** "All users can talk to
 their phone. Obviously. You can do dictation, or talk to an on-device
 model. But only paid users can publish their voice."
+
+**Signed out.** "we should expand what can be done signed out. All the
+local on device stuff doesn't care about you having an account. Like, the
+account is for the choir computer, which free users don't have."
+
+**A local model exhibition.** "only after making autoradio did I realize
+that it was viable as a local model exhibition"

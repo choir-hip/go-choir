@@ -50,7 +50,9 @@ its public instance. Deep research on a podcast is a second instance.
 account key (`TurnGate.swift`) and gets its answer from the server
 (`POST /api/autoradio/turns`, `POST /api/system1/judgments`). A turn that
 completes on the phone alone, for a person with no computer, is not built.
-The onboarding interview depends on it.
+The onboarding interview depends on it. With no account, a free
+listener's state (the queue, what was heard, what the interview learned)
+lives only on the phone.
 
 ## What we arbitrage
 
@@ -86,9 +88,12 @@ Each is the owner's, with the words in [inbox.md](inbox.md).
    arbitrary VMs, not only computers.
 7. Mike stays, as a chat client of a Choir computer.
 8. Integrations wait; the rare core parts come first.
-9. Publishing a voice take is for paid accounts only.
-10. Plan for where the product is in a year, not only next week.
-11. Problem records are kept and improved, not scrapped. The docs to
+9. Publishing a voice take is for paid accounts only. Talking to the
+   phone is free for everyone.
+10. An account is for the Choir computer. A free listener has no account,
+    and everything that runs on the device works signed out.
+11. Plan for where the product is in a year, not only next week.
+12. Problem records are kept and improved, not scrapped. The docs to
    consolidate are theory, architecture and planning.
 
 ## The plan
