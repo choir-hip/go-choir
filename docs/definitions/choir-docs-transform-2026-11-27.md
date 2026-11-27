@@ -130,8 +130,8 @@ stations:
   class: yellow
   review: one seat
   depends_on: [T1, T4]
-  carrier: lane gates-cost, in its second review round
-  status: working
+  carrier: 3eb64a326 (CI run tests green; its deploy step refused on the Node B disk)
+  status: landed
 - id: T6
   name: the first line
   scope: 'a one-line header on each document in docs/design, docs/definitions and the top level that the triage sorted as governing or superseded: its kind, its standing, and the ruling or outcome that settled it, with the date. The triage list is checked in. Nothing is moved.'
@@ -227,8 +227,8 @@ owner_rulings:
   read_as: lanes stay the unit of work; GitHub Actions is used as compute, with our own machine as the exercised backup.
 now:
   status: working
-  slice: T5 with its builder; the first real batch through the queue; T12 next
-  source_ref: origin/main cc3fe4db4
+  slice: waiting on the owner for the Node B disk; T12 (the closing pass) in documents meanwhile
+  source_ref: origin/main 3eb64a326
   deploy_identity: staging on 774e87d2f
   candidate:
     id: none
@@ -254,11 +254,11 @@ now:
     evidence_ref: the owner's words of 2026-11-27 in docs/inbox.md
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: 'T0 to T4, T6 and T7 are on main, with a fix to a nix check that failed about three landings in four on the Mac (1333ee064). The local gates were 208 to 489 s of each landing; T5 measures them at about 165 s serial and 60 to 80 s in parallel.'
-    main_uncertainty: whether the batched queue behaves on the real gh and build machine as it does against its fakes
-    next_observation: the first real batch of two lanes, which settles C257
-  blocker_or_risk: 'the second review seat (DeepSeek through OMP) returned nothing twice in twenty minutes; reviews ran on seat 1 and a Sonnet reviewer. lane rm reads every landed lane as unlanded, because the lander cherry-picks; the lander should remove a lane after its push (T12).'
-  next_action: land T5 and this file as one batch through scripts/land-queue; settle C257; then T12, the closing pass, starting with the 15 missions marked working that nobody has touched in five days
+    believed_state: 'T0 to T7 are on main except T8 to T11. The gates run in parallel (69 to 70 s measured alone; 153 s inside the one real landing so far). Staging is on 4ac73d992: every deploy since is refused because Node B has 42 GiB free against a 60 GiB floor (docs/problems/node-b-deploy-refused-disk-headroom-again-2026-11-27.md).'
+    main_uncertainty: whether the batched queue behaves on the real gh and build machine as it does against its fakes; why the gates took 153 s inside a landing and 70 s alone
+    next_observation: the first successful deploy after the disk is freed, then the first real batch of two lanes (C257)
+  blocker_or_risk: 'deploys are refused until the owner decides what may be freed on Node B; every CI run on main ends failed at the deploy step, so the queue will not push a batch. Follow-ups: the gates selftest writes a line to the real timing log; a real landing wrote no gates line; the lander should remove a lane after its push; the doccheck CI job; three readers of the old ledger.'
+  next_action: the owner's disk decision; then one batch through scripts/land-queue to settle C257; meanwhile the closing pass from docs/evidence/mission-closing-verdicts-2026-11-27.md, in documents only
 receipts:
 - id: T0
   boundary: define
