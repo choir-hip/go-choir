@@ -36,6 +36,7 @@ final class BarStateTests: XCTestCase {
     // Failure list for what is left of the radio view (the sentences, progress and follow-along are radio-follow.test.ts):
     //  V1 the block on air is clamped into the programme: a block past the end (after a revision shortens it) is the last, a negative one the first, no blocks is nothing; a clip speaks its summary, a speech block its words.
     //  V2 the title is the document's, or the segment's when the block is in one; nothing is "N of M".
+    //  V4 the block's key changes with the document, the block or its words; the fraction answers for the clamped block.
     //  V3 the block's place is the audio's own, for THIS block only: another block's position, or no position, is 0, and a place at the very end stays below 1.
     func testBlockOnAirClampsIntoTheProgramme() {
         let blocks = (0..<100).map { ProgrammeBlock.speech(text: "Block \($0). More words.") }
@@ -46,6 +47,30 @@ final class BarStateTests: XCTestCase {
         XCTAssertEqual(BarTracker.blockOnAir(snap(idx: -4, count: 100), document: d).index, 0)
         let none = BarTracker.blockOnAir(snap(count: 0), document: ProgrammeDocument(id: "n", title: "", blocks: []))
         XCTAssertEqual(none.count, 0); XCTAssertEqual(none.spoken, ""); XCTAssertEqual(none.index, 0)
+    }
+
+    func testAClipSpeaksItsSummaryAndTheKeyFollowsTheBlockAndItsWords() {
+        let clip = ProgrammeBlock.clip(url: "https://x.test/a.mp3", start: 0, end: nil, source: "Show")
+        let d = ProgrammeDocument(id: "pub:x", title: "Doc", blocks: [.speech(text: "Words here."), clip, .speech(text: "Other words.")])
+        let c = BarTracker.blockOnAir(snap(idx: 1, count: 3), document: d)
+        XCTAssertEqual(c.spoken, clip.summary); XCTAssertEqual(c.document, "pub:x")
+        let a = BarTracker.blockOnAir(snap(idx: 0, count: 3), document: d), b = BarTracker.blockOnAir(snap(idx: 2, count: 3), document: d)
+        XCTAssertEqual(Set([a.key, c.key, b.key]).count, 3, "another block is another key")
+        XCTAssertEqual(a.key, BarTracker.blockOnAir(snap(idx: 0, count: 3), document: d).key, "the same block, the same key")
+        let edited = ProgrammeDocument(id: "pub:x", title: "Doc", blocks: [.speech(text: "Words there."), clip, .speech(text: "Other words.")])
+        XCTAssertNotEqual(a.key, BarTracker.blockOnAir(snap(idx: 0, count: 3), document: edited).key, "other words in the same block, another key")
+        XCTAssertEqual(BarTracker.blockOnAir(snap(count: 0), document: ProgrammeDocument(id: "n", title: "", blocks: [])).key, "")
+    }
+
+    func testTheFractionAnswersForTheBlockThatWasClamped() {
+        let tr = BarTracker()
+        let d = ProgrammeDocument(id: "d", title: "T", blocks: (0..<3).map { .speech(text: "Block \($0).") })
+        let s = snap(idx: 9, count: 3)                                   // a revision shortened the programme under the index
+        tr.positionSource = { RenderPosition(index: 2, fraction: 0.4, seconds: 1, total: 2) }
+        let b = BarTracker.blockOnAir(s, document: d)
+        XCTAssertEqual(b.index, 2)
+        XCTAssertEqual(tr.blockFraction(s), 0, "the raw index names no block the audio plays")
+        XCTAssertEqual(tr.blockFraction(s, index: b.index), 0.4, accuracy: 1e-9, "the clamped block is the one the facts describe, so its place is the audio's")
     }
 
     func testRadioInfoCarriesTheTitleAndFlags() {

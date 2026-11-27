@@ -122,12 +122,12 @@ describe('P3 hidden: no re-ask at all', () => {
 });
 
 describe('P4 native asks per second', () => {
-  test('playing and visible adds one `radioFacts` peek per second (the page facts); the pulse keeps its own; paused adds none', async () => {
+  test('playing and visible adds no `radioFacts` peek (the page facts and the follow use what the pulse read: radio-follow.test.ts L7); the pulse keeps its own', async () => {
     fresh(); await play(); await ask(0, true);
     calls = [];
     for (let i = 0; i < 10; i++) await ask(1, true);
     const peeks = calls.filter((c) => c.op === 'radioFacts' && c.peek === true).length;
-    expect(peeks).toBe(10);                                                   // one per second
+    expect(peeks).toBe(0);                                                    // none: the sentences come from the pulse's one read
     const perPulse = (n: string): number => calls.filter((c) => (c.op === n) || c.name === n).length;
     expect(perPulse('deckState')).toBe(10);                                   // the contract's `ds` read, once a tick (the pulse makes none of its own)
     expect(calls.filter((c) => c.op === 'deck' && c.name !== 'deckState' && c.name !== 'deckAck').length).toBe(0);

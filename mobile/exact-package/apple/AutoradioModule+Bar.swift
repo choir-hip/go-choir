@@ -108,14 +108,14 @@ extension AutoradioModule {
     /// `at` is the device's time in milliseconds (a data source may not read the clock); `ready`: onboarding is complete and no other audio holds the phone, so the radio may start by itself.
     /// `foreground`: the app is in front. Only native knows it on a locked iPhone, because Exact does not establish that the page turns `hidden` there (docs/reference/exact/ui-model.md "Page facts"); shared code stops re-asking the screens
     /// each second while it is false (spine.contract `posKey`). A host that does not give it is taken as in front.
-    @MainActor public func radioFacts(peek: Bool) -> [String: Any] {
+    @MainActor public func radioFacts(peek: Bool, have: String = "") -> [String: Any] {
         let s = runtime.snapshot(), tracker = BarTracker.shared, deck = Deck.shared
-        // The block on air as the document holds it (only native holds the document): shared code makes the sentences, the one being said and the progress from these (radio-follow.ts).
         let block = BarTracker.blockOnAir(s, document: runtime.player.document)
         let pos = runtime.player.storyPosition()
         var o: [String: Any] = ["at": Date().timeIntervalSince1970 * 1000, "turnOpen": s.phase != "playing", "remainder": runtime.player.remainingText() ?? "",
                                 "position": ["block": pos.block, "seconds": pos.seconds], "wants": !runtime.player.userPaused, "foreground": !runtime.coordinator.isBackgrounded, "ready": OnboardingController.shared?.finished ?? false,
-                                "spoken": block.spoken, "block": block.index, "blocks": block.count, "blockFraction": tracker.blockFraction(s), "inbox": peek ? [] : RadioBridge.shared.drain()]
+                                "document": block.document, "blockKey": block.key, "block": block.index, "blocks": block.count, "blockFraction": tracker.blockFraction(s, index: block.index), "inbox": peek ? [] : RadioBridge.shared.drain()]
+        if block.key != have { o["spoken"] = block.spoken }      // the words only when the block is new to shared code (`have` is the key it holds): the one answer says which document, which block, the words and the audio's place at this moment
         if let c = deck.current, c.kind == "audio", let r = deck.engine?.remotePosition() {
             o["audio"] = ["url": c.url, "title": c.title, "show": c.show, "start": c.start, "elapsed": r.elapsed] as [String: Any]
             o["remote"] = ["elapsed": r.elapsed, "duration": r.duration ?? 0] as [String: Any]

@@ -72,7 +72,7 @@ final class ModelsModule: ExactModule {
         if op == "radioFacts" || op == "radioSet" {
             Task { @MainActor in
                 guard let m = AutoradioModule.current else { reply.send([:]); return }
-                switch op { case "radioFacts": reply.send(m.radioFacts(peek: (request["peek"] as? Bool) ?? false)); default: reply.send(m.radioSet(request)) }
+                switch op { case "radioFacts": reply.send(m.radioFacts(peek: (request["peek"] as? Bool) ?? false, have: (request["have"] as? String) ?? "")); default: reply.send(m.radioSet(request)) }
             }
             return
         }

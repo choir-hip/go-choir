@@ -20,7 +20,7 @@ import { lapYield, lap } from './lap.ts';
 import { firstRunOver } from './onboarding.ts';
 import { deskMode } from './consent.ts';
 import { perform } from './radio-model.ts';
-import { followOf, NO_FOLLOW, saying, spokenNow, type Follow, type SpokenFacts } from './radio-follow.ts';
+import { followOf, NO_FOLLOW, NO_SPOKEN, ownsAir, readSpoken, saying, spokenNow, type Follow, type SpokenSnapshot } from './radio-follow.ts';
 import { heldDocument } from './reader.ts';
 import { voiceFacts, respondsOf, airAddressOf } from './voice-facts.ts';
 import { htmlToText } from './mail-model.ts';
@@ -47,7 +47,7 @@ const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v)
 
 /** A mutation in flight (or called for): `due` is a pulse that said the work is due and the mutation not started yet, `running` the mutation's body. Each goes stale (WORK_STALE_MS) so a continuation that never ends cannot stop the radio. */
 type Flag = { phase: 'due' | 'running'; at: number };
-type Radio = { writeFlag?: Flag; holdFlag?: Flag; restoreFails: number; restoreTold: boolean; pulses: number; beatSecond: number; gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[]; stories: { route: string; title: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
+type Radio = { writeFlag?: Flag; holdFlag?: Flag; restoreFails: number; restoreTold: boolean; pulses: number; beatSecond: number; gen: number; setKey: string; rt: RadioRuntime; writer: Writer; storage: Store | undefined; web: { url: string }; inbox: string[]; spoken: SpokenSnapshot; front: { at: number; published: Record<string, number>; versions: Record<string, number>; lines: { title: string; dek: string }[]; stories: { route: string; title: string }[] }; tick: number; beat: number; takeList: Take[]; started: boolean; ready: boolean; readySince: number; fetchFront(): Promise<unknown>; native?: NativeReader };
 let radio: Radio | undefined;
 
 /** Fresh state (tests; a sign-out wipes through `wipeRadio`). */
@@ -80,12 +80,14 @@ function runStorage(s: Store | undefined): RunStorage | undefined {
 }
 
 /** The native facts, over the app module's `radioFacts` op: the audio's own facts and the inbox of what native callers and the voice turn handed over. */
-async function readFacts(r: { inbox: string[] } & Partial<Radio>): Promise<NativeFacts> {
+async function readFacts(r: { inbox: string[]; spoken?: SpokenSnapshot } & Partial<Radio>): Promise<NativeFacts> {
   const later = nativeLater();
   if (!later) return NO_FACTS;
   try {
-    const o = obj(await later({ op: 'radioFacts' }));
+    // `have`: the key of the block whose words we hold, so native sends the words again only when the block changed.
+    const o = obj(await later({ op: 'radioFacts', have: r.spoken?.key ?? '' }));
     if (num(o.at) > 0) clock.ms = num(o.at);
+    if (r.spoken) r.spoken = readSpoken(o, r.spoken);       // the block on air, taken in this one answer with everything else native told at this moment
     r.ready = o.ready === true;
     if (Array.isArray(o.inbox)) for (const m of o.inbox) if (typeof m === 'string') r.inbox.push(m);
     const pos = obj(o.position), a = obj(o.audio), rem = obj(o.remote);
@@ -97,7 +99,7 @@ async function readFacts(r: { inbox: string[] } & Partial<Radio>): Promise<Nativ
       audio: str(a.url) !== '' ? { url: str(a.url), title: str(a.title), show: str(a.show), start: num(a.start), end: a.end === undefined ? undefined : num(a.end), episode_id: str(a.episode_id) || undefined, elapsed: num(a.elapsed) } : undefined,
       remote: rem.duration !== undefined ? { elapsed: num(rem.elapsed), duration: num(rem.duration) } : undefined,
     };
-  } catch { return NO_FACTS; }
+  } catch { if (r.spoken) r.spoken = NO_SPOKEN; return NO_FACTS; }
 }
 
 /** The story words the desk's writer has already fetched, by route: the deck's start uses them, so a
@@ -146,7 +148,7 @@ function resolvers(storage: Store | undefined): Partial<Resolvers> {
 }
 
 async function makeRadio(storage: Store | undefined, native: NativeReader | undefined): Promise<Radio> {
-  const state: Radio = { restoreFails: 0, restoreTold: false, pulses: 0, beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [], stories: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
+  const state: Radio = { spoken: NO_SPOKEN, restoreFails: 0, restoreTold: false, pulses: 0, beatSecond: -1, gen: accountGeneration(), setKey: '', rt: undefined as never, writer: undefined as never, storage, web: { url: '' }, inbox: [], takeList: [], front: { at: 0, published: {}, versions: {}, lines: [], stories: [] }, tick: 0, beat: 0, started: false, ready: false, readySince: 0, fetchFront: undefined as never, native };
   const rt = new RadioRuntime({
     deck: deckPort(), storage: runStorage(storage), poster: routePoster(signedInRequester(authedJSON)), generation: accountGeneration, resolvers: resolvers(storage), hasWords: (route) => wordCache.has(route), prefetchWords: async (route) => { await storyText(route); },
     native: { facts: () => readFacts(state) },
@@ -614,27 +616,21 @@ function sheetText(sheet: Sheet): string {
   return text;
 }
 
-/** What only the audio knows of the block on air (`radioFacts`, asked to peek: the inbox stays): its spoken words, its number among the programme's and the audio's place in it. Nothing is made from it here. */
-async function spokenFacts(later: ReturnType<typeof nativeLater>): Promise<SpokenFacts> {
-  if (!later) return { spoken: '', block: 0, blocks: 0, fraction: 0 };
-  try { const o = obj(await later({ op: 'radioFacts', peek: true })); return { spoken: str(o.spoken), block: num(o.block), blocks: num(o.blocks), fraction: num(o.blockFraction) }; }
-  catch { return { spoken: '', block: 0, blocks: 0, fraction: 0 }; }
-}
-
 /** The block and sentence of the page in front that the radio is saying (the reader lights it): from the radio's own sentence and the page the reader holds for the address on air. Nothing is kept: asked again, it is read again,
  *  so the sign-out wipe (the reader forgets its pages, the radio its sheet) leaves nothing to clear. */
 export async function readerFollow(storage: Store | undefined, native: NativeReader | undefined): Promise<Follow> {
-  const r = await getRadio(storage, native, false), later = nativeLater();
-  const address = airAddressOf(r.rt.store.onAir());
-  if (address === '' || !r.rt.view().playing) return NO_FOLLOW;
-  const said = saying(true, address, spokenNow(await spokenFacts(later)));
+  const r = await getRadio(storage, native, false);
+  const air = r.rt.store.onAir(), address = airAddressOf(air);
+  if (!air || address === '' || !r.rt.view().playing) return NO_FOLLOW;
+  if (!ownsAir(r.spoken.document, address, air.id)) return NO_FOLLOW;       // the words are another entry's (the entry changed between the pulse's read and now): light nothing
+  const said = saying(true, address, spokenNow(r.spoken));
   return followOf(address, said, heldDocument(address));
 }
 
 export async function radioPageFacts(storage: Store | undefined, native: NativeReader | undefined): Promise<RadioFacts> {
   const r = await getRadio(storage, native, false);
-  const v = r.rt.view(), later = nativeLater();
-  const { sentences, sentenceIndex, progress } = spokenNow(await spokenFacts(later));
+  const v = r.rt.view();
+  const { sentences, sentenceIndex, progress } = spokenNow(r.spoken);       // what the pulse's one read of native told (no call of its own)
   const prog = r.rt.programme(), route = prog.route;
   const airEntry = r.rt.store.onAir(), takeRef = airEntry?.kind === 'take' && airEntry.source?.ref.startsWith('take:') ? airEntry.source.ref.slice(5) : '';
   const take = takeRef !== '' ? r.takeList.find((t) => t.takeID === takeRef) : undefined;

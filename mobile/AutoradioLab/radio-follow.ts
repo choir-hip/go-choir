@@ -27,11 +27,14 @@ export function sentenceAt(sentences: string[], progress: number): number {
   return sentences.length - 1;
 }
 
+/** A place in a block never reaches 1 (the audio's own cap, as native always had it): the end of a block is not the start of the next, so progress in the middle of a programme is never the next block's. */
+const MAX_PLACE = 0.99;
 export type SpokenNow = { sentences: string[]; sentenceIndex: number; progress: number };
 /** The sentences of the block on air, the one being said, and how far through the programme the audio is. A block number past the end is the last block; no blocks is no progress. */
 export function spokenNow(f: SpokenFacts): SpokenNow {
-  const n = Math.max(0, Math.floor(f.blocks)), idx = n === 0 ? 0 : Math.min(Math.max(Math.floor(f.block), 0), n - 1);
-  const bp = Number.isFinite(f.fraction) ? Math.min(1, Math.max(0, f.fraction)) : 0;
+  const fin = (v: number): number => (Number.isFinite(v) ? Math.floor(v) : 0);
+  const n = Math.max(0, fin(f.blocks)), idx = n === 0 ? 0 : Math.min(Math.max(fin(f.block), 0), n - 1);
+  const bp = Number.isFinite(f.fraction) ? Math.min(MAX_PLACE, Math.max(0, f.fraction)) : 0;
   const sentences = n === 0 ? [] : sentencesOf(f.spoken);
   return { sentences, sentenceIndex: sentenceAt(sentences, bp), progress: n === 0 ? 0 : Math.min(1, (idx + bp) / n) };
 }
@@ -75,4 +78,22 @@ export function followOf(address: string, spoken: string, doc: { blocks: Block[]
 /** The sentence being said, by itself: nothing when the radio is not playing, has no page address or the sentence is past the list. */
 export function saying(playing: boolean, address: string, now: SpokenNow): string {
   return playing && address !== '' && now.sentenceIndex >= 0 && now.sentenceIndex < now.sentences.length ? now.sentences[now.sentenceIndex] : '';
+}
+
+/** What native told, in one answer taken at one moment: the document the block is in, a key that changes when the block or its words do, and the words only when the key is new to us. */
+export type SpokenSnapshot = SpokenFacts & { key: string; document: string };
+export const NO_SPOKEN: SpokenSnapshot = { key: '', document: '', spoken: '', block: 0, blocks: 0, fraction: 0 };
+const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+const number = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+/** The `radioFacts` answer as a snapshot. Native sends the words only when `have` (the key we sent) was not the block's key, so the words of the same key are the ones we held. */
+export function readSpoken(o: Record<string, unknown>, held: SpokenSnapshot): SpokenSnapshot {
+  const key = text(o.blockKey);
+  if (key === '') return NO_SPOKEN;
+  const words = typeof o.spoken === 'string' ? o.spoken : held.key === key ? held.spoken : '';
+  return { key, document: text(o.document), spoken: words, block: number(o.block), blocks: number(o.blocks), fraction: number(o.blockFraction) };
+}
+
+/** Whether the document native is speaking is the entry on air: a story read from the paper is `pub:<route>`, any other entry is `rs:<entry id>`. Anything else is not this entry's, and nothing is lit. */
+export function ownsAir(document: string, address: string, entryId: string): boolean {
+  return document !== '' && (document === `rs:${entryId}` || document === address.split('@')[0]);
 }
