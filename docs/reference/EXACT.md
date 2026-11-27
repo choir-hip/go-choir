@@ -1,10 +1,12 @@
 # EXACT: the reference for building Autoradio's app on Exact
 
-Pinned: `expo/exact` at commit `f5334750386192245ee76add13a67ab51fb4e2fd`
-(upstream `main`, 2026-11-20 10:40 -0800; `mobile/exact.pin`), moved on 2026-11-20 from
-`de212e671a69f4fea18bed67d5b73b259ddf3061` (2026-11-16), 762 commits (before that on 2026-11-17 from
-`76cd50f9e863129b3fc75db1673d6ad4bbf79258`, 2026-11-10, 3018 commits). **The 2026-11-20 move is read, not built**: the section "Pin move,
-2026-11-20" says what was read and what is unrun; until the lead's build passes, treat the pin line as a proposal.
+Pinned: `expo/exact` at commit `8552d20f9b50a013fc19d5fc9298ff149d8b2dc5`
+(upstream `main`, 2026-11-26 23:02 -0800; `mobile/exact.pin`), moved on 2026-11-27 from
+`f5334750386192245ee76add13a67ab51fb4e2fd` (2026-11-20/21, which was built and proved), 1,366 commits, read only: see
+[docs/evidence/exact-pin-move-prep-2026-11-27.md](../evidence/exact-pin-move-prep-2026-11-27.md). **The 2026-11-27 move is read, not built**: patches 0002 and 0003 were
+re-made and one contract line changed (`radio.contract` `swipeleft`); until the lead's build passes, treat the pin line as a proposal. The 2026-11-20 pin was
+`f5334750386192245ee76add13a67ab51fb4e2fd`, moved from `de212e671a69f4fea18bed67d5b73b259ddf3061` (2026-11-16), 762 commits (before that on 2026-11-17 from
+`76cd50f9e863129b3fc75db1673d6ad4bbf79258`, 2026-11-10, 3018 commits).
 Observed with Xcode 27.1, iOS 27 simulator, on an M1 Mac. The subpages and the
 examples below were written and their `file:line` read at the old pin, then
 **corrected on 2026-11-18 against the checkout at `de212e671`**: a `file:line`

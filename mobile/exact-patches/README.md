@@ -1,6 +1,6 @@
 # Local patches to Exact's iOS host
 
-`mobile/.exact-src` is a gitignored checkout of `expo/exact` at the pin in `mobile/exact.pin`. We carry **no fork**. Anything we change in it
+`mobile/.exact-src` is a gitignored checkout of `expo/exact` at the pin in `mobile/exact.pin` (`8552d20f9`, upstream `main`, 2026-11-26 23:02 -0800, since 2026-11-27). We carry **no fork**. Anything we change in it
 is a patch here, applied in file-name order by `scripts/setup-exact.sh` after it checks out the pin (a patch that is already applied is skipped;
 one that does not apply stops the script, so a pin move cannot silently lose it). Each patch says what it changes and why, below and in
 `docs/reference/exact/capabilities.md`; the aim is to upstream it or drop it.
@@ -27,7 +27,11 @@ patch edits, `MarkupEditor.swift` and `MarkupHidden.swift`, are byte-identical b
 read from `f53347503` (`GIT_INDEX_FILE=<scratch> git read-tree f53347503`, no working files touched) **passed on 2026-11-20** [run]; `MarkupSyntaxHiding.swift` is a new file that upstream's `Sources/ExactMarkdown` directory target (path-based, no file list)
 compiles. Still **not compiled or run** by us.
 
+**2026-11-27, pin `f53347503` to `8552d20f9`:** unchanged file; `MarkupEditor.swift` and `MarkupHidden.swift` are byte-identical between the two pins (`git diff` of them is empty), `markup.rs` differs only by an atom's `ariaLabel` (not `exact_markup_style`), and `git apply --cached --check` against a scratch index read from `8552d20f9` passes. Applies by `git apply --check`; not compiled or run.
+
 ## 0003 Media3 and the playback service for an app that plays in the background
+
+**Re-made against `8552d20f9` on 2026-11-27; applies by `git apply --check`; not compiled or run.** Upstream moved the decision that links Media3 out of `scripts/agent-android.mjs` (`assembleApk`) into `androidLibraryArgs` in `scripts/android-manifest.mjs` and still reads only `uses.includes('video')` or a development build; it does not look at `audio_session` (`host/android/app/build.gradle.kts:47` still needs `video && audio_session == "playback"` to add the service). So the patch is still needed, and its one change now sits in `androidLibraryArgs`, which `assembleApk` and `app-cli.mjs` both call. The description below says what it did at the old pin; the file it edits is now `scripts/android-manifest.mjs`.
 
 Autoradio's deck plays spoken and remote audio under a media session. Exact linked Media3 and its `PlaybackService` only when the
 plan made a `video` node, or for a development build without Maven libraries; an app whose `audio_session` is `playback` had no
@@ -39,6 +43,8 @@ service and nothing kept the sound alive with the activity gone. The patch:
   media session reports our metadata and position, and playback survives Home (`docs/evidence/android-a2-deck-2026-11-26/`).
 
 ## 0002 a bound package's shared libraries reach the APK
+
+**Re-made against `8552d20f9` on 2026-11-27; applies by `git apply --check`; not compiled or run.** Upstream stages only its own libraries (`stageGpuLibraries`, `stageSoundLibrary` into the app's `rust/jniLibs`, `build.gradle.kts:119`); it still passes no bound package's `jniLibs`, so the patch is still needed. Same two files, same checks (ELF magic, LOAD segment at least 16 KiB aligned, must resolve inside the package, only `.so`), re-anchored on the new `extensionArgs` (now exported) and the new `extensionDirs` line; it reuses upstream's exported `loadAlignment`.
 
 Autoradio's Android models are native code (`libautoradio_models.so` plus llama.cpp and ONNX Runtime), and the package's
 `android` directory is where its Kotlin lives. Exact passed only a package's Kotlin to Gradle, so a package could not ship a

@@ -25,7 +25,7 @@ class RuntimeManifestTest(unittest.TestCase):
     def test_exact_pin_and_android_toolchain_are_unchanged(self):
         self.assertEqual(
             (MOBILE / "exact.pin").read_text().strip(),
-            "f5334750386192245ee76add13a67ab51fb4e2fd",
+            "8552d20f9b50a013fc19d5fc9298ff149d8b2dc5",
         )
         self.assertEqual(self.manifest["ndk"], {"version": "r27d", "revision": "27.3.13750724"})
         self.assertEqual(self.manifest["api"], 34)

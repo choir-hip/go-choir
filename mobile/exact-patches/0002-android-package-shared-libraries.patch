@@ -1,8 +1,7 @@
 diff --git a/host/android/app/build.gradle.kts b/host/android/app/build.gradle.kts
-index 9f869205b..c11c975d3 100644
 --- a/host/android/app/build.gradle.kts
 +++ b/host/android/app/build.gradle.kts
-@@ -117,6 +117,9 @@ android {
+@@ -137,6 +137,9 @@
      // The modules' implementations the app binds (LLP 1133.001 D5): their Kotlin, and the roster naming them that
      // `agent-android.mjs` writes (`-PextensionDirs`).
      providers.gradleProperty("extensionDirs").orNull?.split(',')?.filter { it.isNotEmpty() }?.forEach { sourceSets["main"].kotlin.directories.add(it) }
@@ -13,10 +12,9 @@ index 9f869205b..c11c975d3 100644
      // components its packages' manifest fragments declare (`-PmanifestFragment`, checked and written by
      // scripts/android-manifest.mjs, LLP 1133.030 D9, LLP 1133.026 D19 item 3; with the share target's filters on the
 diff --git a/scripts/agent-android.mjs b/scripts/agent-android.mjs
-index 54089c0a4..8558848a5 100644
 --- a/scripts/agent-android.mjs
 +++ b/scripts/agent-android.mjs
-@@ -33,7 +33,7 @@ import { writeFormaNames } from './forma-names.mjs';
+@@ -18,7 +18,7 @@
  import { spawn, spawnSync } from 'node:child_process';
  import { createHash, randomUUID } from 'node:crypto';
  import { inflateRawSync } from 'node:zlib';
@@ -25,17 +23,17 @@ index 54089c0a4..8558848a5 100644
  import { createConnection } from 'node:net';
  import { homedir, tmpdir, userInfo } from 'node:os';
  import { basename, dirname, resolve } from 'node:path';
-@@ -1329,9 +1329,44 @@ function extensionArgs(app, out, config, bound, firebase, development) {
-   const fragment = withAuthCallbacks(withAppLinks(withProtocolHandlers(withMetaData(manifestFragment(bound, { privacyPolicy: app.manifest?.privacy_policy ?? null }), [...configMetaData(config), ...(androidShareActivity(app.manifest?.share_target) ?? []), ...(notify ? CHANNELS_RECEIVER : [])]), handlers), links), callbacks), fragmentFile = resolve(apkDirs(app).app, 'manifest-fragment.xml');
+@@ -1329,11 +1329,46 @@
+   const fragment = withAuthCallbacks(withAppLinks(withProtocolHandlers(withMetaData(manifestFragment(bound, { appQueries: app.manifest?.host?.android?.queries, privacyPolicy: app.manifest?.privacy_policy ?? null }), [...configMetaData(config), ...(androidShareActivity(app.manifest?.share_target) ?? []), ...(notify ? CHANNELS_RECEIVER : [])]), app.manifest, !development), links), callbacks), fragmentFile = resolve(apkDirs(app).app, 'manifest-fragment.xml');
    rmSync(fragmentFile, { force: true });
    if (fragment) { mkdirSync(dirname(fragmentFile), { recursive: true }); writeFileSync(fragmentFile, fragment); }
 +  const extensionJniLibs = extensionLibraries(bound);
    return [...(bound.length ? [`-PextensionDirs=${[...bound.flatMap((b) => b.dirs), generated].join(',')}`] : []), ...(permissions.length ? [`-Ppermissions=${permissions.join(',')}`] : []),
-     ...(fragment ? [`-PmanifestFragment=${fragmentFile}`] : []), ...(Object.keys(services).length ? [`-PforegroundServices=${JSON.stringify(services)}`] : []),
+     ...(car ? [`-PcarSourceDirs=${carOwner.dirs.join(',')}`, `-PcarMapTemplates=${declared.includes('androidx.car.app.MAP_TEMPLATES') ? 1 : 0}`, `-PcarDeclaration=${carOwner.mavenSource}`] : []), ...(fragment ? [`-PmanifestFragment=${fragmentFile}`] : []), ...(Object.keys(services).length ? [`-PforegroundServices=${JSON.stringify(services)}`] : []),
 -    ...(features.length ? [`-PandroidFeatures=${features.join(',')}`] : [])];
 +    ...(features.length ? [`-PandroidFeatures=${features.join(',')}`] : []), ...(extensionJniLibs.length ? [`-PextensionJniLibs=${extensionJniLibs.join(',')}`] : [])];
-+}
-+
+ }
+ 
 +/** Each bound package's own shared libraries (`jniLibs/<abi>/*.so`), shipped uncompressed in the APK where
 + * `System.loadLibrary` finds them. Every ELF's LOAD segments must meet Android's 16 KiB page-size contract: a library
 + * built for 4 KiB pages fails on a 16 KiB-page device, which is refused here rather than at the store. */
@@ -68,6 +66,8 @@ index 54089c0a4..8558848a5 100644
 +    }
 +  }
 +  return directories;
- }
- 
++}
++
  /** The `am start` arguments that launch the app `id`, following the dev loop at `url` when there is one (LLP 1122 D4):
+  * `-S` stops a running reader first, since it reads its launch extras once per process. */
+ export const launchArgs = (id, url = null) =>

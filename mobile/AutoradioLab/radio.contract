@@ -272,7 +272,7 @@ component RadioPage
                       text "1×" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
                 else
                   box width=32 height=44
-          // up next: the first five (all of it on request): kind, title, length, and who placed each. Drag the grip to reorder (the list's native reorderdrop, which needs a virtualized list), swipe left to remove (swipeleft: the platform's own delete swipe belongs to a grouped list, which cannot be virtualized), tap to play now.
+          // up next: the first five (all of it on request): kind, title, length, and who placed each. Drag the grip to reorder (the list's native reorderdrop, which needs a virtualized list), swipe left to remove (`swipe` with `swipe-follow="left"`, once `swipeleft`: the platform's own delete swipe belongs to a grouped list, which cannot be virtualized), tap to play now.
           column gap=8 width="100%" testId="radio-up-next"
             SectionHeader(label=(rp.ahead.length > 0 ? `Up next · ${rp.ahead.length}` : "Up next"))
             if rp.notice != ""
@@ -282,7 +282,7 @@ component RadioPage
             else
               list id="radio-next" testId="radio-next-list" appearance="none" virtualized=true reorderdrop=radioDrop width="100%" height=(shownRows.length * 64) overflow-x="hidden"
                 for r in shownRows key=r.id
-                  row testId=`radio-next-${r.n}` -exact-layout-transition=tLayout(th.reducedMotion) -exact-exit-animation=tOut(th.reducedMotion, 0) swipeleft=radioDo("remove", r.id) touch-action="pan-y" height=64 align-items="center" gap=8 width="100%"
+                  row testId=`radio-next-${r.n}` -exact-layout-transition=tLayout(th.reducedMotion) -exact-exit-animation=tOut(th.reducedMotion, 0) swipe=radioDo("remove", r.id) swipe-follow="left" touch-action="pan-y" height=64 align-items="center" gap=8 width="100%"
                     button press=radioDo("play", r.id) testId=`radio-next-play-${r.n}` appearance="none" flex=1 min-width=0 aria-label=`Play ${r.title} now`
                       column gap=2 align-items="flex-start" width="100%"
                         row gap=6 align-items="baseline"

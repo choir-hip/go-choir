@@ -65,7 +65,7 @@ exactly**, Xcode 27.1 or later, and Hermes bundles.
 
 ```sh
 git clone --depth 1 https://github.com/expo/exact exact-checkout
-cd exact-checkout && git fetch --depth 1 origin f5334750386192245ee76add13a67ab51fb4e2fd && git checkout FETCH_HEAD   # our pin: mobile/exact.pin
+cd exact-checkout && git fetch --depth 1 origin 8552d20f9b50a013fc19d5fc9298ff149d8b2dc5 && git checkout FETCH_HEAD   # our pin: mobile/exact.pin
 
 # Bun 1.4.2 beside any other Bun. 1.3.14 is refused:
 #   "error: Bun 1.3.14 is older than 1.4.2 or unavailable; set BUN=~/.bun-1.4.2/bin/bun"
@@ -422,8 +422,9 @@ any machine.
 ## Versioning and upgrading
 
 - Exact has no releases or CLI package. The pin is the one line in `mobile/exact.pin` (a full 40-character sha; `setup-exact.sh`,
-  `check-exact-pin.sh`, `build-lab.sh` and `exact.sh` all read it). Pinned now: `f5334750386192245ee76add13a67ab51fb4e2fd`
-  (2026-11-20, moved from `de212e671` by reading only; the first build at it is the lead's, see [EXACT.md](../EXACT.md) "Pin move, 2026-11-20").
+  `check-exact-pin.sh`, `build-lab.sh` and `exact.sh` all read it). Pinned now: `8552d20f9b50a013fc19d5fc9298ff149d8b2dc5`
+  (2026-11-26, moved on 2026-11-27 from `f53347503` by reading only; the first build at it is the lead's, see [EXACT.md](../EXACT.md) and
+  [exact-pin-move-prep-2026-11-27.md](../../evidence/exact-pin-move-prep-2026-11-27.md)).
 - `bun exact.mjs update` rewrites the app's `exact.mjs` and would replace our launcher: do not run it. Exact's own upgrade route
   (`docs/start-here.md#upgrading-an-inherited-app`) is `update`, `contract migrate app.contract` (rewrites retired spellings in place),
   `lock` (the Swift package lock, only when `swiftPackages` is declared) and `contract build app.contract --json --errors-only`. There is no
