@@ -242,3 +242,24 @@ that the app strategy is to seemingly niche down. Like, Apple approved it!
 They wouldn't have approved an autoputer app, since no OS or App Store or
 app generator is allowed technically in the App Store. An automated news
 app is"
+
+**Version 1.2.** "Takes focus is 1.2. That's all takes and social. Note
+that docs transform is also ofc 1.1... like, we don't ship docs in the
+autoradio app, but docs transform is the prerequisite."
+
+**Sequencing.** "Building choir this past year has shown me a lot about
+sequencing. Perhaps sequencing is the essence of engineering as a
+discipline. Orchestration is the next step. Gotta get better at doing more
+at once."
+
+**Building on our own hosts.** "There's no real reason why choir hosts
+can't also host building and merging choir platform code in our vacant
+compute"
+
+**Pull requests.** "My thoughts on prs are underdeveloped. I think they
+work pretty well as a collaboration tool, almost like 'prompt requests',
+but it's hard to just merge them in without doing a whole suite of tests on
+them and rebasing onto the new version... it is somewhat of a solved
+problem. Big tech has been doing massive merging and building at scale for
+years... But I'm scaling myself, my own focus, not max agents or thousands
+of engineers that need to coordinate"

@@ -118,7 +118,10 @@ submission is a real feature step, not a bug-fix release (owner,
 
 **Autoradio 1, version 1.1:** the app made nice with the features it has,
 deeper use of on-device models, and the onboarding voice interview. The
-move to Exact finishes first, on the latest Exact.
+move to Exact finishes first, on the latest Exact. The docs transform is
+its prerequisite and counts as part of 1.1.
+
+**Version 1.2:** takes and social.
 
 ### Next, in order
 
