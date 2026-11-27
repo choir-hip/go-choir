@@ -235,3 +235,32 @@ fresh deploy is not immediately what a computer shows: unknown how long; settle 
 - `README.md` lines 148 and 161: embedded Dolt; deleted 2026-10-30.
 - `mobile/README.md` line 183: default configuration lists choir-front, choir-desk and button to talk; the code uses the hands-free listener configuration with holder `saved-answer`. The "Desk contract (not implemented)" section was replaced on 2026-11-22 when the interface-only `ChoirDesk` stub, `RemoteSystem1` and `RemoteProgramme` were deleted.
 - `docs/reference/ON-DEVICE-MODELS.md` line 13: "everything else is untested on any phone"; true for measurement, but it does not say Qwen3-0.6B, Silero and Parakeet are wired into the app.
+
+## Built and not described above (added 2026-11-27)
+
+Seventeen facts that built designs state and this file did not mention,
+found by station T10 of
+[the docs transform](definitions/choir-docs-transform-2026-11-27.md). Each
+was checked one way only: the commit is on main and the path exists. None
+was run, so the status says so. A row moves into its own section, with a
+real status, when someone checks it.
+
+| Subject | Status | The fact | Evidence |
+| --- | --- | --- | --- |
+| compute capsule contract | on main; whether it runs today was not checked | A package recipe is validated against an app desk's request and argv is rendered from the recipe, in internal/computecapsule, unwired | 93931bbe2; [choir-launch-fp10-arch-09-2026-10-21.md](definitions/choir-launch-fp10-arch-09-2026-10-21.md) |
+| host fetch verb | on main; whether it runs today was not checked | The gateway serves POST /provider/v1/fetch, one hop per call, address guard on the host, admitted per VM ID, in internal/hostfetch | 0967e296f; [choir-launch-fp10-net01-host-fetch-2026-10-21.md](definitions/choir-launch-fp10-net01-host-fetch-2026-10-21.md) |
+| package mirrors | on main; whether it runs today was not checked | Host read-through npm, PyPI, crates and git mirrors for capsules, each ecosystem off by default, in internal/pkgmirror | f2a5dd85a; [choir-launch-fp10-net02-mirrors-2026-10-21.md](definitions/choir-launch-fp10-net02-mirrors-2026-10-21.md) |
+| Claude delegate token relay in the gateway | on main; whether it runs today was not checked | The delegate token stays on the host and a capsule reaches it through an egress route anthropic.choir.internal | 55420cab4 (internal/capsule/claude_delegate.go); [choir-launch-fp7-gateway-identity-2026-10-21.md](definitions/choir-launch-fp7-gateway-identity-2026-10-21.md) |
+| guest store header/body split | on main; whether it runs today was not checked | Og_objects and choir_events are split into header and body tables and migrated at boot | 1d33cafce (cmd/store-split-migrate); [choir-store-header-body-split-2026-11-02.md](definitions/choir-store-header-body-split-2026-11-02.md) |
+| append receipt trim | on main; whether it runs today was not checked | The append receipt body is stored compact, every reader expands it, a paced backfill rewrites old rows | d68fb3d87; [append-receipt-trim-2026-10-31.md](design/append-receipt-trim-2026-10-31.md) |
+| bundle authenticity | on main; whether it runs today was not checked | Verify checks every receipt signature against the importing host's trust set and the Mac follows its computer's tape by choir-bundle follow | 013c7de93 (cmd/choir-bundle, internal/bundle); [bundle-authenticity-2026-10-31.md](design/bundle-authenticity-2026-10-31.md) |
+| guest page cache return | on main; whether it runs today was not checked | The guest returns cold page cache to the host on idle and before a snapshot hibernate (guestmem, vmmanager, rssfall) | b068de456; [density-d6-page-cache-return-2026-10-26.md](design/density-d6-page-cache-return-2026-10-26.md) |
+| derived-key marks | on main; whether it runs today was not checked | A boot trusts og_key_index from per-family marks bound to the projection head | 6b30bcd67; [derived-key-marks-2026-11-01.md](design/derived-key-marks-2026-11-01.md) |
+| desk shots | on main; whether it runs today was not checked | Screenshots and their review are management desk verbs (choir.ShotStart, ShotWait, ShotVerdict), not a platform worker | 9ff269597 (internal/agentcore/desk_shots.go); [desk-shots-and-review-2026-11-07.md](design/desk-shots-and-review-2026-11-07.md) |
+| email sign-in | on main; whether it runs today was not checked | Sign-in and registration by emailed code are live behind security epoch 25 | d439ba098; [email-sign-in-2026-10-31.md](design/email-sign-in-2026-10-31.md) |
+| engineer reuse | on main; whether it runs today was not checked | A rejection returns to the same engineer and an assignment takes up to six candidates | 07a98d046; [engineer-reuse-2026-11-04.md](design/engineer-reuse-2026-11-04.md) |
+| yaegi Go modules | on main; whether it runs today was not checked | One yaegi runtime with curated Go modules for every desk | internal/gomodule; [ma65-yaegi-go-modules-2026-11-06.md](design/ma65-yaegi-go-modules-2026-11-06.md) |
+| Ring-ordered deploys | on main; whether it runs today was not checked | Vmctl walks the rings in order and rolls the guest release back automatically | 869255bb4 and internal/vmctl/ring_walk.go; [ring-ordered-deploys-2026-11-03.md](design/ring-ordered-deploys-2026-11-03.md) |
+| Runtime install | on main; whether it runs today was not checked | The Library install builds a published release into a module on the computer | 889b73619; [s12-runtime-install-build-2026-11-04.md](design/s12-runtime-install-build-2026-11-04.md) |
+| Shot verdict reuse | on main; whether it runs today was not checked | A clean rebase with unchanged shot inputs reuses its screenshot verdict after a liveness check | 6c8c42616; [shot-verdict-reuse-2026-11-09.md](design/shot-verdict-reuse-2026-11-09.md) |
+| Source-only freeze | on main; whether it runs today was not checked | Freeze ships the source patch and the platform shoots the host-built candidate before the swap, gated by a candidate_shot event | e65affa11; [source-only-freeze-and-candidate-shots-2026-11-06.md](design/source-only-freeze-and-candidate-shots-2026-11-06.md) |
