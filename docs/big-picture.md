@@ -252,12 +252,34 @@ showed the size of the docs problem.
   15,300, tests excluded; 53 lines in them mention Node B or a single
   host.
 
+## Read by agents on 2026-11-27 (not run; counts approximate)
+
+- **A second host is a rearchitecture of control, not of the VM.** One
+  control process holds every VM in memory with one local file behind it; a
+  computer has no host recorded; about 20 local state paths, none
+  replicated; nothing stops two hosts booting one computer; the deploy is
+  one 1,186-line script for one host. The host record, writer lease and
+  host key of the fabric design are not in the code.
+- **Service VMs are an extension.** A VM kind field exists with one value.
+  The obstacle is boot, which requires a computer id, an owner, a
+  credential envelope and a route record. They can come first, on Node B.
+- **Landing.** Push to staging serving is 12.9 minutes at the median (8.1
+  to 24.9, measured over 21 runs): 6.0 for CI and 6.8 for the deploy. The
+  wait between queued lanes is a convention; the deploy already lets a
+  newer commit supersede a queued one. Time before the push is not
+  recorded anywhere; three failed runs show 10 to 22 minutes.
+- **Vocabulary Gates** is about fifteen structural lints. Its ten failures
+  on 2026-11-26 were one lint failing on an expiry date, not on a change.
+- **Designs.** About 18 designs carry an owner ruling and still govern; 12
+  are linked from no always-read doc. In `docs/design`,
+  `docs/definitions` and the top level: 51 files govern (266,000 words),
+  126 are built, 30 superseded, 27 undecided, 47 unsorted. There are three
+  vault designs, a dozen storage designs and four SwiftUI-era app designs.
+
 ## Not known
 
-- How tightly the VM code assumes one host, and that every VM is a
-  computer. An inventory is the next read-only step.
-- Where the 25 minutes per landing goes, and why Vocabulary Gates fails on
-  `main`.
+- How long a landing spends before its push, step by step.
+
 - What a turn costs the server for an account with no computer.
 - Barge-in latency if the turn policy moves to shared code.
 - Whether shared code keeps running on a locked phone. Read at Exact
@@ -271,5 +293,3 @@ showed the size of the docs problem.
   inside one.
 - Whether the tests hold usable end-to-end checks.
 - Rights for showing another show's full transcript.
-- Which other accepted designs in `docs/design` (145 files) are as
-  forgotten as the fabric design was.
