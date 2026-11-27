@@ -198,6 +198,11 @@ decisions_for_the_owner:
   why: 'The key never expires and carries every scope. Today it is in the platform''s secure store and both native code and shared code can use it. The design (docs/design/phone-sign-out-and-server-client-in-exact-2026-11-27.md, section 2) finds that keeping it native-only does not hold up, because sign-in already receives it in shared code and Android''s native side cannot read Exact''s secret store.'
   options: 'shared code''s secret store is the only place it rests, and it is pushed once into native memory for the live voice turn (the design''s recommendation: one path on both platforms); it stays as today, in two hands; the server issues short-lived keys first, which is server work'
   default: 'as today; only the parts of E6 that do not depend on the answer are built (the order of sign-out, one reader of signed in, the inventory of native stores, deleting old-build code)'
+- id: D7
+  question: May the launch-time revoke of an old Swift build's key be deleted?
+  why: 'E6.1 was to delete LegacyKey, its launch task and ChoirSignIn.revokeNow (about 30 lines of non-voice Swift). A builder found on 2026-11-27 that nothing else revokes the full-access key an old Swift build left in the Keychain: shared code never reads that Keychain service and its pending-revoke list holds only its own sign-outs. The only installs of an old build are the owner''s own devices. If the owner''s phone has launched a current build once with the network up, the old key is already revoked and the code is dead; that cannot be read from here.'
+  options: 'the owner confirms their devices have run a current build (or revokes old keys in the account page), and the code is deleted; it stays'
+  default: 'it stays. The rest of E6.1 came to two lines (a wipe step also done at every launch); one of two reviewers sent that back as cheap protection worth keeping, so it was dropped and nothing of E6.1 landed'
 owner_rulings:
 - on: 2026-11-27
   decision: order
@@ -214,7 +219,7 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: E6.3 (the order of sign-out, red) landed as 4f5e66020; E6.1 (the old Swift sign-in's leftovers) is next; E1 waits on the build tree
+  slice: E6.3 (the order of sign-out, red) landed as 4f5e66020; E6.1 came to nothing without D7; E6.4's inventory test and E6.2 are next; E1 waits on the build tree
   source_ref: origin/main 4f5e66020
   deploy_identity: staging on 4f5e66020
   candidate:
@@ -245,7 +250,7 @@ now:
     main_uncertainty: 'whether the owner counts the voice turn''s state as voice (it decides whether the gate can reach zero without rewriting the turn), and whether the build tree may move'
     next_observation: 'the contract build and bun test on the new pin, once the build tree may move'
   blocker_or_risk: 'the pin move can be verified only by moving the one Exact checkout, which lives in the build tree (lane qa-mac). That tree holds another session''s uncommitted Android work, 38 paths, among them its own edit of patch 0003. I have not moved it. The pin does not go to main unverified, because every lane checks its pin against the build tree.'
-  next_action: 'E6.1, E6.4''s test and E6.2, which do not wait on the owner; a device check of sign-out while listening, answering and recording a take is owed; the sentence follow is picked up from the parked lane by the approach its record names'
+  next_action: 'E6.4''s test and E6.2, which do not wait on the owner; a device check of sign-out while listening, answering and recording a take is owed; the sentence follow is picked up from the parked lane by the approach its record names'
 receipts: []
 ---
 
