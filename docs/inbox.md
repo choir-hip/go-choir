@@ -307,3 +307,8 @@ the 11th week is a week like this, where we actually work to forget
 everything. deletion. and yes, at some level the concept of weeks breaks
 down, because we are always working on everything all at once. thats why we
 do big picture planning"
+
+**The learning engine on documents.** "we need to apply the learning engine
+to documents. literally. the learning engine is a function we approximate.
+thats the whole point, actually. thats what makes it amenable to in context
+meta learning"

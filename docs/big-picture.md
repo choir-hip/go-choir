@@ -236,6 +236,22 @@ the phone app. The shared limit is the owner's review attention.
 - People adding their own sources to the paper, as the thing they pay for.
 - Autoradio as a desktop app.
 
+## The learning engine applied to documents
+
+Owner, 2026-11-27: "we need to apply the learning engine to documents.
+literally." The strokes are those of [learning-engine.md](learning-engine.md).
+This is a first reading of what each means for a document.
+
+| Stroke | For a document |
+| --- | --- |
+| Forecast | A plan entry or a design says what it expects before the work, with a probability. |
+| Outcome | Something its author cannot write says what happened: a landing, a deployed proof, a count, the owner's verdict. |
+| Lesson | The most general thing learned is written into the small always-read set. The detail is then archived. This is where forgetting happens. |
+| Trust | A document's authority is earned by its forecasts settling true. A document does not make itself canonical by saying so. |
+
+The always-read set is what the engine learns into, so it has to stay
+small enough to be read whole every session.
+
 ## Where this sits in the roadmap
 
 The session did not contradict the roadmap; it filled in later stages.
