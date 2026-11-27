@@ -193,6 +193,11 @@ decisions_for_the_owner:
   why: The move resets the one Exact checkout and re-applies the patches; that session edited patch 0003 itself, and the re-made 0003 differs from its edit.
   options: the Android session commits its work first and then the tree moves; move it now and keep its 38 paths as they are; name a second build tree for the pin move
   default: the tree is not moved; the pin waits on a branch
+- id: D6
+  question: Where is the account key held on the phone?
+  why: 'The key never expires and carries every scope. Today it is in the platform''s secure store and both native code and shared code can use it. The design (docs/design/phone-sign-out-and-server-client-in-exact-2026-11-27.md, section 2) finds that keeping it native-only does not hold up, because sign-in already receives it in shared code and Android''s native side cannot read Exact''s secret store.'
+  options: 'shared code''s secret store is the only place it rests, and it is pushed once into native memory for the live voice turn (the design''s recommendation: one path on both platforms); it stays as today, in two hands; the server issues short-lived keys first, which is server work'
+  default: 'as today; only the parts of E6 that do not depend on the answer are built (the order of sign-out, one reader of signed in, the inventory of native stores, deleting old-build code)'
 owner_rulings:
 - on: 2026-11-27
   decision: order
