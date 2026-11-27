@@ -296,3 +296,7 @@ comes later. after takes 1.2 comes transcription and pictures service 1.4.
 then desktop app 1.5 then vms replicated/running on desktop 1.6. then solid
 economics 1.7. then red teaming 1.8. then the integrations work 1.9. any
 steps im forgetting?"
+
+**1.3 and the method.** "yes, 1.3 is discovery. and the point is to
+discover how all the other requirements order and sequence the roadmap of
+features"

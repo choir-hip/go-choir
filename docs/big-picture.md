@@ -127,18 +127,35 @@ its prerequisite and counts as part of 1.1.
 
 **Version 1.2:** takes and social.
 
-The owner's sequence after that (2026-11-27; no 1.3 was named):
+The owner's sequence (2026-11-27). The roadmap of 2026-10-31 was not
+followed exactly; the app launched. The right-hand column is a first
+reading of what each version needs before it can ship, for the owner to
+correct. Platform work is a second track: each item is tied to the first
+version that needs it.
 
-| Version | What |
-| --- | --- |
-| 1.4 | the transcription and pictures services |
-| 1.5 | the desktop app |
-| 1.6 | computers replicated to and running on the desktop |
-| 1.7 | solid economics |
-| 1.8 | agentic red teaming |
-| 1.9 | integrations |
+| Version | What a listener gets | Needed first |
+| --- | --- | --- |
+| 1.1 | the app made nice; deeper on-device models; the onboarding interview | the docs transform; the batched lander; the Exact pin updated and the move finished; the locked-phone test; a turn that completes on the phone, signed out; account deletion deployed |
+| 1.2 | takes and social: record, publish, respond; stories branch into responses | a price and a way to pay (Apple's in-app purchase on iPhone); a take published from the person's own computer; screening before others hear a take; permalinks, so a take or story can be shared; the phone's state carried into a new computer; free sign-ups no longer given a VM; the platform's secrets vault; backups in a third place; a count of how many computers Node B holds; a first security pass on the upload path |
+| 1.3 | discovery: search over the paper, the explore feed, podcast explore, the first recommender | the recommender on the phone and as the desk in a computer; monitoring good enough to see what people find |
+| 1.4 | transcription and pictures | service VMs; Node A as a second, independent host (its config out of the Mike repository first); rights rules for pictures and transcripts; research amortised into the corpus |
+| 1.5 | the desktop app, with computer use | the capability model (manifest, three gates, the tape); a second confirmation for sensitive acts; a security pass before a desktop can be controlled |
+| 1.6 | a computer replicated to and running on the desktop | the second-host rearchitecture: a host record, a writer lease, a host key, state that moves. Rolling deploys with no downtime come from the same work |
+| 1.7 | solid economics | metering; one unit of account; credits; people's own sources as the paid step; the organisation offer |
+| 1.8 | agentic red teaming, in full | self-development in good order |
+| 1.9 | integrations | the people's credentials vault; an MCP client in the computer; driving a computer from outside; a harness as a desk |
 
-The roadmap of 2026-10-31 was not followed exactly; the app launched.
+What the table shows:
+
+- **The second-host rearchitecture is the longest item** and ships at 1.6.
+  Its design starts by 1.2 or it sets the date of 1.6. Until then Node A
+  adds capacity as an independent host, with no movement between hosts.
+- **Money arrives at 1.2,** so the things that make the platform
+  production rather than staging (the secrets vault, backups in a third
+  place) are due then, not at 1.7.
+- **Security passes come before each new exposure** (strangers' voices at
+  1.2, desktops at 1.5), with the full exercise at 1.8.
+- **Android** follows each version on its own track.
 
 ### Next, in order
 
