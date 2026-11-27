@@ -122,16 +122,16 @@ stations:
   class: yellow
   review: one seat
   depends_on: [T1]
-  carrier: lane batch-queue (80252a1a8), sent back once by seat 1, with seat 2
-  status: working
+  carrier: cc3fe4db4; not yet run on a real batch (C257)
+  status: landed
 - id: T5
   name: heavy suites run once
   scope: from T1's timings, decide whether the build machine or CI is the gate for the race and scale suites, and remove the other run
   class: yellow
   review: one seat
   depends_on: [T1, T4]
-  carrier: none yet
-  status: pending
+  carrier: lane gates-cost, in its second review round
+  status: working
 - id: T6
   name: the first line
   scope: 'a one-line header on each document in docs/design, docs/definitions and the top level that the triage sorted as governing or superseded: its kind, its standing, and the ruling or outcome that settled it, with the date. The triage list is checked in. Nothing is moved.'
@@ -227,8 +227,8 @@ owner_rulings:
   read_as: lanes stay the unit of work; GitHub Actions is used as compute, with our own machine as the exercised backup.
 now:
   status: working
-  slice: T4, with the second review seat; T5 and T11 next
-  source_ref: origin/main 7c2ea0572
+  slice: T5 with its builder; the first real batch through the queue; T12 next
+  source_ref: origin/main cc3fe4db4
   deploy_identity: staging on 774e87d2f
   candidate:
     id: none
@@ -254,11 +254,11 @@ now:
     evidence_ref: the owner's words of 2026-11-27 in docs/inbox.md
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: 'T0, T1, T2, T3, T6 and T7 are on main. A landing of a scripts-only change takes 250 to 590 seconds before CI, nearly all of it scripts/gates (247 to 489 s for one run, by how busy the Mac is); the build is 7 to 38 s.'
-    main_uncertainty: whether the batched queue is safe on a real gh and a real build machine; it has run only against fakes
-    next_observation: seat 2's verdict on T4, then the first real batch of two lanes, which settles C257
-  blocker_or_risk: 'a docs push to main while a landing runs makes the lander run the gates twice (seen on T3: 474 s); three lanes in a row conflicted on one spot in scripts/gates. Both go to T5 and T11.'
-  next_action: read seat 2 on T4 and land it or send it back; then T5 (gates are the cost, not suites; a docs-only move of main must not re-run them) and T11 (one file per gate check); follow-ups are the doccheck CI job and the three readers of the old ledger
+    believed_state: 'T0 to T4, T6 and T7 are on main, with a fix to a nix check that failed about three landings in four on the Mac (1333ee064). The local gates were 208 to 489 s of each landing; T5 measures them at about 165 s serial and 60 to 80 s in parallel.'
+    main_uncertainty: whether the batched queue behaves on the real gh and build machine as it does against its fakes
+    next_observation: the first real batch of two lanes, which settles C257
+  blocker_or_risk: 'the second review seat (DeepSeek through OMP) returned nothing twice in twenty minutes; reviews ran on seat 1 and a Sonnet reviewer. lane rm reads every landed lane as unlanded, because the lander cherry-picks; the lander should remove a lane after its push (T12).'
+  next_action: land T5 and this file as one batch through scripts/land-queue; settle C257; then T12, the closing pass, starting with the 15 missions marked working that nobody has touched in five days
 receipts:
 - id: T0
   boundary: define
