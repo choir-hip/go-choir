@@ -289,3 +289,10 @@ much better, and that becomes incredible as you add more sources, and
 attracts users to add their own sources; for that they'll gladly pay. Soon
 I'll hit caps of what I can serve but I'll have more resources at that
 point."
+
+**The sequence of versions.** "docs/roadmap-2026-10-31.md was basically a
+month ago. i didnt follow it exactly, but i did launch. agentic red-teaming
+comes later. after takes 1.2 comes transcription and pictures service 1.4.
+then desktop app 1.5 then vms replicated/running on desktop 1.6. then solid
+economics 1.7. then red teaming 1.8. then the integrations work 1.9. any
+steps im forgetting?"

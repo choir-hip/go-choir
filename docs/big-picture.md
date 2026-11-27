@@ -127,6 +127,19 @@ its prerequisite and counts as part of 1.1.
 
 **Version 1.2:** takes and social.
 
+The owner's sequence after that (2026-11-27; no 1.3 was named):
+
+| Version | What |
+| --- | --- |
+| 1.4 | the transcription and pictures services |
+| 1.5 | the desktop app |
+| 1.6 | computers replicated to and running on the desktop |
+| 1.7 | solid economics |
+| 1.8 | agentic red teaming |
+| 1.9 | integrations |
+
+The roadmap of 2026-10-31 was not followed exactly; the app launched.
+
 ### Next, in order
 
 1. **Finish the move to Exact.** About a day of agent work (owner). Update
