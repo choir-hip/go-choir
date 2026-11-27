@@ -253,8 +253,13 @@ showed the size of the docs problem.
 - Where the 25 minutes per landing goes, and why Vocabulary Gates fails on
   `main`.
 - What a turn costs the server for an account with no computer.
-- Barge-in latency if the turn policy moves to shared code, and whether
-  shared code runs on a locked phone.
+- Barge-in latency if the turn policy moves to shared code.
+- Whether shared code keeps running on a locked phone. Read at Exact
+  `8552d20f9` (2026-11-27): Exact does not freeze the page while the app
+  holds a playback or speech claim, and nothing in that rule changed since
+  our pin. Whether iOS keeps the process running is not measured by us or
+  by Exact. A ten-minute locked-phone log settles it; the native deck's
+  fallback rules stay until it is run.
 - Whether `choir mcp` can run a command in a computer today.
 - What memory a Choir VM allows, which decides whether Mike's backend fits
   inside one.
