@@ -133,7 +133,7 @@ stations:
   class: orange
   review: one seat
   depends_on: [E1, E3]
-  carrier: '7abe41baf (SegmentTracker removed: 33 files, 3,206 lines; CI run 46014262890 green, staging serves it; seat 1 accepted at the second round); the rest in lanes'
+  carrier: '7abe41baf (SegmentTracker removed) and 6d0ff7ed7 (the mail approval link and the Imported page ask Swift for nothing; Activity''s clock is Exact''s date): 32 files, 3,182 lines, CI run 46019166955 green, staging serves it, seat 1 accepted each at its last round. Owed on a device: the mail approval link opens, Activity shows ages once the date is known. The app version is still read from Swift.'
   status: working
 - id: E6
   name: sign-out and the server client
@@ -210,8 +210,8 @@ owner_rulings:
 now:
   status: working
   slice: E1 prepared and waiting on the build tree; E5 on the present pin
-  source_ref: origin/main 7abe41baf
-  deploy_identity: staging on 7abe41baf
+  source_ref: origin/main 6d0ff7ed7
+  deploy_identity: staging on 6d0ff7ed7
   candidate:
     id: none
     state: none
@@ -236,11 +236,11 @@ now:
     evidence_ref: CLAUDE.md, Product
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: 'the facts and the lane verdicts are on main and no code of this mission is built. A builder sent to delete non-voice Swift with no production reader (2026-11-27) deleted nothing: none of the 34 files is dead. SegmentTracker has no production observer but the voice engine feeds it at nine places and about fifteen player tests read through it; every BarState member has a production caller. So the 3,375 lines fall only by moving behaviour, not by deletion.'
+    believed_state: 'two slices of E5 are on main and deployed: 3,375 lines became 3,182 in about four hours, 193 lines, with five review rounds between them. No non-voice Swift is dead, so every further line needs behaviour moved. Nothing of this mission has run on a device, and the pin has not moved.'
     main_uncertainty: 'whether the two Android patches can be re-made on a current Exact, and how much of each remaining Swift file the shared code already duplicates'
     next_observation: 'the contract build and bun test on the new pin, once the build tree may move'
   blocker_or_risk: 'the pin move can be verified only by moving the one Exact checkout, which lives in the build tree (lane qa-mac). That tree holds another session''s uncommitted Android work, 38 paths, among them its own edit of patch 0003. I have not moved it. The pin does not go to main unverified, because every lane checks its pin against the build tree.'
-  next_action: 'E5 on the present pin, file by file in lanes; E1''s build when the Android session''s work in the build tree is committed or the owner says to move it'
+  next_action: 'the next slices of E5 by size and safety: RadioProgramme (288), BarState (the fields shared code no longer reads), SavedAnswerHolder (148), Conversation (124), the reader and notebook helpers; each a lane, shared code and tests first; a device build of main is owed before any of it is called done'
 receipts: []
 ---
 
