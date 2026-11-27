@@ -157,7 +157,7 @@ const sources: Sources = {
   // Settings: the Computer page (computer.ts), Activity (activity.ts) and About's app rows over the native facts (`settingsFacts`).
   settingsComputer: ([signedIn, tick]) => settingsComputer({ signedIn, tick }),
   computerAct: ([op, signedIn]) => computerAct(op, signedIn),
-  activityPage: ([facts, signedIn, tick, state, updateAvailable, checked, now]) => activityPage(facts, signedIn, tick, state, updateAvailable, checked, now),
+  activityPage: ([facts, signedIn, tick, state, updateAvailable, checked, known, now]) => activityPage(facts, signedIn, tick, state, updateAvailable, checked, known, now),
   aboutPage: ([facts, signedIn]) => aboutPage(facts, signedIn),
   // First run (onboarding.ts): the step machine over the voice side's facts (`voiceSetupFacts`); one send per button.
   onboardingPage: ([voice, tick, top], _s, storage) => onboardingPage(voice, tick, top, onboardingEnv(storage)),

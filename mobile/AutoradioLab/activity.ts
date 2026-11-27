@@ -32,8 +32,9 @@ export function target(docID: string, route: string): string {
   return '';
 }
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-export function when(atMs: number, now: number): string {
-  if (!(atMs > 86400000)) return '';
+/** `now` is null until the date is known (Exact's `exactTime` has not answered): no age is shown then, never one measured from a placeholder. */
+export function when(atMs: number, now: number | null): string {
+  if (now === null || !(atMs > 86400000)) return '';
   const age = (now - atMs) / 1000;
   if (age >= 0 && age < 3600) { const m = Math.max(1, Math.floor(age / 60)); return m === 1 ? 'a minute ago' : `${m} minutes ago`; }
   if (age >= 0 && age < 86400) { const h = Math.floor(age / 3600); return h === 1 ? 'an hour ago' : `${h} hours ago`; }
@@ -45,7 +46,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof
 const s = (o: Record<string, unknown>, k: string): string => (typeof o[k] === 'string' ? (o[k] as string) : '');
 
 /** The changelog route's answer as rows, newest first. Throws when the body is not an object. */
-export function items(body: unknown, now: number): Item[] {
+export function items(body: unknown, now: number | null): Item[] {
   if (!isObj(body)) throw new Error('changelog: not an object');
   const seen = typeof body.seen_seq === 'number' ? body.seen_seq : 0;
   const out: Item[] = [];
@@ -74,7 +75,7 @@ export function view(events: Item[], status: string, message: string, radio: Ite
 }
 
 /** The page's source: the changelog with the radio's own rows as given. Never throws; a failure is `failed` and its one line. */
-export async function activityInfo(a: { now: number; signedIn: boolean; radio: Item[]; live: Item[] }, get: (path: string, q: Record<string, string | number>) => Promise<unknown> = async (p, q) => (await authedJSON(p, { query: q })).body): Promise<View> {
+export async function activityInfo(a: { now: number | null; signedIn: boolean; radio: Item[]; live: Item[] }, get: (path: string, q: Record<string, string | number>) => Promise<unknown> = async (p, q) => (await authedJSON(p, { query: q })).body): Promise<View> {
   if (!a.signedIn) return view([], 'idle', '', a.radio, a.live);
   try { return view(items(await get('/api/changelog', { limit: 50, minor: 1 }), a.now), 'ok', '', a.radio, a.live); }
   catch (e) { return view([], 'failed', plain(e), a.radio, a.live); }
@@ -108,7 +109,7 @@ export function liveItems(f: Facts, computer: { state: string; updateAvailable: 
   return out;
 }
 
-/** The source the page binds: the native facts, the signed-in flag and the Refresh tick; `now` is the date the contract passes (`with`: Exact's epochAtZero plus performanceNow()). */
-export async function activityPage(f: Facts, signedIn: boolean, _tick: number, state: string, updateAvailable: boolean, checked: boolean, now: number): Promise<View> {
-  return activityInfo({ now, signedIn, radio: radioItems(f), live: liveItems(f, checked || state !== '' ? { state, updateAvailable } : null) });
+/** The source the page binds: the native facts, the signed-in flag and the Refresh tick; `known` is whether Exact's date has answered (`current(stime)`), `now` the date (`with`: epochAtZero plus performanceNow()); until it is known no age is shown. */
+export async function activityPage(f: Facts, signedIn: boolean, _tick: number, state: string, updateAvailable: boolean, checked: boolean, known: boolean, now: number, get?: Parameters<typeof activityInfo>[1]): Promise<View> {
+  return activityInfo({ now: known ? now : null, signedIn, radio: radioItems(f), live: liveItems(f, checked || state !== '' ? { state, updateAvailable } : null) }, get);
 }
