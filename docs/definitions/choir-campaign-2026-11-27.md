@@ -21,11 +21,17 @@ metamission:
     status: working
     depends_on: []
     note: 'the missions already live on 2026-11-27, kept in their own list until K1 folds that list into this file: the move to Exact (M1), the desks and engine (M2), storage (M3), Android (M4), records (M5), the voice pipeline (M6), shipping (M7), operations (M8), the desktop (M9). The owner''s order after K1: finish the move to Exact, then Android.'
+  - id: K3
+    path: docs/definitions/choir-finish-the-move-to-exact-2026-11-27.md
+    readiness: executable
+    status: working
+    depends_on: []
+    note: 'finishing the move of the phone app to Exact on a current Exact, and a turn that completes signed out on the phone. A prerequisite of version 1.1. Authored 2026-11-27 from a read-only count; nothing of it is built. It asks the owner (its D1) whether it takes over the phone stations of M1 under K2.'
 start:
   captured_at: 2026-11-27T08:56Z
   source:
     canonical_ref: origin/main 0a213add2
-    deploy_identity: staging on 774e87d2f, read from the x-choir-build-commit header of https://choir.news at 2026-11-27T08:56Z
+    deploy_identity: staging on 323df6f3b
   what_is_true_now:
   - Autoradio 1 is on the App Store (approved 2026-11-25) and has no users yet.
   - The plan this campaign follows is docs/big-picture.md, a draft the owner has not yet cut. Its version table is an order of emphasis and a map of what needs what, not a calendar.
@@ -102,8 +108,8 @@ owner_rulings:
   said: "my role becomes answering questions posed by the agents that cant be answered without me, approvals for irreversible decisions, and communicating with the system naturally as part of my expression and co-understanding with it."
 now:
   status: working
-  slice: K1, the docs transform
-  source_ref: origin/main 0a213add2
+  slice: K1 (the closing pass and T8 to T11) and K3 (E0)
+  source_ref: origin/main 5844447d4
   deploy_identity: staging on 774e87d2f
   candidate:
     id: none
@@ -129,11 +135,11 @@ now:
     evidence_ref: none
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: the plan is drafted and unread by the owner; K1 is under way; the missions under K2 continue in their own sessions
+    believed_state: 'K1''s landing and filter stations are proved (a batch of two lanes landed as one push; claim C257); its closing pass, the shortened loaded file and the one plan wait on the owner. K3 is authored and unbuilt. The missions under K2 continue in their own sessions.'
     main_uncertainty: whether the owner's cut of the plan changes the order of the platform work
     next_observation: the owner's reading of docs/big-picture.md
   blocker_or_risk: none
-  next_action: work K1; when its landing stations are proved, author the goal file for finishing the move to Exact on the latest Exact
+  next_action: 'run K3: the pin (E1) and the verdicts on the lanes in flight (E3), each with its own builder; apply K1''s closing pass once the owner has read docs/evidence/mission-closing-verdicts-2026-11-27.md'
 receipts: []
 ---
 

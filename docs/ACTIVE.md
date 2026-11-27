@@ -20,7 +20,10 @@ campaign tracking missions... the first mission is the docs transform."
 [The campaign](definitions/choir-campaign-2026-11-27.md) is the standing
 list of missions and does not end. Its first station is
 [the docs transform](definitions/choir-docs-transform-2026-11-27.md): a
-document filter and a batched, timed landing. Its second station is the
+document filter and a batched, timed landing (both proved 2026-11-27; its
+closing pass waits on the owner). Its third is
+[finishing the move to Exact](definitions/choir-finish-the-move-to-exact-2026-11-27.md),
+authored 2026-11-27 and not yet built. Its second station is the
 standing metamission below, unchanged, until the owner rules on folding it
 in. The plan the campaign follows is [big-picture.md](big-picture.md), a
 draft; the owner's words behind it are in [inbox.md](inbox.md).
