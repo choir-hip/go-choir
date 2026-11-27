@@ -434,27 +434,30 @@ export const REVIEW_FAILED = 'The approval page could not be opened.';
  * newlines, backslashes, percent-encoded and full-width hosts), and the string that is returned is the string that was checked. It must be printable ASCII with no space and no backslash, begin with the app's
  * own origin LITERAL (`ORIGIN`, https and the exact host, lower case, no explicit port, no user-info, no trailing dot) and continue with `/`, `?`, `#` or nothing; the parsed origin must then equal the home origin.
  * Stricter than the Swift (`RemoteHost.allows`, which lower-cased the scheme and host and took `:443` as the default port): an upper-case scheme or host and an explicit `:443` are refused. */
-export function reviewLink(url: unknown): string {
+export const reviewLink = (url: unknown): string => reviewLinkOn(url, ORIGIN);
+/** `reviewLink` over a given origin (a trailing slash on it is dropped once, here). */
+export function reviewLinkOn(url: unknown, origin: string): string {
+  const home = origin.replace(/\/+$/, '');
   if (typeof url !== 'string' || !/^[\x21-\x7e]+$/.test(url) || url.includes('\\')) return '';
-  if (!url.startsWith(ORIGIN)) return '';
-  const rest = url.slice(ORIGIN.length);
+  if (!url.startsWith(home)) return '';
+  const rest = url.slice(home.length);
   if (rest !== '' && rest[0] !== '/' && rest[0] !== '?' && rest[0] !== '#') return '';
   try {
     const u = new URL(url);
-    if (u.origin !== new URL(ORIGIN).origin || u.username !== '' || u.password !== '') return '';
+    if (u.origin !== new URL(home).origin || u.username !== '' || u.password !== '') return '';
   } catch { return ''; }
   return url;
 }
-/** What the opener answers: the shared web layer's state after the open (`webUrl`, as the radio's queue answer carries it) and an optional message. */
+/** What the opener answers: the radio's queue answer (`queueAct` resolves to `queueView`, whose `webUrl` is `r.web.url` after the verb ran: the link on success). Anything but `webUrl === link` is a failure. */
 export type ReviewOpened = { webUrl?: string; message?: string } | void | null;
 /** Open the approval page: a link that passes is handed to the shared web layer (`open`: app.ts gives the radio's queueAct "openWeb"); one that does not is refused with the words; an opener that throws, or
- * answers that the layer is not showing this page, is a failure with its words (never "opened"). */
+ * does not answer that the layer shows this very page (`webUrl === link`), is a failure with its words (never "opened"). */
 export async function mailReviewOpen(url: unknown, open: (u: string) => Promise<ReviewOpened>): Promise<{ status: string; message: string }> {
   const u = reviewLink(url);
   if (u === '') return { status: 'refused', message: REVIEW_REFUSED };
   let r: ReviewOpened;
   try { r = await open(u); } catch { return { status: 'failed', message: REVIEW_FAILED }; }
-  if (r && typeof r === 'object' && typeof r.webUrl === 'string' && r.webUrl !== u) return { status: 'failed', message: r.message || REVIEW_FAILED };
+  if (r?.webUrl !== u) return { status: 'failed', message: (r && typeof r.message === 'string' && r.message) || REVIEW_FAILED };
   return { status: 'opened', message: '' };
 }
 

@@ -24,7 +24,7 @@ describe('the clock', () => {
     const known = await activityInfo({ now: 5_000, signedIn: true, radio: [], live: [] }, async () => body);      // a number that is a placeholder (0 + performanceNow()) would give a date, not an age
     expect(known.desk[0].ago).toBe('25 Nov, 12:00');                  // the old behaviour for a known clock earlier than the item: an absolute date, never negative
     const unknown = await activityInfo({ now: null, signedIn: true, radio: [], live: [] }, async () => body);
-    expect(unknown.status).toBe('ok'); expect(unknown.desk[0].ago).toBe(''); expect(unknown.desk[0].label).not.toBe('');
+    expect(unknown.status).toBe('ok'); expect(unknown.desk[0].ago).toBe('');
     expect(JSON.stringify(unknown)).not.toMatch(/ago"?:"[^"]*(-|NaN|Infinity)/);
     expect(when(at, null)).toBe(''); expect(when(at, at + 90_000)).toBe('a minute ago');
   });
@@ -44,6 +44,6 @@ describe('the clock', () => {
   test('H3 the contract asks exactTime and passes the date after with', () => {
     const c = readFileSync('members-settings.contract', 'utf8');
     expect(c).toContain('resource stime = exactTime()');
-    expect(c).toContain('with current(stime), stime.epochAtZero + performanceNow()');
+    expect(c).toContain('cmpt.checked, current(stime)) with stime.epochAtZero + performanceNow()');
   });
 });

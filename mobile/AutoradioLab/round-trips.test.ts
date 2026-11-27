@@ -5,7 +5,7 @@
 //  C4 the names `mailOpenReview` and `importedFollow` are gone from the contracts, the interface and the Swift handlers, and the two module files with them.
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { reviewLink, mailReviewOpen, REVIEW_REFUSED, REVIEW_FAILED } from './mail.ts';
+import { reviewLink, reviewLinkOn, mailReviewOpen, REVIEW_REFUSED, REVIEW_FAILED } from './mail.ts';
 import { queueAct } from './radio-bridge.ts';
 import * as imported from './imported.ts';
 
@@ -13,7 +13,6 @@ const OK = 'https://choir.news/mail/review/x';
 describe('the mail approval page', () => {
   test('C1 what opens: the paper\'s own origin over https, then / ? # or nothing', () => {
     for (const good of [OK, 'https://choir.news', 'https://choir.news/', 'https://choir.news?a=1', 'https://choir.news#f', 'https://choir.news/a%20b/c?x=y@z#w']) expect(reviewLink(good)).toBe(good);
-    expect(reviewLink(OK)).toBe(OK);                                  // the string that was checked is the string that opens, never a re-serialised one
   });
   test('C1b whitespace, control characters and backslashes are refused (the Swift URL(string:) refused them; a parser would normalise them away)', () => {
     for (const bad of [' ' + OK, OK + ' ', OK + '\n', 'https://choir\t.news/x', 'https://choir\n.news/x', 'https://choir\r.news/x', 'https://choir.news/a b', 'https:\\\\choir.news\\mail\\review\\x', 'https://choir.news\\@evil.example/x', 'https://choir.news/a\\b', 'https://choir.news/\u0000', 'https://choir.news/\u00e9'])
@@ -31,14 +30,15 @@ describe('the mail approval page', () => {
   });
   test('C2 a link that passes is handed to the shared web layer; a refused one is not', async () => {
     const opened: string[] = [];
-    expect(await mailReviewOpen(OK, async (u) => { opened.push(u); })).toEqual({ status: 'opened', message: '' });
-    expect(await mailReviewOpen('https://evil.example/x', async (u) => { opened.push(u); })).toEqual({ status: 'refused', message: REVIEW_REFUSED });
-    expect(await mailReviewOpen(' ' + OK, async (u) => { opened.push(u); })).toEqual({ status: 'refused', message: REVIEW_REFUSED });
+    expect(await mailReviewOpen(OK, async (u) => { opened.push(u); return { webUrl: u }; })).toEqual({ status: 'opened', message: '' });
+    expect(await mailReviewOpen('https://evil.example/x', async (u) => { opened.push(u); return { webUrl: u }; })).toEqual({ status: 'refused', message: REVIEW_REFUSED });
+    expect(await mailReviewOpen(' ' + OK, async (u) => { opened.push(u); return { webUrl: u }; })).toEqual({ status: 'refused', message: REVIEW_REFUSED });
     expect(opened).toEqual([OK]);
   });
-  test('C2b an opener that fails is a failure, not "opened": it throws, or answers a layer that is not showing the page', async () => {
+  test('C2b only an opener that answers the layer showing this very link is "opened"; it throws, answers nothing, {}, another page or a message is a failure', async () => {
     expect(await mailReviewOpen(OK, async () => { throw new Error('x'); })).toEqual({ status: 'failed', message: REVIEW_FAILED });
-    expect(await mailReviewOpen(OK, async () => ({ webUrl: '' }))).toEqual({ status: 'failed', message: REVIEW_FAILED });
+    for (const answer of [undefined, null, {}, { webUrl: '' }, { webUrl: OK + 'x' }]) expect(await mailReviewOpen(OK, async () => answer as never)).toEqual({ status: 'failed', message: REVIEW_FAILED });
+    expect(await mailReviewOpen(OK, async () => ({ message: 'Closed.' }))).toEqual({ status: 'failed', message: 'Closed.' });
     expect(await mailReviewOpen(OK, async () => ({ webUrl: 'https://other.example/', message: 'Closed.' }))).toEqual({ status: 'failed', message: 'Closed.' });
     expect(await mailReviewOpen(OK, async () => ({ webUrl: OK }))).toEqual({ status: 'opened', message: '' });
   });
@@ -46,6 +46,15 @@ describe('the mail approval page', () => {
     const r = await mailReviewOpen(OK, (u) => queueAct(undefined, undefined, 'openWeb', u));
     expect(r).toEqual({ status: 'opened', message: '' });
     expect((await queueAct(undefined, undefined, 'openWeb', OK)).webUrl).toBe(OK);
+  });
+});
+
+describe('the origin', () => {
+  test('C1e a trailing slash on the origin is dropped once, and the same links pass and fail', () => {
+    expect(reviewLinkOn(OK, 'https://choir.news/')).toBe(OK);
+    expect(reviewLinkOn('https://choir.news', 'https://choir.news/')).toBe('https://choir.news');
+    expect(reviewLinkOn('https://choir.news.evil.example/x', 'https://choir.news/')).toBe('');
+    expect(reviewLinkOn('https://choir.news:8443/x', 'https://choir.news//')).toBe('');
   });
 });
 

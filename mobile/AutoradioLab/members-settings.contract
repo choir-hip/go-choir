@@ -23,9 +23,9 @@ members Autoradio
   // "What the paper has learned" (cards.ts): the acts the listener told the paper, kept under app:/data.
   resource learnt = learnedInfo(0) as shape LearnedInfo else empty()
   // Activity (activity.ts): the changelog, with the radio's rows from the native facts and the computer's line from computer.ts.
-  // The date the rows' ages are measured from is Exact's own (`stime`), passed after `with`, with whether it has answered (`current`) so that no age is shown from a placeholder (it differs at every ask, so it is not part of what the answer is kept for).
+  // The date the rows' ages are measured from is Exact's own (`stime`), passed after `with` (it differs at every ask); whether it has answered (`current`) is a call argument, so the rows are asked again when it turns true and no age is shown from a placeholder.
   resource stime = exactTime() as shape SettingsTime else empty()
-  resource act = activityPage(sfacts, au.signedIn, actTick, cmpt.state, cmpt.updateAvailable, cmpt.checked) with current(stime), stime.epochAtZero + performanceNow() as shape ActivityInfo else empty()
+  resource act = activityPage(sfacts, au.signedIn, actTick, cmpt.state, cmpt.updateAvailable, cmpt.checked, current(stime)) with stime.epochAtZero + performanceNow() as shape ActivityInfo else empty()
   resource about = aboutPage(sfacts, au.signedIn) as shape AboutInfo else empty()
   // The commits (shared code, about.ts): the app's own and the server's. The tick is the Refresh button's.
   resource bld = aboutBuild(acctTick) as shape AboutBuild else empty()
