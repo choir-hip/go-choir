@@ -216,3 +216,11 @@ account is for the choir computer, which free users don't have."
 
 **A local model exhibition.** "only after making autoradio did I realize
 that it was viable as a local model exhibition"
+
+**The Exact move is a day.** "Finishing the exact cutover is 1 day at
+agentic speed. 8 hours really. Faster if I'm focused but I don't need to
+allocate much human attention to it. Just decision and instruction framing.
+Hence why it's docs transform then resume exact cutover. But the fact that
+such cutovers can get needlessly drawn out, as this one already has, is
+actually strong signal for the need for docspace refactoring, and realizing
+the magnitude of the simplification process"
