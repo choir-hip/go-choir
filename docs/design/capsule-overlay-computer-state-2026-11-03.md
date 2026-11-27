@@ -1,5 +1,7 @@
 # Capsules overlay the exact computer state; the source tree follows the deploy (2026-11-03)
 
+Standing: governing | kind: decided | settled-by: owner 2026-11-03 (line 11): 'capsules should be an overlay over the exact computer state'
+
 Status: design, revision 4: revision 3 accepted at tier 2 (Devin round 3 accept_with_nits; nits folded in below); revision 4 folds in the owner's "no credentials on computers" input and the S0 inventory. Mutation class of this
 doc: green. The change it designs is red: capsule isolation, owner data in
 a capsule, the guest store, source projection and the Cast gate. Problem:

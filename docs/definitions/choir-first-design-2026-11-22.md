@@ -352,6 +352,8 @@ receipts:
 
 # The first design: the mission of 2026-11-22
 
+Standing: governing | kind: wanted | settled-by: owner 2026-11-22 ('great, this is the plan for the next throughline'), authority field line 4 | note: desks-and-engine-2026-11-24 wins where they conflict
+
 The owner called the day's design "the plan for the next throughline". The
 design is [docs/design/first-design-2026-11-22.md](../design/first-design-2026-11-22.md);
 this file is its mission: the start, the finish, the stations and what the

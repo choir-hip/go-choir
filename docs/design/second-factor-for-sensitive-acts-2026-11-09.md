@@ -1,5 +1,7 @@
 # A second factor for sensitive acts, from the Autoradio app
 
+Standing: governing | kind: wanted | settled-by: owner direction 2026-11-09 (line 5) | note: not designed in detail; not built
+
 Status: owner direction, recorded 2026-11-09. Not designed in detail, not
 built. Mutation class when built: red (auth and session).
 

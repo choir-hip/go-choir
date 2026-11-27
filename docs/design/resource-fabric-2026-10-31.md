@@ -1,5 +1,7 @@
 # The resource fabric: workstations, the server, bursting, Choir in Choir, and the native install (2026-10-31)
 
+Standing: governing | kind: decided | settled-by: roadmap-2026-10-31.md line 25 names it the stage 2 end state (owner 2026-10-31: 'the canonical sequence') | note: its section 10 proposals still need the owner
+
 Status 2026-10-31: design exploration of the end state. Nothing in it is
 built. Mutation class of this document: green. The builds it points at are
 orange to red, and each will carry its own ceremony. It builds on

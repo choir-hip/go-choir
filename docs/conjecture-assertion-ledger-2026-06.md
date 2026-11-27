@@ -1,5 +1,7 @@
 # Conjecture / Assertion Ledger — June 2026
 
+Standing: superseded | kind: happened | settled-by: status (line 5): historical ancestor, no longer updated; CLAUDE.md Proof names the live ledger | replaced-by: docs/calibration/claude-ledger.md
+
 **Status:** historical ancestor — the Markdown ancestor of the precommitment
 records mechanism (see `Precommitment Records Theory and Implications.md` and
 `Precommitment Records — Engineering Memo.md`). This is **not** the live

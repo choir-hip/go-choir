@@ -1,5 +1,7 @@
 # The first design: the path to it (2026-11-22)
 
+Standing: superseded | kind: happened | scope: in part | settled-by: this file's header (lines 5 to 7): 'the owner later ruled one kind, subject' | replaced-by: docs/design/first-design-2026-11-22.md | note: where it says event or entity as separate kinds; kept as the record of why
+
 The conversation that led to [first-design-2026-11-22.md](first-design-2026-11-22.md), in order, with the
 owner's words, the proposals that were broken and the code readings. Kept as
 the record of why; the design itself is the other file. Where this file says

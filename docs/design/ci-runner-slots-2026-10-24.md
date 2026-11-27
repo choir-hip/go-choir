@@ -1,5 +1,7 @@
 # CI0 C6: runner slots (2026-10-25)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file (line 8): proposal for FP0, not implemented
+
 Station: CI0, slice C6. Mutation class of this note: green; every change it
 proposes is in `.github/workflows/ci.yml`, which the worker token cannot push
 (memory: ci0-worker-token-no-workflow-push) and which touches `check`'s

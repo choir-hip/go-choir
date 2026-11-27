@@ -1,5 +1,7 @@
 # One tape: telemetry, recovery, backup and sync on one mechanism (2026-10-31)
 
+Standing: governing | kind: decided | settled-by: owner 2026-10-31 (line 8): 'one append-only tape' | note: partly built (tape group commit)
+
 Status 2026-10-31: design, building. Mutation class of this document: green.
 The changes it orders are orange to red; each slice names its class.
 

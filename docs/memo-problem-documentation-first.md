@@ -1,5 +1,7 @@
 # Memo: Problem Documentation Must Precede Fixing
 
+Standing: governing | kind: decided | settled-by: CLAUDE.md 'Problems come first' names it as the rule
+
 **Date:** 2026-05-23
 **Author:** Review of commit `27d07a1` (Serialize heavy runtime tool calls)
 **Status:** finding — requires codex session log investigation before closure

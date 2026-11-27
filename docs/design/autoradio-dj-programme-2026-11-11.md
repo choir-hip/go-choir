@@ -1,5 +1,7 @@
 # The Autoradio desk as DJ and interface: the programme script (2026-11-11)
 
+Standing: governing | kind: decided | settled-by: owner 2026-11-11, verbatim (line 24): 'a new desk, an auto radio' | note: slices 1 and 2 built per docs/current-architecture.md; the rest not built
+
 Status: design, nothing built. Mutation class of this document: green.
 Rollback: revert. Read-only: no code changed, no computer acted on, no model
 called. Companions:

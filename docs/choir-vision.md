@@ -1,5 +1,7 @@
 # The Automatic Computer — Choir Vision
 
+Standing: governing | kind: decided | settled-by: named the product vision in CLAUDE.md Product; its status line (line 5) puts it under the doctrine
+
 **Status:** product vision — the north star that mission sequencing flows
 downstream from. Not an implementation plan, not doctrine. Where this document
 and `docs/choir-doctrine.md` conflict, the doctrine is apex; where this

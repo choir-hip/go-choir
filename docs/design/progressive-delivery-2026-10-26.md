@@ -1,5 +1,7 @@
 # Progressive delivery for Choir (2026-10-26)
 
+Standing: superseded | kind: decided | scope: in part | settled-by: owner 2026-11-03 'no switches at all' (line 9; rulings at line 785) | replaced-by: docs/definitions/choir-progressive-delivery-2026-11-03.md | note: switch controller S3 and S4 dropped; S5 and S6 stand
+
 Design for one switch registry, a ring order, and a host controller that
 promotes and reverts switches on measured evidence, so the owner stops
 ruling on each switch.

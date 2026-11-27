@@ -1,5 +1,7 @@
 # Autoradio: the notebook and takes (2026-11-17)
 
+Standing: governing | kind: decided | settled-by: owner rulings 2026-11-17 (line 122) | note: supersedes parts of design/autoradio-learning-engine-2026-11-14.md
+
 Design for the next build of the Autoradio learning loop, from the owner's
 rulings of 2026-11-17. It supersedes parts of
 [autoradio-learning-engine-2026-11-14.md](autoradio-learning-engine-2026-11-14.md)

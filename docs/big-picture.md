@@ -1,5 +1,7 @@
 # The big picture
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): draft for the owner to cut down
+
 Date: 2026-11-27. Status: **draft for the owner to cut down. It is not
 authority.** The canonical sequence is still
 [roadmap-2026-10-31.md](roadmap-2026-10-31.md), and what exists is still

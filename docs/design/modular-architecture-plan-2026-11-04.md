@@ -1,5 +1,7 @@
 # Modular architecture: the consolidated plan (2026-11-04)
 
+Standing: governing | kind: decided | settled-by: owner rulings R1 to R38 of 2026-11-04 (section 1, line 31); 'the one plan the owner reads' | note: the mission is paused; the rulings are not replaced
+
 Status: design, green (this document). It is the one plan the owner reads before
 any building starts. Nothing here has been built, reviewed or landed. The slices
 carry their own mutation classes.

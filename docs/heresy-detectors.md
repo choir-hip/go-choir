@@ -1,5 +1,7 @@
 # Heresy Detector Manifest
 
+Standing: governing | kind: exists | settled-by: executable: scripts/check-heresies.sh reads it in CI; named by docs/choir-doctrine.md line 39
+
 Status: doctrine-level manifest, baseline captured 2026-06-13. Updated 2026-07-09.
 
 This file is the current detector inventory for Choir Doctrine. The CI check

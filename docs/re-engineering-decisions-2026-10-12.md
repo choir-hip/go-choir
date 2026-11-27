@@ -1,5 +1,7 @@
 # Re-engineering decisions, 2026-10-12
 
+Standing: governing | kind: decided | settled-by: owner-agreed design direction (status line 5), agreed before any code change
+
 Status: owner-agreed design direction, written after an iterative review
 of the master report
 ([reports/master-report-protocol-research-autopaper-2026-10-11.md](archive/reports/master-report-protocol-research-autopaper-2026-10-11.md))

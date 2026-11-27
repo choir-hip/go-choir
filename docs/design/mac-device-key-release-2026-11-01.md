@@ -1,5 +1,7 @@
 # Releasing a computer's key to the owner's Mac (stage 2, S1)
 
+Standing: undecided | kind: wanted | settled-by: nothing; accepted by a review seat (Devin round 3, this file line 5), no owner ruling found | note: vault group in docs/standing.md
+
 Date: 2026-11-01. Status: design v3, accepted by Devin round 3 (red; the build is tier 2).
 v1 (c153b24f8) was sent back by Devin and DeepSeek, v2 (aef02845a) by Devin;
 every finding is taken here, and "Review v2" and "Review v1" at the end map

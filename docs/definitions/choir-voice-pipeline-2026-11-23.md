@@ -235,4 +235,6 @@ receipts:
 
 # The voice pipeline as specified
 
+Standing: governing | kind: wanted | settled-by: owner 2026-11-23, quoted in this file's authority field (line 4); readiness intent | note: an intention; reviewed before it becomes executable
+
 Track T1. What runs on the phone when voice is on is a first-commit baseline. The models the owner specified sit in a setup path that cannot keep its choices. This mission makes the specified pipeline the one that runs.

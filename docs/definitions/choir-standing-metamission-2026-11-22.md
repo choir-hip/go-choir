@@ -142,6 +142,8 @@ receipts:
 
 # The standing metamission
 
+Standing: governing | kind: wanted | settled-by: owner 2026-11-22, quoted in this file's authority field (line 4); named as the run target in docs/ACTIVE.md
+
 One file to run with `/goal`. It lists the live missions and what they share:
 the landing order and the machines. Each mission's state is in its own file.
 A new mission is one more entry.

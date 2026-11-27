@@ -1,5 +1,7 @@
 # Autoradio on-device voice: pipeline versus voice model, and phone configurations
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file (line 5): a research note with a proposal
+
 Research note, 2026-11-11. Owner question (2026-11-11): which is faster on the
 phone, a pipeline (local text model into local speech synthesis) or a
 voice model; the answer may depend on the phone; setup must cope with many

@@ -1,5 +1,7 @@
 # A coding agent as a desk over MCP (2026-11-09)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file (line 754): its shape ordering is a proposal, unratified | note: only the no-Texture-bypass ruling in it is the owner's
+
 Status: design, not built. Mutation class of this document: green.
 Author: a Sonnet design pass for the owner. Nothing here is settled until the
 owner rules on the questions in section 9.

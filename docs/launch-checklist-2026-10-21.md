@@ -1,5 +1,7 @@
 # Launch Checklist
 
+Standing: governing | kind: wanted | settled-by: owner direction 2026-10-21 (line 9); linked from docs/ACTIVE.md | note: a living checklist; read it against docs/current-architecture.md
+
 Date: 2026-10-21. Status: **living checklist, revised after a panel review**;
 tick items as they land. Mutation class of this document: green (docs only).
 Each item's own class is that of the work it names.

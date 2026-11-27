@@ -1,5 +1,7 @@
 # Computer history, restore and audit (2026-10-30)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): not ratified, nothing built
+
 Status: design, revision 1. Not ratified; nothing is built or deployed by
 this note. This note is green. The work it proposes is **red**: tape and
 evidence, checkpoint and route projection, key custody, operator identity

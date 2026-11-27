@@ -1,5 +1,7 @@
 # Choir guest isolation: one guest cannot hurt another or the host (2026-11-01)
 
+Standing: superseded | kind: wanted | settled-by: this file's now.status (line 145); the successor names it as baseline source | replaced-by: docs/definitions/choir-store-header-body-split-2026-11-02.md
+
 The owner made this the next mission on 2026-11-01: "Ok, good plan. We
 should make this the next mission actually. Make a throughline. I'll drop
 the current goal." The requirement, the same evening: "The guests will

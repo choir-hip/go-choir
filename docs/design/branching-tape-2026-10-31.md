@@ -1,5 +1,7 @@
 # Branching tape: branches of one computer, a primary ref, no merge (2026-10-31)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): design only, section 10 doctrine delta needs owner ratification
+
 Status 2026-10-31: design only, nothing built. Mutation class of this
 document: green. The changes it orders are orange to red. **The doctrine
 delta in §10 needs owner ratification.** Revision 2 replaces the first

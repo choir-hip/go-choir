@@ -1,5 +1,7 @@
 # Choir memory optimization: the backup, the paper, and Node B (2026-11-01)
 
+Standing: superseded | kind: wanted | settled-by: owner 2026-11-01, this file's now.superseded_by (line 72); docs/ACTIVE.md says guest isolation supersedes it | replaced-by: docs/definitions/choir-guest-isolation-2026-11-01.md
+
 The owner set this goal on 2026-11-01: "optimize memory usage for backup
 and the paper computer and in general without major cost in compute or
 storage." Earlier the same night: "Increasing memory is not the solution",

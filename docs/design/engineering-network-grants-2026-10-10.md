@@ -1,5 +1,7 @@
 # Engineering network grants — design
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 6): design proposal, not settled | note: L2 built (2026-10-21)
+
 Date: 2026-10-10
 Status: design proposal (not settled). Built so far (2026-10-21): L2 only,
 the per-capsule allowlisting proxy (284f7c1a2, `ecosystem_proxy`); not built:

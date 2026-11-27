@@ -1,5 +1,7 @@
 # The ideal form: from an arriving item to a better corpus, and the root that holds the view
 
+Standing: superseded | kind: decided | scope: in part | settled-by: owner 2026-11-24 'the new design superseded' (header line 5; system-map section 10) | replaced-by: docs/design/desks-and-engine-2026-11-24.md | note: where they conflict
+
 > **Superseded in part (2026-11-24).** [Desks and engine](desks-and-engine-2026-11-24.md) is the current design and wins where they conflict. Superseded here: "happening" as a kind (a group that matters is named and becomes a subject); flat batches into one model call with no desk (capture is its own desk on the RLM pattern, grouped calls with learned context); the graph custodian as a free-standing host service (it is the capture desk's); management holding a bound on the root (management manages scoring). Still standing: the measure, importance counted from independent origins on subjects, the page as a host render the root steers, the path that begins with instrumenting and experiments.
 
 

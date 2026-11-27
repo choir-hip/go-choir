@@ -1,5 +1,7 @@
 # Forced modularity: build design (2026-11-04)
 
+Standing: governing | kind: decided | settled-by: owner rulings 2026-11-04, settled and quoted (line 5)
+
 Status: build design. Green (this document). The slices below are orange and
 red; each names its own class. Owner rulings of 2026-11-04 are settled and
 quoted; this design implements them and does not re-argue them. Read first:

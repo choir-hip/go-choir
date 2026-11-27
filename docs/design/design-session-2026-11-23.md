@@ -1,5 +1,7 @@
 # Design session with the owner, 2026-11-23 (afternoon and evening): what was said and what was measured
 
+Standing: governing | kind: happened | settled-by: the owner's words of 2026-11-23, quoted exactly in this file (line 7); a record, not a design | note: its design half is carried by design/desks-and-engine-2026-11-24.md
+
 This is the record of one conversation, not a design. The owner's words are quoted exactly (some were dictated by voice, so a few words are mis-transcribed: "Quire" is "Choir").
 
 ## The owner's statements today

@@ -1,5 +1,7 @@
 # Moving Autoradio's logic into Exact: a design
 
+Standing: governing | kind: decided | settled-by: owner 2026-11-18, section 'Where data may go' (line 238); the rule is CLAUDE.md Product | note: status line 5 says proposed; the section After review governs where it differs
+
 Status: proposed, 2026-11-18; reviewed by two seats the same day, both
 "repair, the frame is right". The section "After review" at the end
 governs where it differs from the text above it. Written by an Opus design pass from the pinned

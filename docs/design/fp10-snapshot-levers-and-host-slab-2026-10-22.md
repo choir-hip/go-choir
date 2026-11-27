@@ -1,5 +1,7 @@
 # FP10 design: snapshot levers (RES-13) and host slab and btrfs metadata (RES-22)
 
+Standing: superseded | kind: decided | scope: in part | settled-by: this file's line 5 and the successor's line 5 | replaced-by: docs/design/density-d2-snapshots-survive-deploys-2026-10-26.md | note: the L20 section only
+
 Status 2026-10-30: the L20 section is superseded by the density D2 design ([density-d2-snapshots-survive-deploys-2026-10-26.md](density-d2-snapshots-survive-deploys-2026-10-26.md)); read D2 for that lever.
 
 Date: 2026-10-22. Station:

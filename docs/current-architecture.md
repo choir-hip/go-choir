@@ -1,5 +1,7 @@
 # Choir: what exists today
 
+Standing: governing | kind: exists | settled-by: CLAUDE.md Product, owner 2026-11-16: read before saying what the system does; a landing that changes a row edits it
+
 Not doctrine
 ([choir-doctrine.md](choir-doctrine.md)), not vision, not roadmap ([roadmap-2026-10-31.md](roadmap-2026-10-31.md)),
 not the live work ([ACTIVE.md](ACTIVE.md)). It says what is built and what has been seen working.

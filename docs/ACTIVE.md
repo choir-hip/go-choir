@@ -1,5 +1,7 @@
 # ACTIVE — Confirmed Work View
 
+Standing: governing | kind: wanted | settled-by: named the live station list in CLAUDE.md Product; the campaign file may replace it (owner decision D3 open)
+
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 Sequencing: the owner's roadmap,

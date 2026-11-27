@@ -1,5 +1,7 @@
 # Switching models without a deploy (2026-11-09)
 
+Standing: governing | kind: decided | settled-by: owner rulings 2026-11-09 (lines 13, 119) | note: not built
+
 Status: design r2, not built (r1 reviewed by Devin and a Sonnet seat, both
 "build with changes"; owner rulings of 2026-11-09 folded in; section 8). Class of the design: green. It is a build order
 for section 3 of

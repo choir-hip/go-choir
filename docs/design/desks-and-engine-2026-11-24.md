@@ -1,5 +1,7 @@
 # Desks and engine: the design as ruled on 2026-11-24
 
+Standing: governing | kind: decided | settled-by: owner 2026-11-24 (line 11): 'the new design superseded'; docs/system-map.md section 10 names it current
+
 This is the current design. It is the owner's rulings of 2026-11-22 to
 2026-11-24 written as one text, with what the code has today beside each part.
 Where it conflicts with an older design

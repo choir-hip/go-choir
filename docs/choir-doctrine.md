@@ -1,5 +1,7 @@
 # Choir Doctrine
 
+Standing: governing | kind: decided | settled-by: CLAUDE.md: 'Architecture is normative in docs/choir-doctrine.md'; doctrine wins where the two conflict
+
 ## Status
 
 Canonical doctrine and architecture control document. The durable-computer

@@ -212,6 +212,8 @@ receipts: []
 
 # T1a — the apps, to a design bar
 
+Standing: superseded | kind: wanted | settled-by: this file's readiness note (line 18): 'SUPERSEDED 2026-11-02 ... do not execute'; successor line 7 | replaced-by: docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.md
+
 The Reader proved the self-development loop on b@c. It also proved that a
 loop without a design bar ships designs the owner calls horrid. This station
 self-develops the five apps, one per request, with the bar in each request

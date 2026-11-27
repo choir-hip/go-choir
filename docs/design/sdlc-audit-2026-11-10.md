@@ -1,5 +1,7 @@
 # Audit of the working method, with proposed changes (2026-11-10)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): proposal for the owner, nothing adopted
+
 Status: proposal for the owner. Nothing here is adopted. Asked for by the
 owner on 2026-11-10: the method was built for earlier models, and should be
 checked against what the current orchestrator does well and badly. The

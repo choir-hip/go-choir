@@ -1,5 +1,7 @@
 # Autoradio on the four-stroke learning engine (2026-11-14)
 
+Standing: superseded | kind: decided | scope: in part | settled-by: this file's header (line 5) and the successor's line 6 | replaced-by: docs/design/autoradio-learned-document-2026-11-17.md | note: the sections named in the header
+
 > **Superseded in part, 2026-11-17**, by
 > [autoradio-learned-document-2026-11-17.md](autoradio-learned-document-2026-11-17.md)
 > (its section 1). Superseded here: 3.1's `edition` and `instruction:note`

@@ -1,5 +1,7 @@
 # Library as an app store: the security model (intent, 2026-11-04)
 
+Standing: governing | kind: wanted | settled-by: owner conversation 2026-11-04 recorded (line 5): not to build yet | note: not built, by the owner's order
+
 Readiness: intent. Not to build yet. Recorded from the owner's
 conversation of 2026-11-04 so the direction is not lost; a design follows
 once self-development is reliable and app agents are under way (owner

@@ -191,4 +191,6 @@ receipts:
 
 # Records and measurement
 
+Standing: governing | kind: wanted | settled-by: owner 2026-11-23, quoted in this file's authority field (line 4); readiness executable; live in docs/ACTIVE.md
+
 Track T3. The paper cannot say why it made a choice two hours ago, and nothing measures it against the news. This mission makes both true and runs the experiments the engine's design waits on. The four-stroke learning engine needs outcomes that are written down; this is where they are written.

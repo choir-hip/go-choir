@@ -329,4 +329,6 @@ receipts:
 
 # Shipping the app: TestFlight and the App Store
 
+Standing: governing | kind: wanted | settled-by: owner 2026-11-23, quoted in this file's authority field (line 4); live in docs/ACTIVE.md
+
 Track T5. The owner renewed the developer account. This mission takes the app to testers and then to the store, and holds the list of things that must be true before it ships: the radio signed out, an account made and deleted inside the app, consent and permissions asked at the right moment, and materials a reviewer can follow.

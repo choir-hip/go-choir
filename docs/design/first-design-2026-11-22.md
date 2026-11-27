@@ -1,5 +1,7 @@
 # The first design: Autopaper and its readers
 
+Standing: governing | kind: decided | settled-by: owner 2026-11-22, 'this is the plan for the next throughline' (the first-design goal file, authority field) | note: desks-and-engine-2026-11-24 wins where they conflict (header line 5); status line says idea
+
 > **Superseded where it conflicts (owner, 2026-11-24)** by [ideal-form-draft-2026-11-23.md](ideal-form-draft-2026-11-23.md) and the rulings recorded in `docs/definitions/choir-first-design-2026-11-22.md`: vectors go before keywords and rules in the hot path; importance is counted from independent origins on a subject, not asked of a model; the front page is a host render the root steers; subjects, mentions, groups and counts are written by host code as a named graph custodian.
 
 Draft 4, 2026-11-23 (draft 3 plus the owner's rulings of the evening of 2026-11-22 and the failed offline test; section 13 says what changed; section 12 is the panel's reading of draft 2), taken from the top after a day's conversation with the

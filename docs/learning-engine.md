@@ -1,5 +1,7 @@
 # The four-stroke learning engine
 
+Standing: governing | kind: decided | settled-by: written from the owner's statements of 2026-11-13 and 2026-11-14 (line 6); named in CLAUDE.md Desks
+
 The theory of how a Choir computer learns, and the one current home for it.
 Written 2026-11-14 from the owner's statements of 2026-11-13 and 2026-11-14
 (section 12) and a read of the code and docs at `origin/main` 5af04baad.

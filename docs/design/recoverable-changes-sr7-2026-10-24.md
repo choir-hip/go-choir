@@ -1,5 +1,7 @@
 # Recoverable changes: keep-and-skip replay, the restore pin, and the cross-version gate (SR7 design, 2026-10-24)
 
+Standing: governing | kind: decided | settled-by: owner invariant 2026-10-24 (line 13): any release boots on any tape written by it or a later release
+
 Status: design, docs only, no code. Revision 2 answers the tier 2 review
 (bunch 222: Devin, findings 1-9; DeepSeek v4.1 flash, findings 1-21). The
 review answers are at the end. Station SR7 of

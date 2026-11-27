@@ -1,4 +1,5 @@
 ---
+# Standing: superseded | kind: wanted | settled-by: owner 2026-11-04 ~20:55Z 'Let's supersede the current metamission' (line 173); successor line 12 | replaced-by: docs/definitions/choir-modular-architecture-2026-11-04.md
 definition_version: 5
 
 # Overnight metamission: progressive delivery, then self-development, run

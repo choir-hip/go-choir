@@ -262,6 +262,8 @@ receipts:
 
 # Exact, search and entities: the handoff of 2026-11-20
 
+Standing: superseded | kind: wanted | settled-by: the successor's supersedes field (its line 4) | replaced-by: docs/definitions/choir-exact-cutover-and-ontology-2026-11-20.md
+
 This file replaces the night goal of 2026-11-19. It was written at the end of
 a thread that had been summarised many times, at the owner's request, so that
 a new thread can start from what is true and not from what a summary says.

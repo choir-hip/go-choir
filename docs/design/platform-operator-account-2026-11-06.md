@@ -1,5 +1,7 @@
 # Platform operator account (2026-11-06)
 
+Standing: governing | kind: decided | settled-by: owner ruling 2026-11-06 (line 9) | note: slice O1 built
+
 Status: design, with slice O1 built beside it (branch `oper`). Class of the
 design: green. Class of O1: red (a new authority on a protected surface,
 package listing state). Author: Claude (Opus), from code at `dec92f21e`.

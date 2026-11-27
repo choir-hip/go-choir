@@ -1,5 +1,7 @@
 # Self-development applies on automated acceptance; the owner reverts
 
+Standing: governing | kind: decided | settled-by: owner rulings 2026-11-06 (section 0, line 12); docs/system-map.md says read first for self-development
+
 Date: 2026-11-06, revision r2. Status: design, for build. Mutation class: red
 (self-development decision authority, run acceptance, owner-act surface).
 Mission: [modular architecture](../definitions/choir-modular-architecture-2026-11-04.md).

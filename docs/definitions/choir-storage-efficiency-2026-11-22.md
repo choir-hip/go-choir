@@ -220,6 +220,8 @@ receipts:
 
 # Storage efficiency: no store-sized copies, and a store that is measured
 
+Standing: governing | kind: wanted | settled-by: owner 2026-11-22, quoted in this file's authority field (line 4); live in docs/ACTIVE.md
+
 On 2026-11-22 Node B ran out of room because the system copies its own
 largest file twice as a matter of routine. This mission removes those copies,
 makes restore fit its budget, measures what the store holds, and then cuts

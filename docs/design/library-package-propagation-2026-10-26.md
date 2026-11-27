@@ -1,5 +1,7 @@
 # The Choir Library: how an accepted change reaches other computers and the platform (2026-10-26)
 
+Standing: superseded | kind: decided | scope: in part | settled-by: owner ruling 2026-11-03 'published releases mean published' (line 11) | replaced-by: docs/problems/published-release-visible-only-to-publisher-2026-11-03.md | note: publish scope, share and packages.share
+
 Status: **design, green** (docs only, no code). This is an architectural
 design that a build will follow, so it is reviewed like the change it
 designs: **tier 2** (Devin and DeepSeek). It is station SR9 of

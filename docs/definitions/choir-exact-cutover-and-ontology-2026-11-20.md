@@ -429,6 +429,8 @@ receipts:
 
 # The Exact cutover and the ontology: the mission of 2026-11-20
 
+Standing: governing | kind: wanted | settled-by: owner 2026-11-20, quoted in this file's authority field (line 5); live in docs/ACTIVE.md | note: its ontology track is replaced by choir-first-design
+
 Two goals, in the owner's words: finish the cutover to Exact, and finish the
 search and ontology work, which is events and entities with a surface agents
 can query from their cells.

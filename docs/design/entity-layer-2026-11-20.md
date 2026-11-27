@@ -1,5 +1,7 @@
 # The entity layer: captures, stories and events linked by who and where (design, 2026-11-20)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): a proposal, not ratified | note: the owner later ruled events and entities one kind, subject (first-design-path-2026-11-22.md line 7); not verified
+
 **Status: a proposal, not ratified.** Written 2026-11-20 between 05:00Z and
 06:00Z by a design agent (Opus, no code) for station E2 of
 [the goal of 2026-11-20](../definitions/choir-exact-search-entities-2026-11-20.md).

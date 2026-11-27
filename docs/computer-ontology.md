@@ -1,5 +1,7 @@
 # Choir Computer Ontology
 
+Standing: governing | kind: decided | settled-by: CLAUDE.md Product: read before changing VM, candidate, promotion, package or persistent-state behavior
+
 **Status:** canonical architecture vocabulary
 **Last updated:** 2026-10-30 (storage facts updated for the data system cutover)
 

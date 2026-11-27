@@ -126,4 +126,6 @@ receipts:
 
 # Operations: podcast transcription and provider headroom
 
+Standing: governing | kind: wanted | settled-by: owner 2026-11-23, quoted in this file's authority field (line 4); readiness intent | note: an intention; reviewed before it becomes executable
+
 Part of track T4. Two pieces of operations the owner wants early once the plan is defined: podcasts transcribed without a laptop, and model calls routed by what each provider reports it has left.

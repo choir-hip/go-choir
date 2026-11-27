@@ -1,5 +1,7 @@
 # Choir Agent Product Doctrine
 
+Standing: governing | kind: decided | settled-by: named normative product rules in CLAUDE.md Desks ('Product rules: docs/agent-product-doctrine.md')
+
 This file carries product architecture rules for agents working on Choir. It is
 loaded on demand when a mission touches authority boundaries, harness behavior,
 Texture, runtime configuration, product-path verification, or run acceptance.

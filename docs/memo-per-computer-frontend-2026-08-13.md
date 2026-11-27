@@ -1,5 +1,7 @@
 # Memo: Per-Computer Frontend
 
+Standing: governing | kind: decided | settled-by: listed as a source in docs/choir-doctrine.md lines 34 and 235; cited in docs/current-architecture.md line 190
+
 **Status:** architecture synthesis; invariant asserted 2026-08-13
 **Mutation class:** green (documentation only)
 **Scope:** computer surface, restore set, serving join, and self-development of UI

@@ -290,6 +290,8 @@ receipts: []
 
 # Autoradio on Android — parity with the shipped Exact iOS app
 
+Standing: governing | kind: wanted | settled-by: owner 2026-11-25, quoted in this file's authority field (line 4); live goal in docs/ACTIVE.md
+
 This is the existing Android mission, reactivated and expanded by the owner on
 2026-11-25. Update this file in place; do not author a second Android goal.
 The 2026-11-23 deferral is lifted. The old A0-to-A8 probe scope is superseded by

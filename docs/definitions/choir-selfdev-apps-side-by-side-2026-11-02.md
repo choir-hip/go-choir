@@ -1,4 +1,5 @@
 ---
+# Standing: superseded | kind: wanted | settled-by: this file's readiness note (line 15) and now.status (line 155); successor line 7 | replaced-by: docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md
 definition_version: 5
 
 # Return to self-development on the new data system: rewrite the desktop

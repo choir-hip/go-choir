@@ -1,5 +1,7 @@
 # Inbox
 
+Standing: governing | kind: happened | settled-by: the owner's words, dated, as said (line 5); named an authority source in docs/definitions/choir-docs-transform-2026-11-27.md
+
 The owner's words, dated, as said. Nothing here is a commitment or a design.
 An entry leaves the inbox when it becomes a line in the plan
 ([big-picture.md](big-picture.md) while that is a draft) or is dropped.

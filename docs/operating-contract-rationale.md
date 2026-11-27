@@ -1,5 +1,7 @@
 # Operating Contract: History And Rationale
 
+Standing: governing | kind: happened | settled-by: keeps the owner quotes, dates and reasons behind each CLAUDE.md rule (line 6) | note: reference, not instruction
+
 This is the full text of the operating contract as it stood on 2026-11-10,
 before it was cut to the rules in force (`CLAUDE.md`). It keeps the owner
 quotes, dates and reasons behind each rule. It is reference, not instruction:

@@ -1,5 +1,7 @@
 # The semantic layer: one main point per story, and fewer searches per run (design, 2026-11-20, cut 2026-11-21)
 
+Standing: superseded | kind: decided | scope: in part | settled-by: owner 2026-11-24 'the new design superceded' (header line 5; system-map section 10) | replaced-by: docs/design/desks-and-engine-2026-11-24.md | note: where they conflict
+
 > **Superseded where it conflicts (owner, 2026-11-24: "everything where designs conflict, the new design superceded").** Newer: [first-design-2026-11-22.md](first-design-2026-11-22.md) and [ideal-form-draft-2026-11-23.md](ideal-form-draft-2026-11-23.md). Superseded here: the story judgment made inside management's task (sections 1 to 3; in the redesign management does not decide captures); happenings and entities as separate kinds with research as their judge (section 8; the first design has one bucket of subjects, no kinds, written by host code as a named graph custodian). Still standing unless a newer text says otherwise: one main point per story, written once; a successor when the point moves; fewer searches per run; judgments as records with their distribution; vectors propose and never decide.
 
 **Status.** Proposal, revised once after two reviews of 57c9ef106 (both REVISE

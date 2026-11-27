@@ -1,5 +1,7 @@
 # Autoradio first run: a radio tour while the models download
 
+Standing: governing | kind: wanted | settled-by: owner direction 2026-11-25 (line 5) | note: deferred; not built
+
 Owner direction, 2026-11-25:
 
 > “we should start by playing autoradio, then slide the onboarding interview in

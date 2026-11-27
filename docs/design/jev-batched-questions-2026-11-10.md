@@ -2,6 +2,8 @@
 
 # Jev: many questions in one call, not many calls (design and evidence, 2026-11-10)
 
+Standing: governing | kind: decided | settled-by: owner correction 2026-11-10, verbatim (line 12); also CLAUDE.md Delivery (owner 2026-11-15)
+
 Mutation class: green (design and evidence; no product code). Rollback: revert
 this commit. Source: `origin/main` at d71bb1751 plus read-only counts from the
 Node B journal (counts and percentiles only; no question text, no answers, no

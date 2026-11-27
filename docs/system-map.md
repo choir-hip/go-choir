@@ -1,5 +1,7 @@
 # The system map: what runs today
 
+Standing: governing | kind: exists | settled-by: CLAUDE.md Product, owner 2026-11-22: 'each compaction you lose context on the complex system'
+
 Facts read 2026-11-22 (the paper's store measured 2026-11-23). Numbers in
 brackets are the map each fact comes from, [1] to [8]; [CL] is CLAUDE.md,
 [CH] is docs/changes.md, [D4] is draft 4 of the first design. A fact marked

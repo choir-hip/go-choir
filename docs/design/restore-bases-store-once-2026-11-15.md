@@ -1,5 +1,7 @@
 # Restore bases that cost the change (2026-11-15)
 
+Standing: superseded | kind: decided | settled-by: header line 5: set aside 2026-11-15 after three review rounds (docs/problems/restore-bases-design-three-review-rounds-structural-assessment-2026-11-15.md) | replaced-by: none | note: nothing was built from its landing list
+
 > Set aside on 2026-11-15 after a third review round asked for repair. Nothing is built from the landing list below. See docs/problems/restore-bases-design-three-review-rounds-structural-assessment-2026-11-15.md.
 
 Status: revised after review round 2. Round 1 had one seat (DeepSeek), which

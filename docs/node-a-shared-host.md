@@ -1,5 +1,7 @@
 # Node A — shared NixOS host
 
+Standing: governing | kind: decided | settled-by: owner decision 2026-10-09 (line 5)
+
 Owner decision, 2026-10-09: node-a is shared. Choir keeps using it as Node
 B's Nix remote builder; the rest of the machine is free for another
 project, which will also run NixOS.

@@ -1,5 +1,7 @@
 # Operational Invariants Register (draft)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): draft for owner review | note: the owner ratified a principle on 2026-10-08 (line 157); the register is not
+
 Date: 2026-10-08. Status: **draft for owner review** — proposed as a new
 operational invariant class beside the doctrine's derived semantic invariants
 (`docs/choir-doctrine.md` § Derived Architectural Invariants). Not doctrine

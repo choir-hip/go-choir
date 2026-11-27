@@ -1,5 +1,7 @@
 # The LeafRunner seam: a mission proposal (2026-11-10)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): proposal, readiness drafted
+
 Status: proposal, `readiness: drafted`. Not an executable goal file: it has no
 review receipt and no owner authority, and it is not listed in
 `docs/ACTIVE.md` or `docs/mission-graph.yaml`. Mutation class of this file:

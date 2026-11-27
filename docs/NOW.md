@@ -1,5 +1,7 @@
 # NOW — Retired
 
+Standing: superseded | kind: exists | settled-by: this file's status (line 5): retired 2026-09-08; it points to docs/ACTIVE.md | replaced-by: docs/ACTIVE.md
+
 **Status:** retired 2026-09-08. This file no longer carries observations. Its
 July 2026 entries went stale past their own freshness contract and were
 removed rather than refreshed, because the questions they answered now have

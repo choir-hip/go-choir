@@ -1,5 +1,7 @@
 # Standing Questions — Agent Pre-Flight Entry Point
 
+Standing: governing | kind: decided | settled-by: CLAUDE.md Missions: read before authoring or running a goal file
+
 **Read this before authoring or executing any mission goal file.** New
 missions use the throughline format (`skills/throughline/SKILL.md`); existing
 Definition-format goal files remain valid. It is an entry point, not a

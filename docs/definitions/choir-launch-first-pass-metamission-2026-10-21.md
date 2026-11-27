@@ -434,6 +434,8 @@ receipts:
 
 # The launch first pass
 
+Standing: superseded | kind: wanted | settled-by: successor header line 6 'Supersedes'; docs/ACTIVE.md 'Superseded (2026-10-24)' | replaced-by: docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.md
+
 This is the outer mission over the launch checklist's batch plan. It runs
 the batches that agents can do on their own, as many at once as the Mac
 allows, and stops when each is landed or honestly blocked. Then the owner

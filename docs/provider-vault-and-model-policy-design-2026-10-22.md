@@ -1,5 +1,7 @@
 # Provider key vault, host model policy and agentic model onboarding: design
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): proposal, not owner-ratified | note: vault group in docs/standing.md
+
 Date: 2026-10-22. Status: proposal (FP0 design worker; not owner-ratified).
 Mutation class of this document: green (docs only). The slices it plans
 are classed one by one in section 6.

@@ -1,5 +1,7 @@
 # Account creation and deletion in Autoradio: read-only design proposal (2026-11-23)
 
+Standing: governing | kind: decided | settled-by: owner rulings 2026-11-23 listed in this file's status note (line 5) | note: deletion half built on lane/account-delete; creation half open
+
 > **Status 2026-11-24:** the deletion half (section C) is built on `lane/account-delete` with the owner's rulings of 2026-11-23 (takes removed, stories kept with the author detached, access revoked at once, a 72 hour purge that signing in cancels, a receipt, 30 days of abuse logs), the native passkey instead of the sheet, and an in-process runner instead of vmctl owning the job. Where this text and the code differ, `docs/changes.md` (2026-11-24) and the code win. Not deployed.
 
 Checkout `lead-docs2` at `7f75c2c96`. Nothing was run, built or changed. Marks: **[src]** read in code or a repo doc; **[memory]** from my training, not read this session; **[infer]** my inference; **[unconfirmed]** not established. Paths are under the checkout.

@@ -1,5 +1,7 @@
 # A store snapshot without the scratch copy (2026-11-20)
 
+Standing: superseded | kind: decided | settled-by: this file's header line 5; the replacing file's line 3 ('It supersedes') | replaced-by: docs/design/snapshot-one-pass-2026-11-22.md
+
 Superseded on 2026-11-22 by [snapshot-one-pass-2026-11-22.md](snapshot-one-pass-2026-11-22.md):
 the witness it keeps inside the read transaction takes 55 minutes on the paper.
 

@@ -1,5 +1,7 @@
 # The Mission Stack: From Here to World Wire Live
 
+Standing: superseded | kind: wanted | settled-by: this file's status (line 6): SUPERSEDED roadmap, retained as a record (2026-10-14 prune) | replaced-by: docs/ACTIVE.md
+
 Date: 2026-09-22 (revised same-day after owner review)
 Status: **SUPERSEDED roadmap, retained as a record** (2026-10-14 prune). The
 R-series spine it ratified (2026-09-25) has landed; the "World Wire" it

@@ -1,4 +1,5 @@
 ---
+# Standing: superseded | kind: wanted | settled-by: docs/ACTIVE.md 'Superseded (2026-10-28): consolidate and scale', dropped by the owner; terminal receipt in the file | replaced-by: none
 definition_version: 4
 
 # Consolidate and scale: computers that start without a person making room,

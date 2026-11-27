@@ -106,4 +106,6 @@ receipts:
 
 # Autoradio in the choir.news desktop
 
+Standing: governing | kind: wanted | settled-by: owner 2026-11-23, quoted in this file's authority field (line 4); deferred in docs/ACTIVE.md | note: deferred until after Android (owner 2026-11-23)
+
 Deferred. The owner wants the radio as an app in the choir.news desktop, listening only at first, with speech made in the browser by a local model and no cloud voice.

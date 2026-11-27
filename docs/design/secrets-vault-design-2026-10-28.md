@@ -1,5 +1,7 @@
 # Secrets vault design (draft, 2026-10-28; revision 2)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): draft for re-review, nothing authorized to execute | note: line 386 says 'design accepted; execution held by the owner' in review notes; no owner ruling found; see docs/standing.md, vault group
+
 Status: draft for re-review. Not built; nothing in this document is authorized
 to execute. Owner requirement, 2026-10-28 (goal
 docs/definitions/choir-data-architecture-selection-2026-10-28.md, section

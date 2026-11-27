@@ -1,5 +1,7 @@
 # Autopaper learning: materiality learned from readers and from the future (2026-11-04)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): design note, not decided
+
 Status: design note, not decided. Mutation class green (docs only). Nothing
 here is built, and nothing here should be built before the owner walks
 through it.

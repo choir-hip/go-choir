@@ -1,5 +1,7 @@
 # Corpus-first retrieval and research for Autopaper (design proposal, 2026-11-18)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): a proposal, not ratified
+
 **Status: a proposal, not ratified.** Written on 2026-11-18 by a design agent
 (Opus, read-only) at the lead's request, from the owner's words of that day
 and the measurements already recorded. Nothing here is built unless

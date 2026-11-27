@@ -6,6 +6,8 @@ review: {reviewer: none, frozen_ref: none, verdict: none, evidence_ref: none}
 
 # Branching tape: the first three do-now items as a mission proposal (2026-11-10)
 
+Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 11): proposal, needs owner ratification of the doctrine delta
+
 Status: proposal, readiness `drafted`. Not on `docs/ACTIVE.md` or
 `docs/mission-graph.yaml`; it needs owner ratification of the doctrine delta
 in [branching-tape-2026-10-31.md](branching-tape-2026-10-31.md) §10 before
