@@ -263,3 +263,13 @@ them and rebasing onto the new version... it is somewhat of a solved
 problem. Big tech has been doing massive merging and building at scale for
 years... But I'm scaling myself, my own focus, not max agents or thousands
 of engineers that need to coordinate"
+
+**Monitoring.** "We also need better monitoring. I want that to be an app
+in choir. It already is, actually. It's just shit. And the monitoring app
+and data -- it should become a desk, an appagent -- should be accessible in
+autoradio 1. Needs some decisions about what data is mine, and what is for
+public. I want to publicize as much data as is possible securely. All the
+usage data and analytics and performance metrics. Ofc gotta think of threat
+model here...I don't see competitive threat from showing our true usage
+metrics but maybe some analytics data is sensitive and I don't even
+understand why."

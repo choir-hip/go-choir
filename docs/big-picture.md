@@ -183,6 +183,9 @@ the phone app. The shared limit is the owner's review attention.
 - Deeper use of on-device models.
 - More clients, on a one-year view: media production, live streaming, and
   hardware (an e-ink tablet running Autoputer with on-device models).
+- Monitoring as a desk, replacing the present monitoring app, readable in
+  Autoradio. Publish as much usage and performance data as is safe; decide
+  what is the owner's and what is public.
 - Zero-downtime deploys: two hosts for planned moves, three votes for
   automatic failover.
 - The desktop as a host: VMs, large local models, computer use.
