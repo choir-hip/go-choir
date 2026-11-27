@@ -228,7 +228,7 @@ owner_rulings:
 now:
   status: working
   slice: waiting on the owner for the Node B disk; T12 (the closing pass) in documents meanwhile
-  source_ref: origin/main 3eb64a326
+  source_ref: origin/main c29dca2d2
   deploy_identity: staging on 774e87d2f
   candidate:
     id: none
@@ -254,10 +254,10 @@ now:
     evidence_ref: the owner's words of 2026-11-27 in docs/inbox.md
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: 'T0 to T7 are on main except T8 to T11. The gates run in parallel (69 to 70 s measured alone; 153 s inside the one real landing so far). Staging is on 4ac73d992: every deploy since is refused because Node B has 42 GiB free against a 60 GiB floor (docs/problems/node-b-deploy-refused-disk-headroom-again-2026-11-27.md).'
-    main_uncertainty: whether the batched queue behaves on the real gh and build machine as it does against its fakes; why the gates took 153 s inside a landing and 70 s alone
+    believed_state: 'T0 to T7 are on main. A scripts-only landing now takes 90 s before its push (gates 72 s, c29dca2d2); the first measured one took 308 s. Staging is on 4ac73d992: every deploy since is refused because Node B has 42 GiB free against a 60 GiB floor.'
+    main_uncertainty: whether the batched queue behaves on the real gh and build machine as it does against its fakes
     next_observation: the first successful deploy after the disk is freed, then the first real batch of two lanes (C257)
-  blocker_or_risk: 'deploys are refused until the owner decides what may be freed on Node B; every CI run on main ends failed at the deploy step, so the queue will not push a batch. Follow-ups: the gates selftest writes a line to the real timing log; a real landing wrote no gates line; the lander should remove a lane after its push; the doccheck CI job; three readers of the old ledger.'
+  blocker_or_risk: 'deploys are refused until the owner decides what may be freed on Node B, and every CI run on main ends failed at the deploy step, so the queue will not push a batch. Lesson of the night, three times over (the docs-only gate shortcut, automatic lane removal, the queue resetting a borrowed tree): a convenience that skips a check or destroys something on an inference did not survive review, and the plain version did. Follow-ups: the doccheck CI job; three readers of the old ledger.'
   next_action: the owner's disk decision; then one batch through scripts/land-queue to settle C257; meanwhile the closing pass from docs/evidence/mission-closing-verdicts-2026-11-27.md, in documents only
 receipts:
 - id: T0
