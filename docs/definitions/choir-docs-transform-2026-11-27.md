@@ -98,32 +98,32 @@ stations:
   class: yellow
   review: none
   depends_on: []
-  carrier: lane land-timing
-  status: working
+  carrier: 6d85de5a7
+  status: proved
 - id: T2
   name: an expiry warns and does not fail
   scope: the switch-registry lint warns from fourteen days before an expiry and fails only when a change adds or extends a switch past one; its selftest covers the calendar case
   class: yellow
   review: one seat
   depends_on: []
-  carrier: lane expiry-warns
-  status: working
+  carrier: 7c2ea0572
+  status: landed
 - id: T3
   name: one file per entry
   scope: a change-log entry and a ledger claim are each one new file in a directory, with the two long files kept as history and still joined for lanes in flight; CLAUDE.md's two rules point at the directories
   class: yellow
   review: one seat
   depends_on: []
-  carrier: lane one-file-per-entry
-  status: working
+  carrier: e4cca635f
+  status: landed
 - id: T4
   name: the batched queue
   scope: scripts/land-queue stacks every approved lane, verifies the stack once and pushes once; a failing stack is halved to find the lane that broke it, which is set aside and named; the wait for staging between lanes is removed
   class: yellow
   review: one seat
   depends_on: [T1]
-  carrier: none yet
-  status: pending
+  carrier: lane batch-queue (80252a1a8), sent back once by seat 1, with seat 2
+  status: working
 - id: T5
   name: heavy suites run once
   scope: from T1's timings, decide whether the build machine or CI is the gate for the race and scale suites, and remove the other run
@@ -138,16 +138,16 @@ stations:
   class: green
   review: one seat reads a sample against the rulings
   depends_on: [T0]
-  carrier: lane doc-first-line
-  status: working
+  carrier: 7ff273046 and 2dd849e6d
+  status: proved
 - id: T7
   name: the query
   scope: scripts/docs lists documents by kind, standing and subject from their first lines; a small check fails a new design or definition with no first line; scripts/doccheck leaves scripts/gates
   class: yellow
   review: one seat
   depends_on: [T6]
-  carrier: none yet
-  status: pending
+  carrier: b80278aaa
+  status: landed
 - id: T8
   name: the loaded file
   scope: CLAUDE.md shortened to the rules that must never be missed and the instruction to query before relying on a design; the rest moves to documents the query returns
@@ -219,8 +219,8 @@ owner_rulings:
   read_as: lanes stay the unit of work; GitHub Actions is used as compute, with our own machine as the exercised backup.
 now:
   status: working
-  slice: T1, T2, T3 and T6, each with a builder in its own lane
-  source_ref: origin/main 9d75196f4
+  slice: T4, with the second review seat; T5 and T11 next
+  source_ref: origin/main 7c2ea0572
   deploy_identity: staging on 774e87d2f
   candidate:
     id: none
@@ -246,11 +246,11 @@ now:
     evidence_ref: the owner's words of 2026-11-27 in docs/inbox.md
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: T0 is on main (9d75196f4); four builders are at work and nothing else is built
-    main_uncertainty: how much of a landing's time is before the push, which decides whether T4 or T5 pays more
-    next_observation: T1's first five timing records
-  blocker_or_risk: lanes in flight write to the two long files; T3 must keep them landing
-  next_action: read each builder's report, review its diff, send T2, T3 and T6 to a seat, land what passes; then start T4 on T1
+    believed_state: 'T0, T1, T2, T3, T6 and T7 are on main. A landing of a scripts-only change takes 250 to 590 seconds before CI, nearly all of it scripts/gates (247 to 489 s for one run, by how busy the Mac is); the build is 7 to 38 s.'
+    main_uncertainty: whether the batched queue is safe on a real gh and a real build machine; it has run only against fakes
+    next_observation: seat 2's verdict on T4, then the first real batch of two lanes, which settles C257
+  blocker_or_risk: 'a docs push to main while a landing runs makes the lander run the gates twice (seen on T3: 474 s); three lanes in a row conflicted on one spot in scripts/gates. Both go to T5 and T11.'
+  next_action: read seat 2 on T4 and land it or send it back; then T5 (gates are the cost, not suites; a docs-only move of main must not re-run them) and T11 (one file per gate check); follow-ups are the doccheck CI job and the three readers of the old ledger
 receipts:
 - id: T0
   boundary: define
