@@ -6,7 +6,11 @@ kind: landing
 p: 0.75
 settle_by: 2026-11-28T02:00Z
 evidence_source: the CI run on main for the landed commit (gh run list --commit <sha>) and the commit staging serves
-status: open
+status: settled
+settled: 2026-11-27T19:40Z
+outcome: true
+evidence: land-queue attempts 1, pushed 4f5e66020; CI run 46055581016 on main green; staging served 4f5e66020
+brier: 0.0625
 ---
 The sign-out order fix (lane sign-out-order, accepted by both seats at af5d69455)
 lands on its first queue run: gates pass, CI on main is green and staging serves

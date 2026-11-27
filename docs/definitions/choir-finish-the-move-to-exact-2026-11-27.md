@@ -141,8 +141,8 @@ stations:
   class: red
   review: two seats
   depends_on: [E1, E3]
-  carrier: none yet
-  status: pending
+  carrier: 'E6.3 (the order of sign-out) landed as 4f5e66020, CI run 46055581016, staging serves it; accepted by two seats on the fourth review, after the assessment in docs/evidence/sign-out-gate-three-rounds-2026-11-27.md; not run on a device. E6.1, E6.2 and E6.4 are next; E6.5 to E6.7 wait on D6'
+  status: working
 - id: E7
   name: a turn with no account
   scope: 'the turn gate replaced: signed out, a question is answered by the model on the phone and nothing is sent to the server; signed in, as today'
@@ -214,9 +214,9 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: E6.3 (the order of sign-out, red) sent back three times; rebuilt once on a changed approach (docs/evidence/sign-out-gate-three-rounds-2026-11-27.md); E1 waits on the build tree
-  source_ref: origin/main f0509f6a7
-  deploy_identity: staging on f0509f6a7
+  slice: E6.3 (the order of sign-out, red) landed as 4f5e66020; E6.1 (the old Swift sign-in's leftovers) is next; E1 waits on the build tree
+  source_ref: origin/main 4f5e66020
+  deploy_identity: staging on 4f5e66020
   candidate:
     id: none
     state: none
@@ -245,7 +245,7 @@ now:
     main_uncertainty: 'whether the owner counts the voice turn''s state as voice (it decides whether the gate can reach zero without rewriting the turn), and whether the build tree may move'
     next_observation: 'the contract build and bun test on the new pin, once the build tree may move'
   blocker_or_risk: 'the pin move can be verified only by moving the one Exact checkout, which lives in the build tree (lane qa-mac). That tree holds another session''s uncommitted Android work, 38 paths, among them its own edit of patch 0003. I have not moved it. The pin does not go to main unverified, because every lane checks its pin against the build tree.'
-  next_action: 'land E6.3 when two seats accept it; then E6.1, E6.2 and E6.4, which do not wait on the owner; the sentence follow is picked up from the parked lane by the approach its record names'
+  next_action: 'E6.1, E6.4''s test and E6.2, which do not wait on the owner; a device check of sign-out while listening, answering and recording a take is owed; the sentence follow is picked up from the parked lane by the approach its record names'
 receipts: []
 ---
 
