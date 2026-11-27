@@ -90,32 +90,32 @@ stations:
   class: green
   review: none
   depends_on: []
-  carrier: lane big-picture
-  status: working
+  carrier: 9d75196f4
+  status: proved
 - id: T1
   name: landings are timed
   scope: scripts/land and scripts/land-queue print and append the seconds each step took
   class: yellow
   review: none
   depends_on: []
-  carrier: none yet
-  status: pending
+  carrier: lane land-timing
+  status: working
 - id: T2
   name: an expiry warns and does not fail
   scope: the switch-registry lint warns from fourteen days before an expiry and fails only when a change adds or extends a switch past one; its selftest covers the calendar case
   class: yellow
   review: one seat
   depends_on: []
-  carrier: none yet
-  status: pending
+  carrier: lane expiry-warns
+  status: working
 - id: T3
   name: one file per entry
   scope: a change-log entry and a ledger claim are each one new file in a directory, with the two long files kept as history and still joined for lanes in flight; CLAUDE.md's two rules point at the directories
   class: yellow
   review: one seat
   depends_on: []
-  carrier: none yet
-  status: pending
+  carrier: lane one-file-per-entry
+  status: working
 - id: T4
   name: the batched queue
   scope: scripts/land-queue stacks every approved lane, verifies the stack once and pushes once; a failing stack is halved to find the lane that broke it, which is set aside and named; the wait for staging between lanes is removed
@@ -138,8 +138,8 @@ stations:
   class: green
   review: one seat reads a sample against the rulings
   depends_on: [T0]
-  carrier: none yet
-  status: pending
+  carrier: lane doc-first-line
+  status: working
 - id: T7
   name: the query
   scope: scripts/docs lists documents by kind, standing and subject from their first lines; a small check fails a new design or definition with no first line; scripts/doccheck leaves scripts/gates
@@ -219,16 +219,16 @@ owner_rulings:
   read_as: lanes stay the unit of work; GitHub Actions is used as compute, with our own machine as the exercised backup.
 now:
   status: working
-  slice: T0, then T1, T2 and T3 in parallel lanes
-  source_ref: origin/main 0a213add2
+  slice: T1, T2, T3 and T6, each with a builder in its own lane
+  source_ref: origin/main 9d75196f4
   deploy_identity: staging on 774e87d2f
   candidate:
-    id: T0
-    state: rehearsing
-    ref: lane big-picture
-    base: origin/main 0a213add2
+    id: none
+    state: none
+    ref: none
+    base: none
     digest: none
-    scope: [docs/big-picture.md, docs/inbox.md, docs/definitions/choir-campaign-2026-11-27.md, docs/definitions/choir-docs-transform-2026-11-27.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/calibration/claude-ledger.md]
+    scope: []
   conjecture:
     id: DT-C1
     calibration_claim: C257
@@ -246,12 +246,24 @@ now:
     evidence_ref: the owner's words of 2026-11-27 in docs/inbox.md
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: the measurements are in hand and nothing is built
+    believed_state: T0 is on main (9d75196f4); four builders are at work and nothing else is built
     main_uncertainty: how much of a landing's time is before the push, which decides whether T4 or T5 pays more
     next_observation: T1's first five timing records
   blocker_or_risk: lanes in flight write to the two long files; T3 must keep them landing
-  next_action: land T0; start builders for T1, T2 and T3 in their own lanes
-receipts: []
+  next_action: read each builder's report, review its diff, send T2, T3 and T6 to a seat, land what passes; then start T4 on T1
+receipts:
+- id: T0
+  boundary: define
+  identity: 9d75196f4
+  proof_refs: ['scripts/check-goal-files: 94 files scanned, all goal files pass (run in the lane before the push)']
+  rollback_ref: revert 9d75196f4
+  disposition: the plan, the inbox, the campaign and this file are on main; docs only, so no CI gate or deploy ran by design
+  landing:
+    source_commit: 9d75196f4
+    ci_ref: not_applicable
+    deploy_ref: not_applicable
+    environment_identity: not_applicable
+    deployed_acceptance: not_applicable
 ---
 
 # The docs transform
