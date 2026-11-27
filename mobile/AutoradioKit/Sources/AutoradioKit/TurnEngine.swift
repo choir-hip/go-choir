@@ -219,7 +219,7 @@ public actor TurnEngine {
     @discardableResult
     public func typedTurn(_ text: String, front: FrontPage? = nil) async -> Bool {
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !words.isEmpty else { return false }
+        guard !words.isEmpty, TurnGate.shared.allowed else { return false }      // no key (signed out, or signing out): no turn
         let now = env.log.clock.now
         // A question still being answered (even one whose pipeline has not yet left `ended`) is over: two questions in quick succession
         // must not run two pipelines at once.
@@ -287,6 +287,16 @@ public actor TurnEngine {
         env.log.emit(.turnCancelled)
         if turn != nil { await dropTurn(reason: nil) }
         else { await bounds?.reset(); setPhase(.playing) }
+    }
+
+    /// Sign-out, before the key goes: hands-free off (a half-heard turn is dropped), the turn sent is cancelled with everything it started, and the voice is cut. Nothing is sent or said after this returns.
+    public func endForSignOut() async {
+        await handsFreeSet(false)
+        if pipeline != nil || phase == .acknowledging || phase == .holding || phase == .revised { await interruptPipeline() }
+        if let id = hf.answerTurnID { await hfAnswerEnded(turnID: id) }
+        if let t = turn { t.session.cancel(); t.partialTask?.cancel(); turn = nil }
+        buttonDownAt = nil
+        await env.playback.stopVoice()
     }
 
     /// One mic frame, in order. The engine is frame-driven so replay can run in lockstep.

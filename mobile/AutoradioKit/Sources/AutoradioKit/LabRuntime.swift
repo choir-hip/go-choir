@@ -289,7 +289,7 @@ public final class LabRuntime: @unchecked Sendable {
         guard snapshot().running else { return refused("The radio could not start, so it could not hear that. Try again.") }
         let front = pageAddress.isEmpty ? nil : frontPageResolver?(pageAddress)
         let started = await engine.typedTurn(text, front: front)
-        if !started, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return refused("The radio was busy with another question. Try again.") }
+        if !started, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return refused(TurnGate.shared.allowed ? "The radio was busy with another question. Try again." : "Sign in first, then ask.") }
         return started
     }
 
@@ -323,6 +323,16 @@ public final class LabRuntime: @unchecked Sendable {
         var waited = 0
         while state() == .pending, handsFreeIsOn, waited < 40 { if waited == 0 { print("AUTORADIO voice mic still trying") }; try? await Task.sleep(nanoseconds: micPollNanos); waited += 1 }
         if handsFreeIsOn, let say = MicLog.finalError(state(), rate: Int(audio.micTapRate)) { log.emit(.error(stage: "listen", message: say)) }
+    }
+    /// Sign-out, before the key goes: the switch off (also a screen's own turn-on), the engine's turn cancelled, and the session moved off the microphone before this returns (the switch's own move is a Task nobody waits for).
+    public func closeVoiceForSignOut() async {
+        TurnGate.shared.closeForSignOut()                        // first: from here no turn starts (hands-free commit, typed ask), until a new sign-in completes
+        await MainActor.run { TakeSession.live?.discard() }      // before the session moves: a take in hand holds the microphone open, and it is the old account's
+        overrideBox.write { $0 = nil }
+        HandsFreeSwitch.shared.set(false)
+        await engine.endForSignOut()
+        await coordinator.reapply()
+        refresh()
     }
     /// The stored state again, after a screen's own turn-on.
     /// Voice enrolment listens through the engine's microphone without the engine looking for turns (TurnEngine.enrolmentTap).

@@ -32,6 +32,10 @@ of the code, not an observed failure.
    `voice-configuration.json`. Whether they hold anything of the person
    was not established.
 
+## Done
+
+Item 1 (2026-11-27, change `sign-out-closes-the-microphone-before-the-key-goes`): sign-out now shuts `TurnGate`, closes hands-free and the microphone session, and cancels the turn in flight before the wait for shared code and before the key is deleted; `SignOutOrderTests` observe the order. Not proved on a device. Items 2 to 4 are untouched.
+
 ## Evidence
 
 The file and line for each is in section 3 of the design (items D2, I5,
