@@ -66,7 +66,6 @@
    "message": "string"
   },
   "SettingsFacts": {
-   "now": "number",
    "appVersion": "string",
    "radio": "RadioFact",
    "turns": "TurnFact[]"
@@ -90,7 +89,6 @@
    "answers": "SettingsFacts",
    "substitute": {
     "default": {
-     "now": 0,
      "appVersion": "",
      "radio": {
       "known": false,

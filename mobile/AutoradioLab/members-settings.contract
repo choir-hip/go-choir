@@ -4,7 +4,7 @@
 use settingsFacts from "@choir/autoradio"
 use ThemeCards, ThemeExtras, SettingsAck, LearnedInfo, SettingsFacts from "@choir/autoradio"
 
-use SettingsAccount, AboutBuild, SettingsComputer, ActivityInfo, AboutInfo from "./settings-types.contract"
+use SettingsAccount, AboutBuild, SettingsComputer, ActivityInfo, AboutInfo, SettingsTime from "./settings-types.contract"
 use DeleteView, DeleteEnd from "./account-types.contract"
 
 members Autoradio
@@ -18,12 +18,14 @@ members Autoradio
   resource cmpt = settingsComputer(au.signedIn, acctTick) as shape SettingsComputer else empty()
   mutation cmm as shape SettingsComputer refreshes cmpt, act
   state actTick = 0
-  // What only native code knows for these pages (the clock, the app's version, the radio engine's phase and kept turns): one source.
+  // What only native code knows for these pages (the app's version, the radio engine's phase and kept turns): one source.
   resource sfacts = settingsFacts(tick=actTick) as shape SettingsFacts else empty()
   // "What the paper has learned" (cards.ts): the acts the listener told the paper, kept under app:/data.
   resource learnt = learnedInfo(0) as shape LearnedInfo else empty()
   // Activity (activity.ts): the changelog, with the radio's rows from the native facts and the computer's line from computer.ts.
-  resource act = activityPage(sfacts, au.signedIn, actTick, cmpt.state, cmpt.updateAvailable, cmpt.checked) as shape ActivityInfo else empty()
+  // The date the rows' ages are measured from is Exact's own (`stime`), passed after `with` (it differs at every ask, so it is not part of what the answer is kept for).
+  resource stime = exactTime() as shape SettingsTime else empty()
+  resource act = activityPage(sfacts, au.signedIn, actTick, cmpt.state, cmpt.updateAvailable, cmpt.checked) with stime.epochAtZero + performanceNow() as shape ActivityInfo else empty()
   resource about = aboutPage(sfacts, au.signedIn) as shape AboutInfo else empty()
   // The commits (shared code, about.ts): the app's own and the server's. The tick is the Refresh button's.
   resource bld = aboutBuild(acctTick) as shape AboutBuild else empty()

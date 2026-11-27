@@ -67,7 +67,7 @@ describe('the rows from native facts', () => {
     expect(liveItems(noFacts(), null)).toEqual([]);
   });
   test('signed out, the page still shows the radio and says nothing of the changelog', async () => {
-    const v = await activityPage({ ...noFacts(), turns: [{ id: '1', outcome: 'answered', transcript: 'x', configName: '' }] }, false, 0, '', false, false);
+    const v = await activityPage({ ...noFacts(), turns: [{ id: '1', outcome: 'answered', transcript: 'x', configName: '' }] }, false, 0, '', false, false, 0);
     expect(v.status).toBe('idle'); expect(v.radio.length).toBe(1); expect(v.blank).toBe(false);
   });
 });
