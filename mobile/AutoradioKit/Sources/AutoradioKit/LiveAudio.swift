@@ -991,8 +991,6 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             if !sounded { if !Task.isCancelled { engineLostFlag.value = true }; return false }
             lastBlockEnd.write { $0 = Date() }
             return true
-        case .podcastClip:
-            return false                                     // a podcast clip is a run sheet entry, played by the run sheet player
         case .clip(let url, let start, let end, _):
             guard let u = FixtureResources.resolve(url), let all = try? AudioFiles.readMono(u, rate: 16_000) else {
                 log.emit(.error(stage: "player", message: "clip not found: \(url)")); return false

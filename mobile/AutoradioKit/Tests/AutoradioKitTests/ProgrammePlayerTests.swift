@@ -58,6 +58,24 @@ final class SegmentPrepTests: XCTestCase {
         XCTAssertEqual(prepared?.segment.sources, ["The harbour story"], "a chip only for a cite with a label; never a raw ref")
     }
 
+    /// F03, over the server's fixture corpus, read by a minimal reader of the lines (shared code decodes the stretch; this pins what native still does with a segment).
+    func testF03_TheFixtureCorpusBecomesOneBlockSegments() throws {
+        let f = try LearningFixtures.json("stretch_lines.json")
+        let lines = try XCTUnwrap(f["segment_lines"] as? [[String: Any]]).compactMap { $0["line"] as? [String: Any] }
+        XCTAssertEqual(lines.count, 32, "the fixture changed: recount")
+        let kept = lines.filter { SegmentKinds.label($0["kind"] as? String ?? "") != "" && !($0["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        XCTAssertEqual(kept.count, 30, "an unknown kind (weather) and an empty text are not spoken")
+        let prepared = kept.enumerated().map { i, l in
+            SegmentPrep.prepare(IncomingSegment(stretchID: "fx", segmentID: "fx/\(i)", kind: l["kind"] as? String ?? "", title: l["title"] as? String ?? "", text: l["text"] as? String ?? "", cites: [], blockCount: nil))
+        }
+        XCTAssertTrue(prepared.allSatisfy { $0 != nil })
+        XCTAssertTrue(prepared.allSatisfy { $0?.blocks.count == 1 }, "every kept fixture line is one block")
+        let titles = prepared.compactMap { $0?.segment.title }
+        XCTAssertFalse(titles.contains { $0 != $0.trimmingCharacters(in: .whitespaces) || $0.isEmpty })
+        XCTAssertTrue(titles.contains("A quiet harbour")); XCTAssertTrue(titles.contains("Story"))
+        XCTAssertEqual(SplitBlocks.split("  \n\n "), [])
+    }
+
     func testF06_AppendedOnce() {
         let c = IncomingSegment(stretchID: "st-9", segmentID: "st-9/5", kind: "headlines", title: "", text: "Words.", cites: [], blockCount: 3)
         var doc = ProgrammeDocument(id: "radio:st-9", title: "Autoradio", blocks: [])
@@ -89,6 +107,9 @@ final class SplitBlocksTests: XCTestCase {
         let two = "A first.\n\nA second."
         var s = IncomingSegment(stretchID: "s", segmentID: "s/0", kind: "story", title: "T", text: two, cites: [], blockCount: nil)
         XCTAssertEqual(SegmentPrep.prepare(s)?.segment.serverBlockCount, 2, "no count sent: computed, for fixtures")
+        s.blockCount = 2
+        XCTAssertEqual(SegmentPrep.prepare(s)?.segment.serverBlockCount, 2, "the server's count equal to the phone's split")
+        XCTAssertEqual(SegmentPrep.prepare(s)?.segment.unitServerBlocks, [0, 1])
         s.blockCount = 5
         let p = SegmentPrep.prepare(s)
         XCTAssertEqual(p?.segment.serverBlockCount, 5, "the phone never overrules the server")
@@ -133,6 +154,13 @@ final class SegmentedDocumentTests: XCTestCase {
         XCTAssertEqual(d.blocks.count, 1)
         let round = try JSONDecoder().decode(ProgrammeDocument.self, from: JSONEncoder().encode(segmentedDocument(["One.\n\nTwo.", "Three."])))
         XCTAssertEqual(round, segmentedDocument(["One.\n\nTwo.", "Three."]))
+    }
+
+    /// A document a build wrote with the keys this build no longer has (`blockCountMismatch`, `clip` on a segment) still decodes: extra keys are ignored.
+    func testADocumentWithTheOldSegmentKeysStillDecodes() throws {
+        let old = #"{"id":"radio:x","title":"T","blocks":[{"speech":{"text":"One."}}],"segments":[{"id":"s/0","stretchID":"s","kind":"podcast_clip","title":"T","cites":[],"firstBlock":0,"blockCount":1,"serverBlockCount":1,"blockCountMismatch":true,"unitServerBlocks":[0],"clip":{"clipID":"clip-1","storyRef":"","seconds":4}}]}"#
+        let d = try JSONDecoder().decode(ProgrammeDocument.self, from: Data(old.utf8))
+        XCTAssertEqual(d.segments.count, 1); XCTAssertEqual(d.segments[0].serverBlockCount, 1); XCTAssertEqual(d.segments[0].unitServerBlocks, [0])
     }
 
     func testAppendNumbersTheBlocks() {

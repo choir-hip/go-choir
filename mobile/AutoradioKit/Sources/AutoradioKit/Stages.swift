@@ -9,14 +9,12 @@ public enum ProgrammeBlock: Codable, Sendable, Equatable {
     case speech(text: String)
     case clip(url: String, start: Double, end: Double?, source: String)
     case listenerPassage(text: String, afterBlock: Int?)
-    /// A podcast clip the DJ introduces (lane autoradio-dj-clips): played from the publisher's URL, looked up by id in the clip set the phone fetched.
-    case podcastClip(clipID: String)
 
     public var spokenText: String? {
         switch self {
         case .speech(let t): return t
         case .listenerPassage(let t, _): return t
-        case .clip, .podcastClip: return nil
+        case .clip: return nil
         }
     }
     public var summary: String {
@@ -24,7 +22,6 @@ public enum ProgrammeBlock: Codable, Sendable, Equatable {
         case .speech(let t): return "speech: " + String(t.prefix(60))
         case .clip(let u, let s, let e, _): return "clip \(URL(string: u)?.lastPathComponent ?? u) \(s)-\(e.map { String($0) } ?? "end")"
         case .listenerPassage(let t, _): return "listener: " + String(t.prefix(60))
-        case .podcastClip(let id): return "podcast clip \(id)"
         }
     }
 }

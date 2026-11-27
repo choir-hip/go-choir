@@ -129,6 +129,9 @@ describe('reading the stretch (F01 to F07)', () => {
     expect(only.claim_id).toBe('c9'); expect(only.forecast).toBeUndefined();
     const full = segs(d.feed(line({ kind: 'story', title: 'T', text: 'Words.', forecast: { p_heard: 0.62, caused_by: 'the listener skipped long pieces', claim_id: 'c3' } }) + '\n'))[0];
     expect(full.forecast).toEqual({ p_heard: 0.62, caused_by: 'the listener skipped long pieces', claim_id: 'c3' }); expect(full.claim_id).toBe('c3');
+    const flat = segs(d.feed(line({ kind: 'story', title: 'T', text: 'Words.', p_heard: 0.4, caused_by: 'flat', claim_id: 'c5' }) + '\n'))[0];
+    expect(flat.forecast).toEqual({ p_heard: 0.4, caused_by: 'flat', claim_id: 'c5' });   // the flat fields of the line are read as the nested ones are
+    for (const bad of [1.5, -0.1, '0.5']) expect(segs(d.feed(line({ kind: 'story', title: 'T', text: 'Words.', p_heard: bad }) + '\n'))[0].forecast).toBeUndefined();   // out of range or not a number: no forecast
     const none = segs(d.feed(line({ kind: 'story', title: 'T', text: 'Words.' }) + '\n'))[0];
     expect(none.claim_id).toBeUndefined(); expect(none.forecast).toBeUndefined();
   });

@@ -52,7 +52,7 @@ public struct ProgrammeSegment: Codable, Sendable, Equatable {
 public enum SegmentKinds {
     static let labels: [String: String] = [
         "story": "Story", "headlines": "Headlines", "update": "Update", "mail": "Mail", "podcast_note": "Podcast",
-        "answer": "Answer", "result": "Result", "bridge": "Bridge", "ident": "Station break", "podcast_clip": "Podcast clip",
+        "answer": "Answer", "result": "Result", "bridge": "Bridge", "ident": "Station break",
         "opening": "Opening", "transition": "Transition", "take": "Take",
     ]
     public static func label(_ kind: String) -> String { labels[kind] ?? "" }
