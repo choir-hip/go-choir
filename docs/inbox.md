@@ -200,3 +200,8 @@ phone-local version"
 **Who may publish.** "My business model is only offering voice take
 publishing to paid users. Since voice means some moderation must be done,
 and that's not 0MC"
+
+**Everyone who talks has a computer.** "I just like the community culture
+if everyone who can talk has at least one choir computer. Like, if you buy
+an account just to talk, you're forced to get a choir computer, so
+naturally you'll find a use for that compute"
