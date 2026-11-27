@@ -153,7 +153,8 @@ stations:
     review: two seats on a frozen candidate
     depends_on: [A0]
     carrier: .lane/trees/android-auth
-    status: landed; owner passkey sheet pending
+    status: landed
+    note: the owner's passkey sheet on the phone is pending, so the station is landed and not yet proved
   - id: A2
     name: Kotlin deck and background audio
     scope: 'implement the existing deckState/deckPlay/deckEnqueue/deckAct/deckAck contract with Media3, speech playback, media session, audio focus, interruption/route handling, durable journal and background playback; patch Exact only if the pinned Android host truly lacks the required media-service path'

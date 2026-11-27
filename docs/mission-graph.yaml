@@ -1440,6 +1440,31 @@ nodes:
     note: >-
       Owner 2026-11-22: "make a metamission which covers them both, and any
       3rd or nth mission we add. so we can keep /goal running continuously".
+  - id: choir-campaign-2026-11-27
+    title: The campaign — the standing list of missions; it does not end
+    path: docs/definitions/choir-campaign-2026-11-27.md
+    status: working  # 2026-11-27 on the owner's word
+    kind: metamission
+    entrypoint: true
+    depends_on: []
+    enables: [choir-docs-transform-2026-11-27, choir-standing-metamission-2026-11-22]
+    settled_by: owner
+    note: >-
+      Owner 2026-11-27: "get our big picture into a campaign file, with the
+      campaign tracking missions". It lists the standing metamission of
+      2026-11-22 as one station until the owner rules on replacing it.
+  - id: choir-docs-transform-2026-11-27
+    title: The docs transform — a document filter that fits the readers that exist, and landings timed and batched
+    path: docs/definitions/choir-docs-transform-2026-11-27.md
+    status: working  # 2026-11-27 on the owner's word; conjecture is ledger C257
+    kind: station
+    entrypoint: true
+    depends_on: []
+    enables: []
+    settled_by: owner
+    note: >-
+      Owner 2026-11-27: "the first mission is the docs transform". The
+      prerequisite of Autoradio 1 version 1.1.
   - id: choir-records-and-measurement-2026-11-23
     title: Records and measurement — durable decision records, the measure of the paper against the world, the replay experiments
     path: docs/definitions/choir-records-and-measurement-2026-11-23.md

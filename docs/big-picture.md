@@ -6,7 +6,8 @@ authority.** The canonical sequence is still
 [current-architecture.md](current-architecture.md). This file gathers a
 two-day planning session (2026-11-26 and 27) into one place so the docs
 transform can start from it. The owner's own words from the session are in
-[inbox.md](inbox.md).
+[inbox.md](inbox.md). The missions that carry it out are listed in
+[the campaign](definitions/choir-campaign-2026-11-27.md).
 
 Each fact below says how it is known: **measured** (a command was run),
 **read** (from a file, not run) or **not checked**.
@@ -168,14 +169,14 @@ What the table shows:
 1. **Finish the move to Exact.** About a day of agent work (owner). Update
    the Exact pin to the latest first. Design the on-phone turn and the
    onboarding flow into the voice turn code as it moves.
-2. **Takes: recording and distributing them.** The owner's focus for the
+2. **Onboarding (version 1.1).** Autoradio introduces itself, interviews the person and
+   sets up the models for their device and account while it talks.
+3. **Takes: recording and distributing them (version 1.2).** The owner's focus for the
    month, and the paid step: publishing a voice take is for paid accounts
    only, because voice needs moderation and moderation has a cost. The
    server side is deployed and proven on the drill account (2026-11-18,
    read); a recording made by a phone is not proven, and the only
    moderation built is an operator's removal.
-3. **Onboarding.** Autoradio introduces itself, interviews the person and
-   sets up the models for their device and account while it talks.
 4. **Two vaults** (owner, 2026-11-27: "we need two vaults").
    - *The platform's secrets:* provider keys and host credentials, managed
      by the owner alone. Design exists (2026-10-22, not ratified). The owner

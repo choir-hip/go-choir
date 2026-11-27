@@ -11,6 +11,18 @@ superseded; the mission format is
 throughline (`skills/throughline/SKILL.md`). Direction:
 [`reports/choir-state-and-vision-2026-10-14.md`](archive/reports/choir-state-and-vision-2026-10-14.md).
 
+## Added 2026-11-27: the campaign
+
+The owner, 2026-11-27: "get our big picture into a campaign file, with the
+campaign tracking missions... the first mission is the docs transform."
+[The campaign](definitions/choir-campaign-2026-11-27.md) is the standing
+list of missions and does not end. Its first station is
+[the docs transform](definitions/choir-docs-transform-2026-11-27.md): a
+document filter and a batched, timed landing. Its second station is the
+standing metamission below, unchanged, until the owner rules on folding it
+in. The plan the campaign follows is [big-picture.md](big-picture.md), a
+draft; the owner's words behind it are in [inbox.md](inbox.md).
+
 ## Run this: the standing metamission
 
 `/goal docs/definitions/choir-standing-metamission-2026-11-22.md` (owner,
