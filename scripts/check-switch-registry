@@ -17,10 +17,25 @@ bash read it as plain JSON). This lint fails CI when:
      off/false value) without a dated `grandfathered_off_until` walk-by date, a
      `retire: "delete"` verdict, or (life: ops only) an `off_ok` reason. This is
      the AGENTS.md rule "on, never off everywhere; widen by ring";
-  4. an entry's expiry has passed: a warning from the day of expiry; a failure
-     once it is more than policy.expiry_grace_days past AND the change adds a
-     new switch relative to --base-registry/--base (design 7.5: a debt never
-     blocks the fix for itself). --strict-expiry fails on any expiry at all;
+  4. the calendar never fails a run; a change does. An entry within 14 days of
+     its expiry warns ("expires in N day(s)"); a passed expires date warns
+     ("overdue by N day(s)"). A passed grandfathered_off_until date warns only
+     for an entry that is off for every computer, is not an ops/permission
+     entry with off_ok, and has no retire: "delete" verdict (rule 3); any
+     other entry's grandfather date is not read.
+     The one failing rule: relative to --base-registry or --base, a change
+     that adds a new switch fails while any entry with no verdict (retire:
+     "delete") is due or overdue, counted from the day BEFORE its expires or
+     grandfather date (a lane gated at 23:59 must not pass and then fail at
+     00:01 on main): block when today >= date - 1 day, the day itself and
+     every day after included. Editing an entry never fails for this reason: a
+     debt never blocks the fix for itself (design 7.5). With no base, or a
+     --base ref that cannot be read (a warning says so), the change is unknown
+     and this rule is not applied. Warnings keep the real dates.
+     --strict-expiry additionally fails on every passed expires or grandfather
+     date. --base and --base-registry are exclusive; a missing, unparseable or
+     non-object --base-registry exits 2; an empty one has no switches.
+     policy.expiry_grace_days is no longer read.
   5. an entry is malformed (required fields, class, rings above the auto
      ceiling without confirm: human, duplicate ids, ops review_by beyond 90
      days, live release-switch count above policy.release_cap_baseline).
@@ -34,6 +49,9 @@ warning (registry drift), not a failure: declaration is git, state is the host
                                                from nix, and the off-everywhere list
   options: --root DIR  --today YYYY-MM-DD  --base REF  --base-registry FILE
            --strict-expiry
+  scripts/check-switch-registry --overdue      print the overdue entries as a table
+                                               (for the owner's verdicts), exit 0
+  today is --today, else $SWITCH_REGISTRY_TODAY, else the UTC date.
 Self-test: python3 -I scripts/selftest-switch-registry
 """
 import argparse
@@ -145,6 +163,46 @@ def load_registry(text):
         return yaml.safe_load(text)
 
 
+def eid_of(e):
+    return str(e.get("id", "<no id>")) if isinstance(e, dict) else "<not an entry>"
+
+
+def _ids(text, what):
+    """Ids of a base registry text; None (after a message) is not an option: exit 2."""
+    try:
+        b = load_registry(text) if text.strip() else {}
+    except (Exception, SystemExit) as ex:
+        print("FAIL: %s is not a readable registry: %s" % (what, ex))
+        sys.exit(2)
+    b = {} if b is None else b
+    if not isinstance(b, dict) or not isinstance(b.get("switches") or [], list):
+        print("FAIL: %s is not a registry (the top level must be an object with a switches list)" % what)
+        sys.exit(2)
+    return {eid_of(x) for x in (b.get("switches") or [])}
+
+
+def load_base(args, root):
+    """The base registry's ids, or None when no base is known."""
+    if args.base and args.base_registry:
+        print("FAIL: give --base or --base-registry, not both")
+        sys.exit(2)
+    if args.base_registry:
+        t = read(args.base_registry)
+        if t is None:
+            print("FAIL: --base-registry %s cannot be read" % args.base_registry)
+            sys.exit(2)
+        return _ids(t, "--base-registry " + args.base_registry)
+    if args.base:
+        try:
+            t = subprocess.run(["git", "-C", root, "show", "%s:switches/registry.yaml" % args.base],
+                               capture_output=True, text=True, check=True).stdout
+            return _ids(t, "--base " + args.base)
+        except (subprocess.CalledProcessError, OSError):
+            print("warning: --base %s cannot be read (unknown ref, or no switches/registry.yaml there); "
+                  "the new-switch rule was not applied" % args.base)
+    return None
+
+
 def names_of(e):
     return list(e.get("nix") or []), list(e.get("settings") or []), list(e.get("ci") or [])
 
@@ -157,11 +215,13 @@ def main():
     ap.add_argument("--base-registry", default=None, help="file holding the base registry")
     ap.add_argument("--strict-expiry", action="store_true")
     ap.add_argument("--report", action="store_true")
+    ap.add_argument("--overdue", action="store_true", help="print overdue entries as a table")
     args = ap.parse_args()
     root = os.path.abspath(args.root)
     # The UTC date, so a run on a developer's machine west of Greenwich and
     # the CI run of the same minute agree about which dates have passed.
-    today = parse_date(args.today) if args.today else datetime.datetime.now(datetime.timezone.utc).date()
+    today_arg = args.today or os.environ.get("SWITCH_REGISTRY_TODAY")
+    today = parse_date(today_arg) if today_arg else datetime.datetime.now(datetime.timezone.utc).date()
 
     errors, warnings = [], []
     reg_text = read(os.path.join(root, "switches/registry.yaml"))
@@ -171,7 +231,18 @@ def main():
     reg = load_registry(reg_text)
     policy = reg.get("policy") or {}
     entries = reg.get("switches") or []
-    grace = int(policy.get("expiry_grace_days", 7))
+    # schema: every entry is an object with a non-empty string id; others are
+    # reported here and skipped by every later rule
+    good = []
+    for i, e in enumerate(entries):
+        if not isinstance(e, dict):
+            errors.append("switches[%d]: entry must be an object, got %s" % (i, type(e).__name__))
+            continue
+        if not (isinstance(e.get("id"), str) and e["id"]):
+            errors.append("switches[%d]: id must be a non-empty string" % i)
+        good.append(e)
+    entries = good
+    load_base_ids = load_base(args, root)  # validates --base/--base-registry before any work
     ceiling = policy.get("auto_ceiling", "R4")
     cap = policy.get("release_cap_baseline")
 
@@ -196,7 +267,7 @@ def main():
     registered_nix, registered_settings = set(), set()
     seen_ids = set()
     for e in entries:
-        eid = e.get("id", "<no id>")
+        eid = eid_of(e)
         for f in REQUIRED:
             if f not in e:
                 errors.append("%s: missing required field %r" % (eid, f))
@@ -277,6 +348,7 @@ def main():
     all_values = dict(node_found)
     all_values.update(guest_found)
     off_list = []
+    gf_info = {}  # id -> (grandfather date, days past it) for entries off everywhere on a walk-by date
     for e in entries:
         n, _, c = names_of(e)
         primary, value = None, None
@@ -309,9 +381,12 @@ def main():
             gf = e.get("grandfathered_off_until")
             if gf:
                 try:
+                    gf_info[eid_of(e)] = (parse_date(gf), (today - parse_date(gf)).days)
                     if parse_date(gf) < today:
-                        errors.append("%s: grandfather date %s has passed and %s is still off for every computer; "
-                                      "turn it on at R0 or delete it" % (e.get("id"), gf, primary))
+                        msg = ("%s: grandfather date %s passed (overdue by %d day(s)) and %s is still off "
+                               "for every computer; turn it on at R0 or record retire: delete"
+                               % (eid_of(e), gf, (today - parse_date(gf)).days, primary))
+                        (errors if args.strict_expiry else warnings).append(msg)
                     else:
                         warnings.append("%s: grandfathered off for every computer until %s (walk it)"
                                         % (e.get("id"), gf))
@@ -323,40 +398,47 @@ def main():
                           "Name d@e in the selector, or set grandfathered_off_until, or retire: delete."
                           % (e.get("id"), primary, value))
 
-    # 4. expiry
-    base_ids = None
-    if args.base_registry:
-        t = read(args.base_registry)
-        if t is not None:
-            base_ids = {x.get("id") for x in (load_registry(t).get("switches") or [])}
-    elif args.base:
-        try:
-            t = subprocess.run(["git", "-C", root, "show", "%s:switches/registry.yaml" % args.base],
-                               capture_output=True, text=True, check=True).stdout
-            base_ids = {x.get("id") for x in (load_registry(t).get("switches") or [])}
-        except (subprocess.CalledProcessError, OSError):
-            base_ids = None
-    new_ids = sorted(seen_ids - base_ids) if base_ids is not None else []
-    expired_long = []
+    # 4. expiry: a date alone warns; a change fails. One computation serves the
+    # warnings, the blocking rule, the error text and --overdue.
+    rows = []  # id, due date, days past it, owner, surface, has verdict, which
     for e in entries:
+        dues = []
         exp = e.get("expires")
-        if not exp:
-            continue
-        try:
-            days = (today - parse_date(exp)).days
-        except ValueError:
-            continue
-        if days > 0:
-            msg = "%s: expired %s (%d day(s) ago); retire it, delete it, or extend with a reason" % (e.get("id"), exp, days)
-            if args.strict_expiry:
-                errors.append(msg)
-            else:
-                warnings.append(msg)
-            if days > grace:
-                expired_long.append(e.get("id"))
-    if expired_long and new_ids and not args.strict_expiry:
-        errors.append("expired more than %d days (%s) and this change adds a new switch (%s): "
-                      "to add one, retire one" % (grace, ", ".join(expired_long), ", ".join(new_ids)))
+        if exp:
+            try:
+                dues.append((parse_date(exp), "expires"))
+            except ValueError:
+                pass
+        gi = gf_info.get(eid_of(e))
+        if gi:
+            dues.append((gi[0], "grandfather"))
+        verdict = e.get("retire") == "delete"
+        for d, w in dues:
+            days = (today - d).days
+            if w == "expires" and -14 <= days <= 0:
+                warnings.append("%s: expires in %d day(s), on %s" % (eid_of(e), -days, exp)
+                                if days < 0 else "%s: expires today (%s)" % (eid_of(e), exp))
+            if w == "expires" and days > 0:
+                msg = "%s: expires %s, overdue by %d day(s)%s; retire it, delete it, or extend with a reason" % (
+                    eid_of(e), exp, days, " (verdict: delete)" if verdict else "")
+                (errors if args.strict_expiry else warnings).append(msg)
+        near = [(d, w) for d, w in dues if (today - d).days >= -1]
+        if near:
+            d = min(near)[0]
+            rows.append((eid_of(e), d, (today - d).days, e.get("owner", "-"), e.get("surface", "-"),
+                         verdict, "+".join(sorted({w for dd, w in near}))))
+    if args.overdue:
+        return print_overdue(rows, today)
+    new_ids = []
+    if load_base_ids is not None:
+        new_ids = [eid_of(e) for e in entries if eid_of(e) not in load_base_ids]
+    blocking = [r[0] for r in rows if not r[5]]
+    # The edits that are the fix for a debt (a verdict, an extension, a deletion)
+    # never block themselves (design 7.5): only a new switch is refused.
+    if blocking and new_ids:
+        errors.append("due or overdue with no verdict (%s) and this change adds a new switch (%s): record a verdict "
+                      "(retire: delete), retire or extend those entries first (scripts/check-switch-registry --overdue)"
+                      % (", ".join(blocking), ", ".join(new_ids)))
 
     # 5. cap
     live = [e for e in entries if e.get("life") == "release" and e.get("retire") != "delete"]
@@ -388,6 +470,20 @@ def main():
         print("check-switch-registry: %d failure(s)" % len(errors))
         return 1
     print("check-switch-registry: ok (%d switches, %d warning(s))" % (len(entries), len(warnings)))
+    return 0
+
+
+def print_overdue(rows, today):
+    """The entries the blocking rule counts: due tomorrow, due today or overdue."""
+    def status(days):
+        return "due tomorrow" if days == -1 else "due today" if days == 0 else "overdue by %d" % days
+    rows = sorted(rows, key=lambda r: -r[2])
+    w = max([len(r[0]) for r in rows] + [2])
+    print("%-*s  %-10s  %-14s  %-10s  %-12s  %-7s  %s" % (w, "id", "due", "status", "owner", "surface", "verdict", "which"))
+    for r in rows:
+        print("%-*s  %-10s  %-14s  %-10s  %-12s  %-7s  %s" % (w, r[0], r[1], status(r[2]), r[3], r[4],
+              "delete" if r[5] else "none", r[6]))
+    print("%d due or overdue as of %s, %d without a verdict" % (len(rows), today, sum(1 for r in rows if not r[5])))
     return 0
 
 

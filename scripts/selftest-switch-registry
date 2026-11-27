@@ -84,12 +84,12 @@ def build(root, entries=None, node=NODE, guest=GUEST, store=STORE, **policy):
 fails = 0
 
 
-def expect(name, want, root, *args, grep=None):
+def expect(name, want, root, *args, grep=None, nogrep=None, today="2026-11-01", env=None):
     global fails
-    r = subprocess.run([sys.executable, "-I", LINT, "--root", root, "--today", "2026-11-01", *args],
-                       capture_output=True, text=True)
+    cmd = [sys.executable, "-I", LINT, "--root", root] + ([] if today is None else ["--today", today]) + list(args)
+    r = subprocess.run(cmd, capture_output=True, text=True, env=env)
     out = r.stdout + r.stderr
-    ok = r.returncode == want and (grep is None or grep in out)
+    ok = r.returncode == want and (grep is None or grep in out) and (nogrep is None or nogrep not in out)
     print(("ok:   " if ok else "FAIL: ") + name)
     if not ok:
         fails += 1
@@ -130,12 +130,12 @@ try:
     es = base_entries(); es[0]["target_ring"] = "R5"; es[0]["confirm"] = "human"
     expect("target ring R5 with human confirm passes", 0, fresh("ceil2", entries=es))
 
-    # expiry: today is 2026-11-01, grace 7 days
+    # expiry: today is 2026-11-01
     es = base_entries(); es[3]["expires"] = "2026-10-29"
-    expect("expired within grace warns, passes", 0, fresh("exp1", entries=es), grep="expired")
-    expect("--strict-expiry fails any expiry", 1, fresh("exp1s", entries=es), "--strict-expiry", grep="expired")
+    expect("recently expired warns, passes", 0, fresh("exp1", entries=es), grep="overdue")
+    expect("--strict-expiry fails any expiry", 1, fresh("exp1s", entries=es), "--strict-expiry", grep="overdue")
     es = base_entries(); es[3]["expires"] = "2026-10-01"
-    expect("long expired, no new switch, passes with warning", 0, fresh("exp2", entries=es), grep="expired")
+    expect("long expired, no new switch, passes with warning", 0, fresh("exp2", entries=es), grep="overdue")
     base_path = os.path.join(tmp, "base.json")
     with open(base_path, "w") as f:
         json.dump(doc(base_entries()), f)
@@ -157,7 +157,7 @@ try:
     es[2]["grandfathered_off_until"] = "2026-11-15"
     expect("grandfathered empty selector passes with warning", 0, fresh("off2", node=off, entries=es), grep="grandfathered")
     es[2]["grandfathered_off_until"] = "2026-10-30"
-    expect("grandfather date passed fails", 1, fresh("off3", node=off, entries=es), grep="grandfather")
+    expect("grandfather date passed alone warns, passes", 0, fresh("off3", node=off, entries=es), grep="grandfather")
     offmode = NODE.replace('gatewayModelScheduler = "on"', 'gatewayModelScheduler = "off"')
     es = base_entries(); es[0]["ring"] = "none"
     expect("off-valued let-binding fails", 1, fresh("off4", node=offmode, entries=es), grep="off for every computer")
@@ -168,6 +168,152 @@ try:
 
     expect("cap baseline exceeded fails", 1, fresh("cap", release_cap_baseline=2), grep="cap")
     expect("--report lists rings", 0, fresh("rep"), "--report", grep="ring")
+
+    # the calendar: a date alone never fails a run; a change does.
+    # entry 3 (bar_mode) expires 2026-11-10; the same tree and the same empty diff
+    # pass the day before and the day after.
+    def cal(**kw):
+        es = base_entries(); es[3]["expires"] = "2026-11-10"
+        for k, v in kw.items():
+            es[3][k] = v
+        return es
+    with open(base_path, "w") as f:
+        json.dump(doc(cal()), f)
+    root = fresh("cal", entries=cal())
+    expect("calendar: day before expiry passes", 0, root, "--base-registry", base_path, today="2026-11-09")
+    expect("calendar: day after expiry passes, warns overdue", 0, root, "--base-registry", base_path,
+           today="2026-11-11", grep="overdue by 1 day")
+    expect("calendar: months after expiry, empty diff, passes", 0, root, "--base-registry", base_path,
+           today="2027-03-01", grep="overdue by")
+    expect("calendar: no base given, overdue only warns", 0, root, today="2027-03-01", grep="warning: bar_mode: expires 2026-11-10, overdue")
+    expect("calendar: advance warning within 14 days", 0, root, "--base-registry", base_path,
+           today="2026-10-27", grep="expires in 14 day(s)")
+    expect("calendar: no advance warning at 15 days", 0, root, "--base-registry", base_path,
+           today="2026-10-26", nogrep="expires in")
+    expect("calendar: warning names the date", 0, root, today="2026-11-11", grep="2026-11-10")
+    env = dict(os.environ, SWITCH_REGISTRY_TODAY="2026-11-11")
+    expect("calendar: SWITCH_REGISTRY_TODAY sets today", 0, root, today=None, env=env, grep="overdue by 1 day")
+    # a diff that adds a switch fails while an overdue entry without a verdict exists
+    add = cal() + [entry("brand_new", settings=["alpha.one"])]
+    expect("calendar: new switch while overdue fails", 1, fresh("cal2", entries=add),
+           "--base-registry", base_path, today="2026-11-11", grep="new switch")
+    expect("calendar: new switch before expiry passes", 0, fresh("cal2b", entries=add),
+           "--base-registry", base_path, today="2026-11-08")
+    # editing an entry is never refused for another entry's debt: only a new switch is
+    ed = cal(); ed[2]["note"] = "edited"
+    expect("calendar: editing another entry while overdue passes", 0, fresh("cal3", entries=ed),
+           "--base-registry", base_path, today="2026-11-11")
+    # a verdict clears the block; editing the overdue entry itself is the fix path
+    vd = cal(retire="delete")
+    expect("calendar: verdict on the overdue entry, plus a new switch, passes", 0,
+           fresh("cal4", entries=vd + [entry("brand_new", settings=["alpha.one"])]),
+           "--base-registry", base_path, today="2026-11-11")
+    vd2 = cal(retire="delete"); vd2 = vd2 + [entry("brand_new", settings=["alpha.one"])]
+    expect("calendar: overdue entry with a verdict does not block a new switch", 0, fresh("cal5", entries=vd2),
+           "--base-registry", base_path, today="2026-11-11")
+    ex = cal(expires="2026-12-31")
+    expect("calendar: extending the overdue entry, plus a new switch, passes", 0,
+           fresh("cal6", entries=ex + [entry("brand_new", settings=["alpha.one"])]),
+           "--base-registry", base_path, today="2026-11-11")
+    # a passed grandfather date blocks a change the same way, and only a change
+    es = base_entries(); es[2].update(ring="none", grandfathered_off_until="2026-10-30")
+    gbase = os.path.join(tmp, "gbase.json")
+    with open(gbase, "w") as f:
+        json.dump(doc(es), f)
+    expect("calendar: passed grandfather date, empty diff, passes", 0, fresh("cal7", node=off, entries=es),
+           "--base-registry", gbase, grep="grandfather")
+    expect("calendar: passed grandfather date blocks a new switch", 1,
+           fresh("cal8", node=off, entries=es + [entry("brand_new", settings=["alpha.one"])]),
+           "--base-registry", gbase, grep="new switch")
+    # --overdue prints the table and exits 0
+    expect("--overdue lists the entry, its date and days", 0, root, "--overdue", today="2026-11-11",
+           grep="overdue by 1")
+
+    # 1. --strict-expiry: every overdue entry is an error, grandfather dates included
+    expect("strict: passed grandfather date fails", 1, fresh("s1", node=off, entries=es),
+           "--strict-expiry", grep="grandfather")
+    expect("strict: expires overdue plus new switch fails", 1, fresh("s2", entries=add),
+           "--base-registry", base_path, "--strict-expiry", today="2026-11-11", grep="new switch")
+    # 2. id validation is a schema error, found with no overdue entry anywhere
+    for nm, bad in (("noid", None), ("listid", ["x"]), ("intid", 7), ("emptyid", "")):
+        e0 = entry("tmp", settings=["alpha.one"])
+        del e0["id"]
+        if bad is not None:
+            e0["id"] = bad
+        r = fresh("id_" + nm, entries=base_entries() + [e0])
+        expect("bad id (%s): schema error naming the position" % nm, 1, r, today="2026-11-01",
+               grep="switches[6]: id must be a non-empty string", nogrep="Traceback")
+        expect("bad id (%s): --overdue no traceback" % nm, 0, r, "--overdue", today="2026-11-11",
+               nogrep="Traceback")
+    # 5. non-dict entries are schema errors and skipped by every later rule
+    for nm, bad in (("str", "oops"), ("int", 7), ("list", [1])):
+        r = fresh("nd_" + nm, entries=base_entries() + [bad])
+        expect("non-dict entry (%s): schema error, no traceback" % nm, 1, r, "--base-registry", base_path,
+               grep="switches[6]: entry must be an object", nogrep="Traceback")
+        expect("non-dict entry (%s): --overdue no traceback" % nm, 0, r, "--overdue", nogrep="Traceback")
+    # 3. --overdue is the lint's own set
+    es3 = base_entries(); es3[2]["grandfathered_off_until"] = "2026-10-30"   # foo is on
+    expect("--overdue skips an entry that is on but carries an old grandfather date", 0,
+           fresh("o1", entries=es3), "--overdue", nogrep="foo ")
+    es3 = base_entries(); es3[2].update(ring="none", grandfathered_off_until="2026-10-30", retire="delete")
+    expect("--overdue skips a retire:delete entry with only a grandfather date", 0,
+           fresh("o2", node=off, entries=es3), "--overdue", nogrep="foo ")
+    es3 = base_entries(); es3[2].update(ring="none", grandfathered_off_until="2026-10-30")
+    expect("--overdue lists a passed grandfather date still off", 0, fresh("o3", node=off, entries=es3),
+           "--overdue", grep="grandfather")
+    # 1/4. one blocking rule: from the eve onward (d-2 passes; d-1, d, d+1 refuse)
+    def gfcase(d):
+        g = base_entries(); g[2].update(ring="none", grandfathered_off_until=d)
+        return g + [entry("brand_new", settings=["alpha.one"])]
+    gfb = os.path.join(tmp, "gfb.json")
+    g0 = base_entries(); g0[2].update(ring="none", grandfathered_off_until="2026-11-10")
+    with open(gfb, "w") as f:
+        json.dump(doc(g0), f)
+    for off_by, today, want in ((-2, "2026-11-08", 0), (-1, "2026-11-09", 1), (0, "2026-11-10", 1), (1, "2026-11-11", 1)):
+        expect("block: expires d%+d %s" % (off_by, "refuses" if want else "passes"), want,
+               fresh("blk_e%d" % off_by, entries=add), "--base-registry", base_path, today=today,
+               grep="due or overdue" if want else None)
+        expect("block: grandfather d%+d %s" % (off_by, "refuses" if want else "passes"), want,
+               fresh("blk_g%d" % off_by, node=off, entries=gfcase("2026-11-10")), "--base-registry", gfb,
+               today=today, grep="due or overdue" if want else None)
+    expect("block: the day before warns as expiring, not overdue", 0, fresh("m3", entries=cal()),
+           "--base-registry", base_path, today="2026-11-09", grep="expires in 1 day", nogrep="overdue by")
+    # 3. --overdue lists exactly what blocks, with a status column
+    expect("--overdue: due tomorrow", 0, root, "--overdue", today="2026-11-09", grep="due tomorrow")
+    expect("--overdue: due today", 0, root, "--overdue", today="2026-11-10", grep="due today")
+    expect("--overdue: overdue by N", 0, root, "--overdue", today="2026-11-12", grep="overdue by 2")
+    expect("--overdue: nothing two days out", 0, root, "--overdue", today="2026-11-08", nogrep="bar_mode")
+    # 5. --base-registry edge cases
+    empty = os.path.join(tmp, "empty.yaml")
+    open(empty, "w").close()
+    expect("empty base registry means no switches, no crash", 0, fresh("b1", entries=cal()),
+           "--base-registry", empty, today="2026-11-01", nogrep="Traceback")
+    expect("empty base registry: every switch is new, so overdue blocks", 1, fresh("b2", entries=cal()),
+           "--base-registry", empty, today="2026-11-11", grep="new switch")
+    expect("missing explicit base registry exits 2", 2, fresh("b3"), "--base-registry",
+           os.path.join(tmp, "nope.json"), grep="nope.json")
+    expect("--base and --base-registry together exit 2", 2, fresh("b4"), "--base", "HEAD",
+           "--base-registry", base_path, grep="both")
+    listbase = os.path.join(tmp, "list.json"); open(listbase, "w").write("[1, 2]")
+    badbase = os.path.join(tmp, "bad.json"); open(badbase, "w").write("{not json: [")
+    expect("--base-registry with a list at the top exits 2", 2, fresh("b5"), "--base-registry", listbase,
+           nogrep="Traceback")
+    expect("--base-registry with invalid content exits 2", 2, fresh("b6"), "--base-registry", badbase,
+           nogrep="Traceback")
+    # 6. the real --base <git ref> path, in a throwaway repo
+    gitroot = fresh("gitrepo", entries=cal())
+    def git(*a):
+        subprocess.run(["git", "-C", gitroot, "-c", "user.name=t", "-c", "user.email=t@t", *a],
+                       check=True, capture_output=True)
+    git("init", "-q"); git("add", "-A"); git("commit", "-qm", "base")
+    expect("--base <ref>: unchanged tree passes while overdue", 0, gitroot, "--base", "HEAD", today="2026-11-11")
+    build(gitroot, entries=add)
+    expect("--base <unknown ref>: one warning, not applied, passes", 0, gitroot, "--base", "nosuchref",
+           today="2026-11-11", grep="new-switch rule was not applied", nogrep="Traceback")
+    expect("--base <ref> without a registry at that ref: warns, passes", 0, gitroot, "--base", "HEAD:nothing",
+           today="2026-11-11", grep="not applied")
+    expect("--base <ref>: a new switch while overdue fails", 1, gitroot, "--base", "HEAD",
+           today="2026-11-11", grep="new switch")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
