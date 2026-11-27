@@ -159,3 +159,44 @@ the rarefied core components."
 **The mode.** "part of this vision quest is determining the product
 roadmap. I've been for the last while in a flurry of implementation but the
 key here is to step back into the mindset of creation"
+
+## 2026-11-27, later the same session
+
+**Two vaults, and staging.** "we need two vaults. I mean, choir needs better
+secrets management at the platform level. I never meant to ship product
+like this. Like, I see choir in 'staging' not yet 'production' even though
+the app is live on the App Store."
+
+**A year, not a week.** "On one hand the pace of development is fast. On
+the other hand it is 1 year of automatic computer. The idea of the web
+desktop came to me last thanksgiving. And it took tons of work to make it
+work. Now to make it nice. It's important that I envision where I'll be
+next year, not just next week."
+
+**Next year's clients.** "More apps in media production and live streaming.
+Hardware. An e-ink tablet that runs autoputer os, with on-device models"
+
+**Takes, in a month.** "probably the most important thing is the key
+feature of autoradio that needs focus on in the 1-month timeframe:
+recording and distributing takes."
+
+**Social.** "Making autoradio social takes things to a whole nother level.
+That's the key unlock. It first requires making autoradio work, but
+honestly it's already close. We need to go deeper on on-device models, the
+autoradio desk for paid users, ui / ux improvements, photojournalism and
+podcast clipping and analysis, and then we really do social justice. (We do
+social, justice; we do justice to 'social'; 'social' has become the
+category name for social media networks, graph networked news feeds with
+algorithmic recommendations, often ad supported)"
+
+**Branching and the recommender.** "stories should branch off. Each story,
+including podcasts and user published stories (we half built the op ed
+feature...needs revisiting) branches off into ugc responses, that's one key
+facet of recommendations. But basically we have to build a whole agentic
+recsys. I mean, that's what the ai dj is, and we need the autoradio desk
+version in the choir computer, and also scaling down to on device
+phone-local version"
+
+**Who may publish.** "My business model is only offering voice take
+publishing to paid users. Since voice means some moderation must be done,
+and that's not 0MC"

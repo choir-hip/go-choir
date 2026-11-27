@@ -86,7 +86,9 @@ Each is the owner's, with the words in [inbox.md](inbox.md).
    arbitrary VMs, not only computers.
 7. Mike stays, as a chat client of a Choir computer.
 8. Integrations wait; the rare core parts come first.
-9. Problem records are kept and improved, not scrapped. The docs to
+9. Publishing a voice take is for paid accounts only.
+10. Plan for where the product is in a year, not only next week.
+11. Problem records are kept and improved, not scrapped. The docs to
    consolidate are theory, architecture and planning.
 
 ## The plan
@@ -104,22 +106,33 @@ Each is the owner's, with the words in [inbox.md](inbox.md).
 
 1. **Finish the move to Exact.** Design the on-phone turn and the
    onboarding flow into the voice turn code as it moves.
-2. **Onboarding.** Autoradio introduces itself, interviews the person and
+2. **Takes: recording and distributing them.** The owner's focus for the
+   month, and the paid step: publishing a voice take is for paid accounts
+   only, because voice needs moderation and moderation has a cost. The
+   server side is deployed and proven on the drill account (2026-11-18,
+   read); a recording made by a phone is not proven, and the only
+   moderation built is an operator's removal.
+3. **Onboarding.** Autoradio introduces itself, interviews the person and
    sets up the models for their device and account while it talks.
-3. **The vault, in Go, as a host service.** A VM asks for its own owner's
-   secrets; approval of a write comes from the owner's signed-in session,
-   never from the VM. Token refresh is needed for OAuth sign-ins.
-4. **Node A as a Choir host.** Before it: the backup target moves to a
+4. **Two vaults** (owner, 2026-11-27: "we need two vaults").
+   - *The platform's secrets:* provider keys and host credentials, managed
+     by the owner alone. Design exists (2026-10-22, not ratified). The owner
+     counts the platform as staging, not production, until this is done.
+   - *People's credentials,* ported from Mike to Go as a host service. A VM
+     asks for its own owner's secrets; approval of a write comes from the
+     owner's signed-in session, never from the VM. Token refresh is needed
+     for OAuth sign-ins.
+5. **Node A as a Choir host.** Before it: the backup target moves to a
    third location, Node A's system config moves out of the Mike repository,
    and the two workstations that hold account data are decided.
-5. **Service VMs.** One more kind beside computers and leased leaf VMs:
+6. **Service VMs.** One more kind beside computers and leased leaf VMs:
    long-running, no tape. Builders, landers, transcription, MCP servers.
-6. **Driving a computer from outside:** run a command, read and write
+7. **Driving a computer from outside:** run a command, read and write
    files, snapshot. The command, MCP, Mike and Choir in Choir all need it.
-7. **Landing.** One batched lander that runs the existing `scripts/land`
+8. **Landing.** One batched lander that runs the existing `scripts/land`
    logic on rented compute, with our own host as the exercised backup.
 
-Items 3 to 7 are host-side Go and can run beside items 1 and 2, which are
+Items 4 to 8 are host-side Go and can run beside items 1 to 3, which are
 the phone app. The shared limit is the owner's review attention.
 
 ### Later, unordered
@@ -140,6 +153,14 @@ the phone app. The shared limit is the owner's review attention.
 - A triage of Mike's upstream (362 commits behind as of 2026-10-30,
   measured from stale refs).
 - The organisation computer.
+- Social: every story, podcast and published piece branches into
+  listeners' responses. The half-built op-ed feature is revisited here.
+- An agentic recommender: the Autoradio desk in a paid person's computer,
+  and a smaller version that runs on the phone alone.
+- Moderation of published takes beyond an operator's removal.
+- Deeper use of on-device models.
+- More clients, on a one-year view: media production, live streaming, and
+  hardware (an e-ink tablet running Autoputer with on-device models).
 - Zero-downtime deploys: two hosts for planned moves, three votes for
   automatic failover.
 - The desktop as a host: VMs, large local models, computer use.
@@ -166,7 +187,10 @@ showed the size of the docs problem.
   free offer.
 - [provider-vault-and-model-policy-design-2026-10-22.md](provider-vault-and-model-policy-design-2026-10-22.md):
   a vault for the platform's own provider keys (a proposal, not ratified).
-  Mike's vault is for people's credentials. One vault should serve both.
+  Mike's vault is for people's credentials. They are two vaults (owner,
+  2026-11-27).
+- `reference/AUTORADIO-TAKES.md` and the takes row of
+  `current-architecture.md`: what is built for takes.
 - `design/coding-agent-desk-over-mcp-2026-11-09.md`, with
   `internal/claudedelegate` and `cmd/choir-desk-mcp`: a harness as a desk,
   partly built.
