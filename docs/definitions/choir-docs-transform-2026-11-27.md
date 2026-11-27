@@ -11,7 +11,7 @@ start:
   captured_at: 2026-11-27T08:56Z
   source:
     canonical_ref: origin/main 0a213add2
-    deploy_identity: staging on 774e87d2f (x-choir-build-commit of https://choir.news)
+    deploy_identity: staging on c29dca2d2
   what_is_true_now:
   - 'Docs (measured 2026-11-26): 1,641 Markdown files and 4.4 million words. In docs/design, docs/definitions and the top level, a skim on 2026-11-27 sorted 281 files: 51 governing, 126 built, 30 superseded, 27 undecided, 47 unsorted. Twelve designs that carry an owner ruling are linked from none of CLAUDE.md, the system map, current-architecture.md, the roadmap or ACTIVE.md. The per-file list is not in the repository.'
   - 'Landing (measured 2026-11-27 over 21 runs that deployed): push to the CI gate 6.0 minutes at the median, the deploy 6.8, push to staging serving 12.9 (8.1 to 24.9). scripts/land records no timings; three failed runs show 10 to 22 minutes before the push. scripts/land-queue makes lane N+1 wait until lane N is green and served, which the deploy does not need: its job lets a newer commit supersede a queued one.'
@@ -254,11 +254,11 @@ now:
     evidence_ref: the owner's words of 2026-11-27 in docs/inbox.md
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: 'T0 to T7 are on main. A scripts-only landing now takes 90 s before its push (gates 72 s, c29dca2d2); the first measured one took 308 s. Staging is on 4ac73d992: every deploy since is refused because Node B has 42 GiB free against a 60 GiB floor.'
+    believed_state: 'T0 to T7 are on main and deployed (staging serves c29dca2d2). A scripts-only landing takes 90 s before its push (gates 72 s); the first measured one took 308 s. Node B refused three deploys at 42 GiB free and then accepted one at 104 GiB free, with nothing deleted by this session: vm-state fell from 155 to 97 GiB on its own.'
     main_uncertainty: whether the batched queue behaves on the real gh and build machine as it does against its fakes
     next_observation: the first successful deploy after the disk is freed, then the first real batch of two lanes (C257)
-  blocker_or_risk: 'deploys are refused until the owner decides what may be freed on Node B, and every CI run on main ends failed at the deploy step, so the queue will not push a batch. Lesson of the night, three times over (the docs-only gate shortcut, automatic lane removal, the queue resetting a borrowed tree): a convenience that skips a check or destroys something on an inference did not survive review, and the plain version did. Follow-ups: the doccheck CI job; three readers of the old ledger.'
-  next_action: the owner's disk decision; then one batch through scripts/land-queue to settle C257; meanwhile the closing pass from docs/evidence/mission-closing-verdicts-2026-11-27.md, in documents only
+  blocker_or_risk: 'Node B free space swings by tens of GiB within hours and crosses the 60 GiB deploy floor; the cause of the swing is not known and the owner has not ruled on it. Lesson of the night, three times over (the docs-only gate shortcut, automatic lane removal, the queue resetting a borrowed tree): a convenience that skips a check or destroys something on an inference did not survive review, and the plain version did. Follow-ups: the doccheck CI job; three readers of the old ledger.'
+  next_action: one batch of two lanes through scripts/land-queue to settle C257; then the closing pass from docs/evidence/mission-closing-verdicts-2026-11-27.md, in documents only until the owner rules on the verdicts
 receipts:
 - id: T0
   boundary: define

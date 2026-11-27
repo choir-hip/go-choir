@@ -69,3 +69,14 @@ safety floor, and both are the owner's to decide.
 
 Which files inside the 97 GiB tape directory and the 119 GiB image are live
 was not read. The growth rate per day was not measured, only two points.
+
+## Later the same day (13:20Z)
+
+The deploy of `c29dca2d2` passed the preflight with 106 GiB free and staging
+serves it (CI run 46003954493). Nothing was deleted by this session and the
+owner had not answered. A second read found `/` at 365 GiB used, 104 GiB
+free: `vm-state` fell from 155 to 97 GiB while `tape-seg` (120), `sha256`
+(54) and `capture-bodies` (46) did not move. So about 58 GiB of a computer's
+data image came and went within two hours. The deploys are back, the cause
+of the swing is not known, and the options above still stand: the floor will
+be crossed again when the image grows back.
