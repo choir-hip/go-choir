@@ -34,7 +34,7 @@ of the code, not an observed failure.
 
 ## Done
 
-Item 1 (2026-11-27, change `sign-out-closes-the-microphone-before-the-key-goes`): sign-out now shuts `TurnGate`, closes hands-free and the microphone session, and cancels the turn in flight before the wait for shared code and before the key is deleted; `SignOutOrderTests` observe the order. Not proved on a device. Items 2 to 4 are untouched.
+Item 1 (2026-11-27, change `sign-out-closes-the-microphone-before-the-key-goes`, two rounds): sign-out shuts a gate with one epoch as its first statement and closes the voice (microphone, turn, speech, the take's give-back) before the wait for shared code and before the key is deleted; every turn entry and the one native key read check the epoch. `SignOutOrderTests` observe the order. Left open, found on the way and outside this change: when a sign-in replaces the key during sign-out, native now keeps the new key and skips the wipe but answers shared code `done: false` without `superseded` (ModelsEntry.swift:61), and account.ts then drops the old key's pending revoke (account.ts, the `!superseded` line), so the old key may never be revoked; and the account wipe itself has no guard against a new account's stores written while it runs (it bumps the generation first and then deletes by store). Not proved on a device. Items 2 to 4 are untouched.
 
 ## Evidence
 

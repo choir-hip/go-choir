@@ -181,11 +181,12 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     }
 
     /// The policy or the voice switch changed: move to the state it now asks for.
-    public func reapply() async {
+    @discardableResult
+    public func reapply() async -> Bool {
         await mutex.lock(); defer { mutex.unlock() }
         lock.lock(); let asked = _asked, cur = _current; lock.unlock()
-        guard cur != nil else { return }
-        try? await switchTo(target(for: asked), preferBuiltInMic: false, reason: "policy or voice changed")
+        guard cur != nil else { return true }
+        do { try await switchTo(target(for: asked), preferBuiltInMic: false, reason: "policy or voice changed"); return true } catch { return false }
     }
 
     /// Before anything plays (the bar's Play, the lock screen's, a podcast, a read-aloud): the session is claimed and active and the

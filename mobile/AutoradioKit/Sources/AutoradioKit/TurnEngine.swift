@@ -183,6 +183,8 @@ public actor TurnEngine {
         var speakerSamples: [Float] = []
         /// The account generation when this turn was committed: the later adaptation of the learned voice carries it, so a sign-out in between refuses the write.
         var generation = AccountWipe.generation
+        /// The sign-out epoch this turn began under (set by its entry before it first waited): a turn whose epoch moved sends and says nothing more.
+        var epoch = TurnGate.shared.epoch
         init(id: String, config: LabConfiguration, transcriber: Transcriber, yield: YieldPolicy, session: TranscriptionSession, firstEventIndex: Int) {
             self.id = id; self.config = config; self.transcriber = transcriber; self.yield = yield; self.session = session; self.firstEventIndex = firstEventIndex
         }
@@ -219,7 +221,8 @@ public actor TurnEngine {
     @discardableResult
     public func typedTurn(_ text: String, front: FrontPage? = nil) async -> Bool {
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !words.isEmpty, TurnGate.shared.allowed else { return false }      // no key (signed out, or signing out): no turn
+        let epoch = TurnGate.shared.epoch
+        guard !words.isEmpty, TurnGate.shared.admits(epoch) else { return false }      // no key (signed out, or signing out): no turn (a screen's hold is not a reason: typing works during the microphone check)
         let now = env.log.clock.now
         // A question still being answered (even one whose pipeline has not yet left `ended`) is over: two questions in quick succession
         // must not run two pipelines at once.
@@ -231,11 +234,13 @@ public actor TurnEngine {
         guard turn == nil else { return false }
         let cfg = config
         let cut = await env.playback.spoken()
+        guard TurnGate.shared.admits(epoch) else { return false }      // sign-out began while this waited
         do {
             let transcriber = try env.registry.make(.transcriber, as: Transcriber.self, cfg)
             let yield = try env.registry.make(.yieldPolicy, as: YieldPolicy.self, cfg)
             let t = Turn(id: "turn-" + UUID().uuidString.prefix(8).lowercased(), config: cfg, transcriber: transcriber, yield: yield,
                          session: EmptyTranscription(), firstEventIndex: env.log.count)
+            t.epoch = epoch
             t.cut = cut; t.addressed = true; t.addressedAt = now; t.front = front
             HandsFreeSwitch.shared.readerSpoke()          // a typed question is the reader's turn too
             turn = t
@@ -289,13 +294,15 @@ public actor TurnEngine {
         else { await bounds?.reset(); setPhase(.playing) }
     }
 
-    /// Sign-out, before the key goes: hands-free off (a half-heard turn is dropped), the turn sent is cancelled with everything it started, and the voice is cut. Nothing is sent or said after this returns.
+    /// Sign-out, before the key goes. First, within one actor turn and before any await, everything that could start or go on is shut: hands-free off (frames are ignored), the enrolment tap gone, the turn sent cancelled with everything it started, the half-heard turn
+    /// and the button hold dropped; the sign-out epoch (TurnGate) already makes every re-entrant entry return at once. Then the awaits: the listening state reset and the voice cut. Nothing is sent or said after this returns.
     public func endForSignOut() async {
-        await handsFreeSet(false)
-        if pipeline != nil || phase == .acknowledging || phase == .holding || phase == .revised { await interruptPipeline() }
-        if let id = hf.answerTurnID { await hfAnswerEnded(turnID: id) }
+        hf.enabled = false; enrolmentTap = nil; buttonDownAt = nil
+        hfEndSession(cancel: true)
         if let t = turn { t.session.cancel(); t.partialTask?.cancel(); turn = nil }
-        buttonDownAt = nil
+        await interruptPipeline()
+        await hfDropTurn(requireQuiet: false)
+        if let id = hf.answerTurnID { await hfAnswerEnded(turnID: id) }
         await env.playback.stopVoice()
     }
 
@@ -403,6 +410,7 @@ public actor TurnEngine {
     // MARK: Turn lifecycle
 
     func beginTurn(addressed: Bool, now: Double) async {
+        let epoch = TurnGate.shared.epoch
         let id = "turn-" + UUID().uuidString.prefix(8).lowercased()
         let cfg = config
         // First, before anything else takes time or yields the programme: what was being said, and how far.
@@ -419,6 +427,8 @@ public actor TurnEngine {
                 session = EmptyTranscription()
             }
             let t = Turn(id: id, config: cfg, transcriber: transcriber, yield: yield, session: session, firstEventIndex: env.log.count)
+            guard TurnGate.shared.admits(epoch) else { session.cancel(); return }      // sign-out began while the transcriber started
+            t.epoch = epoch
             for f in preroll { session.append(f) }
             preroll = []
             t.partialTask = Task { [log = env.log] in for await p in session.partials { log.emit(.partialTranscript(p)) } }
@@ -452,6 +462,7 @@ public actor TurnEngine {
 
     /// A candidate that counted becomes ended, then the pipeline.
     func runTurn(_ t: Turn, transcript: String) async {
+        guard TurnGate.shared.admits(t.epoch) else { t.session.cancel(); t.partialTask?.cancel(); turn = nil; hf.answerTurnID = nil; setPhase(.playing); return }      // the last point before anything leaves the phone
         if !t.ended { t.ended = true; setPhase(.ended); env.log.emit(.turnEnded) }
         if let a = addressing { _ = await a.decide(.turnFinished, now: env.log.clock.now) }
         let endedAt = env.log.clock.now
@@ -535,6 +546,7 @@ public actor TurnEngine {
     private func runPipelineBody(_ t: Turn, transcript: String, endedAt: Double, kids: TaskBag) async {
         let log = env.log
         let cfg = t.config
+        guard TurnGate.shared.admits(t.epoch) else { return }
         let pos = await env.playback.position()
         let front = t.front ?? env.frontPage()
         setPhase(.acknowledging)
@@ -591,7 +603,7 @@ public actor TurnEngine {
                     }
                     do {
                         for try await e in sd.speech(turnReq, heard: heard) {
-                            if Task.isCancelled { break }
+                            if Task.isCancelled || !TurnGate.shared.admits(t.epoch) { break }
                             switch e {
                             case .sentence(_, let text):
                                 await deskSpeaks()
@@ -641,7 +653,7 @@ public actor TurnEngine {
                         var firstSeen = false
                         print("AUTORADIO turn desk=\(type(of: desk).stageID) asked chars=\(transcript.count)")
                         for try await r in desk.submit(baseReq, heard: heard) {
-                            if Task.isCancelled { break }       // an interrupted turn's revision is not applied
+                            if Task.isCancelled || !TurnGate.shared.admits(t.epoch) { break }       // an interrupted turn's revision is not applied
                             if !firstSeen { firstSeen = true; log.emit(.deskFirstToken(msSinceTurnEnd: (log.clock.now - endedAt) * 1000)) }
                             await self.onRevision(r, flag: revisionSeen, endedAt: endedAt, relay: { cutLocal.set(); relayTask?.cancel(); holder?.cancel() })   // real desk speech is ready: the local stream stops
                         }

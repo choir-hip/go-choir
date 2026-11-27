@@ -300,6 +300,7 @@ extension TurnEngine {
     /// The policy says the turn is over: the session's final text becomes the turn.
     func hfCommit() async {
         let committedGeneration = AccountWipe.generation          // captured when the commit begins, before any await (the adaptation of the voice carries it)
+        let epoch = TurnGate.shared.epoch                         // the same moment: a sign-out that begins while this waits for the transcript drops the turn
         guard let session = hf.session else { await hfFeed(.turnDiscarded); return }
         // No key, no turn: signed out the radio only listens. A switch left on at sign-out, or turned on by some other path, still sends nothing (TurnGate).
         if !TurnGate.shared.allowed { hfEndSession(cancel: true); hf.cut = nil; await setLevelTo(.play, reason: .resume); await hfFeed(.turnDiscarded); return }
@@ -307,6 +308,7 @@ extension TurnEngine {
         let transcriber = hf.transcriber
         hfEndSession(cancel: false)
         let text = ((try? await env.log.timed("transcribe") { try await session.finish() }) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard TurnGate.shared.admits(epoch) else { hf.cut = nil; await setLevelTo(.play, reason: .resume); await hfFeed(.turnDiscarded); return }
         env.log.emit(.finalTranscript(text))
         print("AUTORADIO voice heard chars=\(text.count)")
         guard !text.isEmpty, let transcriber, let yield = try? env.registry.make(.yieldPolicy, as: YieldPolicy.self, config) else {
@@ -326,7 +328,7 @@ extension TurnEngine {
         let id = "turn-" + UUID().uuidString.prefix(8).lowercased()
         let t = Turn(id: id, config: config, transcriber: transcriber, yield: yield, session: session, firstEventIndex: env.log.count)
         t.speakerSamples = samples
-        t.generation = committedGeneration
+        t.generation = committedGeneration; t.epoch = epoch
         t.cut = hf.cut
         hf.cut = nil
         t.addressed = true; t.speechSeen = true

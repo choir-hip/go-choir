@@ -350,6 +350,7 @@ public final class ChoirClient: @unchecked Sendable {
         r.setValue(accept, forHTTPHeaderField: "Accept")
         if body != nil { r.setValue(contentType, forHTTPHeaderField: "Content-Type"); r.httpBody = body }
         if authenticated {
+            if TurnGate.shared.signedOutShut { throw ChoirError.notSignedIn }      // the one place a native request reads the key: none leaves while the account signs out (shared code's own post uses the shared client)
             guard let key = keys.get(KeyAccount.apiKey) else { throw ChoirError.notSignedIn }
             r.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
             if !path.hasPrefix("/auth/") && path != Self.statusPath {

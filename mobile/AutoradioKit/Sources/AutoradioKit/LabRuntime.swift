@@ -324,15 +324,27 @@ public final class LabRuntime: @unchecked Sendable {
         while state() == .pending, handsFreeIsOn, waited < 40 { if waited == 0 { print("AUTORADIO voice mic still trying") }; try? await Task.sleep(nanoseconds: micPollNanos); waited += 1 }
         if handsFreeIsOn, let say = MicLog.finalError(state(), rate: Int(audio.micTapRate)) { log.emit(.error(stage: "listen", message: say)) }
     }
-    /// Sign-out, before the key goes: the switch off (also a screen's own turn-on), the engine's turn cancelled, and the session moved off the microphone before this returns (the switch's own move is a Task nobody waits for).
-    public func closeVoiceForSignOut() async {
-        TurnGate.shared.closeForSignOut()                        // first: from here no turn starts (hands-free commit, typed ask), until a new sign-in completes
-        await MainActor.run { TakeSession.live?.discard() }      // before the session moves: a take in hand holds the microphone open, and it is the old account's
+    /// Sign-out, before the key goes (the gate is already shut: ChoirApp.signOut's first statement). The switch off and the engine's turn and listening ended, all synchronously; then the session moved off the microphone, bounded:
+    /// a move that fails or does not answer in `seconds` is not waited for, and the microphone is closed the direct way (`stop`: the engine's input and the claim go) before the wait for shared code begins.
+    public func closeVoiceForSignOut(seconds: Double = 2) async {
         overrideBox.write { $0 = nil }
-        HandsFreeSwitch.shared.set(false)
-        await engine.endForSignOut()
-        await coordinator.reapply()
+        await MainActor.run { TakeSession.live?.discard() }      // a take in hand holds the microphone open and is the old account's (its give-back cannot turn hands-free on: HandsFreeSwitch.set refuses)
+        HandsFreeSwitch.shared.set(false)                        // its own session move is a Task nobody waits for; the awaited one is below
+        let ended = Locked<Bool>(false)
+        let moved: Bool = await withCheckedContinuation { c in
+            let once: @Sendable (Bool) -> Void = { ok in if ended.write({ let first = !$0; $0 = true; return first }) { c.resume(returning: ok) } }      // the first answer wins
+            Task { [engine, coordinator] in await engine.endForSignOut(); once(await coordinator.reapply()) }
+            Task { try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9)); once(false) }
+        }
+        if !moved { stop() }
         refresh()
+    }
+    /// Sign-out's key step: it deletes the key it began with and nothing else (a new sign-in that landed meanwhile is kept, and so are its stores), then the gate's own sequence is over.
+    public func endSignOut(deleteKey: () async -> Void) async {
+        defer { TurnGate.shared.finishSignOut() }
+        if TurnGate.shared.keyReplaced { log.emit(.note("sign-out: a new sign-in replaced the key meanwhile; it is kept")); return }
+        await deleteKey()
+        if TurnGate.shared.signedOutShut { log.emit(.note("sign-out: the key could not be deleted; turns stay refused until sign-out is tried again")) }
     }
     /// The stored state again, after a screen's own turn-on.
     /// Voice enrolment listens through the engine's microphone without the engine looking for turns (TurnEngine.enrolmentTap).

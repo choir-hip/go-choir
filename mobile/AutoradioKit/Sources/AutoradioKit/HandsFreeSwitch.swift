@@ -39,6 +39,7 @@ public final class HandsFreeSwitch: @unchecked Sendable {
     public var isOn: Bool { lock.lock(); defer { lock.unlock() }; return on }
     /// The Voice control: the listener's explicit choice, the only thing that turns it on. Turning it on starts the quiet time.
     public func set(_ value: Bool) {
+        if value, !TurnGate.shared.accountOpen { return }      // the one place every path to "on" passes (a take's give-back too): signed out or signing out, the microphone is never turned on
         lock.lock(); on = value; if value { lastTurn = now() }; lock.unlock()
         onChange?(); onVoiceChange?()
     }

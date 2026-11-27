@@ -44,7 +44,8 @@ public final class ChoirApp: @unchecked Sendable {
     public let signIn: ChoirSignIn
     private let lock = NSLock()
     private var message = ""
-    private var loading = false; private var signOutTask: Task<Void, Never>?
+    private var loading = false
+    private var signOutTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
     public var onChange: (@Sendable () -> Void)?
     nonisolated(unsafe) var continuity: PlaybackContinuity?
@@ -206,21 +207,19 @@ public final class ChoirApp: @unchecked Sendable {
         }
     }
 
-    /// Sign-out, in this order: the gate shuts and the voice closes (microphone, turn, speech); playback stops; the run sheet gets up to five seconds to post its pending ops with the old key still held (`RadioBridge.waitSignedOut`);
-    /// what is not answered is dropped, never sent under a later account; then the key goes and the wipe runs; the server revoke is shared code's. A kill leaves: before the key, signed in with the microphone off (hands-free is never kept across a launch); after it, signed out and shared code's marker finishes the wipe.
+    /// Sign-out, in this order: the gate shuts at once (synchronously, before any Task); the voice closes (microphone, turn, speech); playback stops; the run sheet gets up to five seconds to post with the old key still held (`waitSignedOut`); what is not answered is dropped;
+    /// then the key it began with goes (a newer one is kept) and the wipe runs; the server revoke is shared code's. A kill leaves: before the key, signed in with the microphone off (never kept across a launch); after it, signed out and shared code's marker finishes the wipe.
     public func signOut() async {
+        TurnGate.shared.closeForSignOut()
         lock.lock(); let t = signOutTask ?? Task { await self.signOutOnce(); self.lock.lock(); self.signOutTask = nil; self.lock.unlock() }; signOutTask = t; lock.unlock(); await t.value      // a second call joins the first: its `stopAll` would reset the first's wait
     }
     private func signOutOnce() async {
-        await runtime.closeVoiceForSignOut()                     // first, before the wait and the key: the gate shuts, the microphone closes, the turn is cancelled; the old key is still held for the post below
+        await runtime.closeVoiceForSignOut()                     // first, before the wait and the key: the microphone closes, the turn is cancelled; the old key is still held for the post below
         lock.lock(); loading = false; lock.unlock(); runtime.player.pause(reason: "sign out")
-        runtime.player.clearQueue()
-        runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
-        await MainActor.run { Deck.shared.engine?.stopSpoken(); Deck.shared.engine?.stopRemote() }
-        RadioBridge.shared.send("stopAll")                      // shared code's run sheet leaves the air (`left`) and posts, then the account wipe runs
+        runtime.player.clearQueue(); runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
+        await MainActor.run { Deck.shared.engine?.stopSpoken(); Deck.shared.engine?.stopRemote() }; RadioBridge.shared.send("stopAll")                      // shared code's run sheet leaves the air (`left`) and posts, then the account wipe runs
         await RadioBridge.shared.waitSignedOut(seconds: 5)      // until shared code says it is done (its own wait for the route is 3 s), with the old key still held
-        await signIn.signOut()
-        if !signIn.signedIn { TurnGate.shared.keyDeleted() }    // only once the key is truly gone: a key present after this is a new sign-in's and opens the gate
+        await runtime.endSignOut { await signIn.signOut() }     // last: the key goes and the wipe runs, unless a new sign-in replaced the key; the gate then stays shut only for the key that left
         lock.lock(); message = ""; lock.unlock(); onChange?()
     }
 
