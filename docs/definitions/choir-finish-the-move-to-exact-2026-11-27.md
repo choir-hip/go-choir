@@ -141,7 +141,7 @@ stations:
   class: red
   review: two seats
   depends_on: [E1, E3]
-  carrier: 'E6.3 (the order of sign-out) landed as 4f5e66020, CI run 46055581016, staging serves it; accepted by two seats on the fourth review, after the assessment in docs/evidence/sign-out-gate-three-rounds-2026-11-27.md; not run on a device. E6.1, E6.2 and E6.4 are next; E6.5 to E6.7 wait on D6'
+  carrier: 'E6.3 (the order of sign-out) landed as 4f5e66020, CI run 46055581016, staging serves it; accepted by two seats on the fourth review, after the assessment in docs/evidence/sign-out-gate-three-rounds-2026-11-27.md; not run on a device. E6.4''s gate (scripts/check-native-stores, every native persistence site named with its sign-out ruling) landed as dfe978cb7, CI run 46059825133; its inventory is docs/evidence/native-stores-inventory-2026-11-27.md. E6.2 (one native reader of signed in) is built and parked on origin/lane/one-signed-in-reader 748e6a1ba: one seat accepted and one sent it back because seven of its Swift files compile only in the app build, which has not run. E6.1 waits on D7; E6.5 to E6.7 wait on D6'
   status: working
 - id: E7
   name: a turn with no account
@@ -219,9 +219,9 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: E6.3 (the order of sign-out, red) landed as 4f5e66020; E6.1 came to nothing without D7; E6.4's inventory test and E6.2 are next; E1 waits on the build tree
-  source_ref: origin/main 4f5e66020
-  deploy_identity: staging on 4f5e66020
+  slice: E6.3 and E6.4's gate are on main; E6.2 is parked until an app build can compile it; E1 and every app build wait on the build tree (D5)
+  source_ref: origin/main dfe978cb7
+  deploy_identity: staging on dfe978cb7
   candidate:
     id: none
     state: none
@@ -249,8 +249,8 @@ now:
     believed_state: 'three slices of E5 are on main and deployed: 3,375 lines became 3,127. A builder who read Conversation, SavedAnswerHolder, EditionSetup and Takes found them to be the voice turn''s own state, written while a turn runs, with their page logic already in shared code; they are not on the voice list, which is the owner''s to change (D2). Counting those, RadioProgramme''s speech blocking and what stays of BarState as voice, the non-voice code that can still move without the red stations is small; most of the rest is ChoirClient, ChoirApp and AccountWipe (E6). Nothing has run on a device and the pin has not moved.'
     main_uncertainty: 'whether the owner counts the voice turn''s state as voice (it decides whether the gate can reach zero without rewriting the turn), and whether the build tree may move'
     next_observation: 'the contract build and bun test on the new pin, once the build tree may move'
-  blocker_or_risk: 'the pin move can be verified only by moving the one Exact checkout, which lives in the build tree (lane qa-mac). That tree holds another session''s uncommitted Android work, 38 paths, among them its own edit of patch 0003. I have not moved it. The pin does not go to main unverified, because every lane checks its pin against the build tree.'
-  next_action: 'E6.4''s test and E6.2, which do not wait on the owner; a device check of sign-out while listening, answering and recording a take is owed; the sentence follow is picked up from the parked lane by the approach its record names'
+  blocker_or_risk: 'No app build has run since the build tree was last used: five Swift files under mobile/exact-package/apple were changed on main on 2026-11-27 (6 lines added, 62 deleted, two files removed) and have been compiled by nothing, because the package tests do not build them. They were read by reviewers, not by a compiler. Every further native slice adds to this until the build tree may move (D5). the pin move can be verified only by moving the one Exact checkout, which lives in the build tree (lane qa-mac). That tree holds another session''s uncommitted Android work, 38 paths, among them its own edit of patch 0003. I have not moved it. The pin does not go to main unverified, because every lane checks its pin against the build tree.'
+  next_action: 'an app build as soon as the build tree may move (it compiles today''s app-side Swift, verifies the pin move and unparks E6.2); a device check of sign-out while listening, answering and recording a take is owed; the sentence follow is picked up from the parked lane by the approach its record names'
 receipts: []
 ---
 
