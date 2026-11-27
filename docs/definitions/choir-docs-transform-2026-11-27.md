@@ -170,7 +170,7 @@ stations:
   class: green
   review: one seat
   depends_on: [T6]
-  carrier: f1e30b16b (a first line on the 126: 34 built, 65 built in part, 17 superseded, 10 undecided) and the next commit (17 built facts added to current-architecture.md); the vault, storage and SwiftUI-era groups still have no governing member chosen
+  carrier: 'f1e30b16b (a first line on the 126 built-triaged documents; 34 built, 65 built in part, 17 superseded, 10 undecided) and 77e587208 (17 built facts added to current-architecture.md); the vault, storage and SwiftUI-era groups still have no governing member chosen'
   status: working
 - id: T11
   name: checks named for what they protect
