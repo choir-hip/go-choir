@@ -5,16 +5,183 @@
 # Prints "ALL GATES PASS" and exits 0, or names each failing gate and exits 1.
 # It never adds or edits a commit trailer: a missing reviewer trailer is
 # reported by check-guest-security-epoch and the landing stops there.
+#
+#   scripts/gates               every check
+#   GATES_JOBS=N                checks run N at a time (default: CPUs, at most 8; 1 = one after
+#                               another, in file order). Each check's output is captured to its
+#                               own file and printed, in file order, only for a failure (the
+#                               last 8 lines; GATES_VERBOSE=1 prints every check whole).
+#
+# Every check is a `run` line. The line before it may be `gate_tag <tag>...`:
+#   serial  not run beside the others: it shares a fixed temp file or evaluates the nix
+#           flake; serial checks run one at a time, after every other check has finished
+# At the end the ten slowest checks are printed and one "gates" line is appended to the
+# land timing log (the land-timing helper beside this file). Timing never changes a verdict.
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 2
 base=${GATES_BASE:-origin/main}
 f=0
-hr_report=$(mktemp "${TMPDIR:-/tmp}/gates-heresy.XXXXXX")
-trap 'rm -f "$hr_report"' EXIT
-run() {
-  local out
-  out=$("$@" 2>&1) || { echo "FAIL: $*"; echo "$out" | tail -8; f=1; }
+# a sourced run (the runner's selftest) passes no arguments here
+case "${1:-}" in
+  "") ;;
+  *) echo "usage: scripts/gates" >&2; exit 2 ;;
+esac
+jobs=${GATES_JOBS:-}
+case "$jobs" in ''|*[!0-9]*|0) jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+  case "$jobs" in ''|*[!0-9]*|0) jobs=4 ;; esac
+  [ "$jobs" -le 8 ] || jobs=8 ;;
+esac
+gd=$(mktemp -d "${TMPDIR:-/tmp}/gates-run.XXXXXX") || { echo "gates: cannot make a temp directory under ${TMPDIR:-/tmp}" >&2; exit 2; }
+hr_report=$(mktemp "${TMPDIR:-/tmp}/gates-heresy.XXXXXX") || { rm -rf "$gd"; echo "gates: cannot make a temp file under ${TMPDIR:-/tmp}" >&2; exit 2; }
+stall=${GATES_STALL:-1800}
+case "$stall" in ''|*[!0-9]*) stall=1800 ;; esac
+pids=(); pidx=()
+gates_cleanup() { rm -rf "$gd" "$hr_report"; }
+# bash's own job table: gates_live lists the pids of jobs that are running or STOPPED (a pid that
+# has exited is never signalled). gates_kill_all: CONT (so a stopped job can die), TERM, then KILL
+# after 5 s.
+gates_live() { { jobs -pr; jobs -ps; } 2>/dev/null; }
+gates_kill_all() {
+  local p n=0
+  for p in $(gates_live); do kill -CONT "$p" 2>/dev/null; kill -TERM "$p" 2>/dev/null; done
+  while [ "$n" -lt 50 ] && [ -n "$(gates_live)" ]; do sleep 0.1; n=$((n+1)); done
+  for p in $(gates_live); do kill -KILL "$p" 2>/dev/null; done
 }
+gates_abort() { gates_kill_all; gates_cleanup; exit 130; }
+trap gates_cleanup EXIT
+trap gates_abort INT TERM
+# Timing helper: the file beside this one (also in a staged copy); without it timing is a no-op.
+gates_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+# shellcheck disable=SC1091
+[ -f "$gates_dir/land-timing.sh" ] && { . "$gates_dir/land-timing.sh" 2>/dev/null || true; }
+command -v lt_init >/dev/null 2>&1 || { lt_init() { :; }; lt_add() { :; }; lt_finish() { :; }; lt_clean() { printf '%s' "$1"; }; lt_set_head() { :; }; }
+gnow() { perl -MTime::HiRes=time -e 'printf "%.2f\n", time' 2>/dev/null || date +%s; }
+names=(); display=(); ser_idx=(); ser_cmd=()
+next_tags=" "
+gate_tag() { next_tags="$next_tags$* "; }  # appends: two gate_tag lines before one run both apply
+# gates_exec <index> <command...>: run one check, its output and status into $gd. It returns the check's status.
+gates_exec() {
+  local i=$1 t0 t1 rc; shift
+  t0=$(gnow)
+  "$@" >"$gd/$i.out" 2>&1; rc=$?
+  t1=$(gnow)
+  echo "$t0 $t1" >"$gd/$i.t"
+  echo "$rc" >"$gd/$i.rc"
+  return "$rc"
+}
+# Progress guard: if the number of running jobs has not changed for $stall seconds, name the
+# running checks, stop them and end the run non-zero (a job killed from outside is not running,
+# so it never blocks this; a job that hangs does, and is named).
+gs_prev=-1; gs_last=$(date +%s)
+gates_count() { local l; l=$(gates_live); if [ -z "$l" ]; then echo 0; else printf '%s\n' "$l" | wc -l | tr -d ' '; fi; }
+gates_progress() { # <live count>: the guard covers every phase, the serial checks and GATES_JOBS=1 too
+  local n=$1 now p k
+  now=$(date +%s)
+  if [ "$n" != "$gs_prev" ]; then gs_prev=$n; gs_last=$now; return 0; fi
+  [ $((now - gs_last)) -ge "$stall" ] || return 0
+  echo "gates: stalled: no check finished for ${stall}s (GATES_STALL); still running or stopped:"
+  for p in $(gates_live); do
+    k=0
+    while [ "$k" -lt "${#pids[@]}" ]; do
+      [ "${pids[$k]}" = "$p" ] && echo "  ${display[${pidx[$k]}]}"
+      k=$((k+1))
+    done
+  done
+  gates_kill_all
+  echo "GATES FAILED"; exit 1
+}
+gates_throttle() { # wait until fewer than $jobs jobs are running or stopped
+  local n
+  while :; do
+    n=$(gates_count)
+    [ "$n" -lt "$jobs" ] && return 0
+    gates_progress "$n"; sleep 0.1
+  done
+}
+gates_drain() { # wait until no job is running or stopped
+  local n
+  while :; do
+    n=$(gates_count)
+    [ "$n" -eq 0 ] && return 0
+    gates_progress "$n"; sleep 0.1
+  done
+}
+# gates_launch <index> <command...>: every check runs as a background job, with stdin from
+# /dev/null, so the guard sees it and a check that reads stdin gets EOF.
+gates_launch() {
+  local i=$1; shift
+  gates_exec "$i" "$@" </dev/null &
+  pidx[${#pids[@]}]=$i
+  pids[${#pids[@]}]=$!
+}
+run() {
+  local tags=$next_tags i
+  next_tags=" "
+  i=${#names[@]}
+  names[$i]=$(printf '%s' "$*" | tr '\t\r\n|' '    ' | cut -c1-70)
+  display[$i]="$*"
+  case "$tags" in
+    *" serial "*) if [ "$jobs" -gt 1 ]; then ser_idx[${#ser_idx[@]}]=$i; ser_cmd[${#ser_cmd[@]}]=$(printf '%q ' "$@"); return 0; fi ;;
+  esac
+  gates_throttle
+  gates_launch "$i" "$@"
+}
+gates_report() { # the ten slowest, the sum, one log line
+  local i=0 n=${#names[@]} t0 t1 s total="" top="" sum
+  local secs=()
+  while [ "$i" -lt "$n" ]; do
+    s=0; read -r t0 t1 <"$gd/$i.t" 2>/dev/null && s=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.2f", b-a}')
+    secs[$i]=$s; top="$top$s	${names[$i]}
+"; i=$((i+1))
+  done
+  [ "$n" -gt 0 ] || return 0
+  echo "gates: ten slowest of $n checks, seconds:"
+  printf '%s' "$top" | sort -t "$(printf '\t')" -k1,1 -nr | head -10 | awk -F'\t' '{printf "  %7.2f  %s\n", $1, $2}'
+  sum=$(printf '%s' "$top" | awk -F'\t' '{s+=$1} END{printf "%.0f", s}')
+  echo "gates: sum of check seconds $sum, wall $(( $(date +%s) - gates_t0 )), jobs $jobs"
+  lt_init gates "" >/dev/null 2>&1 || return 0
+  lt_set_head "$(git rev-parse HEAD 2>/dev/null)"
+  i=0; while [ "$i" -lt "$n" ]; do lt_add "${names[$i]}" "$(printf '%.0f' "${secs[$i]}")"; i=$((i+1)); done
+  LT_T0=$gates_t0
+  lt_finish "$f" >/dev/null 2>&1 || true
+}
+gates_t0=$(date +%s)
+# the end of the checks: the serial group, the wait, the failures in file order, the verdict
+gates_finish() {
+  local k=0 i=0 n=${#names[@]} rc wst=()
+  # every background check has finished (gates_drain) and is waited for, once, before the first serial check starts
+  gates_drain
+  k=0
+  while [ "$k" -lt "${#ser_idx[@]}" ]; do
+    eval "set -- ${ser_cmd[$k]}"
+    gates_launch "${ser_idx[$k]}" "$@"
+    gates_drain
+    k=$((k+1))
+  done
+  k=0
+  while [ "$k" -lt "${#pids[@]}" ]; do
+    wait "${pids[$k]}" 2>/dev/null; wst[${pidx[$k]}]=$?
+    k=$((k+1))
+  done
+  while [ "$i" -lt "$n" ]; do
+    rc=$(cat "$gd/$i.rc" 2>/dev/null)
+    case "$rc" in ''|*[!0-9]*) rc="" ;; esac
+    if [ -z "$rc" ] || [ "$rc" != 0 ] || [ "${wst[$i]:-0}" != 0 ]; then
+      echo "FAIL: ${display[$i]}"
+      [ -n "$rc" ] || echo "(no result: the check's status file is missing or unreadable)"
+      if [ "${GATES_VERBOSE:-}" = 1 ]; then cat "$gd/$i.out" 2>/dev/null; else tail -8 "$gd/$i.out" 2>/dev/null; fi
+      f=1
+    elif [ "${GATES_VERBOSE:-}" = 1 ]; then
+      echo "ok: ${display[$i]}"; cat "$gd/$i.out" 2>/dev/null
+    fi
+    i=$((i+1))
+  done
+  gates_report || true
+  if [ "$f" = 0 ]; then echo "ALL GATES PASS"; else echo "GATES FAILED"; fi
+  exit "$f"
+}
+# the selftest sources this file up to here and drives run and gates_finish itself
+[ -z "${GATES_SOURCE_ONLY:-}" ] || return 0
 # CI's Vocabulary Gates also run each gate's selftest (they take 1-5 s each)
 run scripts/selftest-kernel-gates
 run scripts/selftest-desk-names
@@ -26,6 +193,9 @@ run scripts/selftest-jev-entry
 # every script a CI gate job runs is run here or is in scripts/gates-ci-exemptions.txt
 # with its reason (a gate CI has and this script lacks refused three landings)
 run scripts/selftest-gates-cover-ci
+# the parallel runner and the fixture lint's selftests (about 10 s; they run beside the others)
+run scripts/selftest-gates-runner
+run scripts/selftest-check-gatefixture-imports
 run scripts/check-gates-cover-ci
 # the first-line standing of documents (docs/standing.md); scripts/doccheck no longer runs here
 run python3 -I scripts/selftest-check-doc-standing
@@ -76,10 +246,13 @@ run bash scripts/test-guest-tool-exec-wrapper.sh
 run bash scripts/test-node-b-deploy-disk-preflight.sh
 run bash scripts/test-node-b-disk-forecast.sh
 # no host log entry outlives 30 days, with margin; the bound is computed from the settings (needs nix and python3)
+gate_tag serial
 run bash scripts/test-node-b-log-retention.sh
+# the log-age job on fixtures in its own temp directory: no nix, so it runs in the pool
 run bash scripts/test-node-b-log-age.sh
 # the boot prune is safe only while it is ordered before the daemon and the runtime
 # and cannot be re-run beside them; skips itself without nix or python3
+gate_tag serial
 run bash scripts/updater-prune-unit-nix-test.sh
 # The Jev entry-point gate CI's Vocabulary Gates job runs: a file that calls Jev
 # directly and is not on scripts/jev-entry-baseline.txt, or a list that grew
@@ -107,5 +280,4 @@ else
   run scripts/check-package-export
 fi
 run scripts/check-guest-security-epoch --base "$base" --head HEAD
-if [ "$f" = 0 ]; then echo "ALL GATES PASS"; else echo "GATES FAILED"; fi
-exit "$f"
+gates_finish

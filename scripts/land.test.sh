@@ -196,6 +196,7 @@ func B() int { return a.A() + $2 }"; }
 newlane laneB2 1; moved_run laneB2 docs/m.md 1
 expect "main moves once (docs): rebased and pushed" 0 $rc
 case "$out" in *"rebasing"*"touch nothing under test"*) ok "unrelated move skips the rerun";; *) bad "docs move" "$out";; esac
+expect "a docs-only move of main still runs build and the full gates again" "2 2" "$(printf '%s\n' "$out" | grep -c 'go build \./\.\.\.') $(printf '%s\n' "$out" | grep -c 'gates (true)')"
 
 newlane laneB4 4; moved_run laneB4 c/c.go 1
 expect "main moves once (package c, not a dependency): pushed" 0 $rc

@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Selftest for scripts/check-gatefixture-imports. Each case builds a fixture tree in a temp
+# directory and runs BOTH the new check and the old three-processes-per-file loop (kept below
+# as old_check, verbatim logic) and requires the same verdict. Then the error paths: a tool
+# that fails is exit 2, never a pass.
+#
+# Failure list / cases (new behaviour = old behaviour in every one unless stated):
+#   comment line      `// SetModeForTest(1)` in a non-test file: not a hit
+#   definition line   `func SetModeForTest(...)` alone: not a hit; a call on another line: a hit
+#   import            an import of internal/objectgraph/gatefixture in a non-test file: a hit
+#   _test.go          a call in a _test.go file: not a hit (not scanned)
+#   vendor            a call under vendor/: a hit (the old find did not skip vendor either)
+#   generated         a call in zz_generated.go: a hit (generated files are scanned like any)
+#   build-tagged      a call in a //go:build linux file: a hit (text, not build graph)
+#   testdata          a call under testdata/: not a hit (skipped by find)
+#   the exempt file   internal/objectgraph/gatefixture/gatefixture.go: not scanned
+#   a name with ':'   a hit in a file named a:b.go is reported with its whole name
+#   errors            grep exiting 2, find failing, a missing root: exit 2 with a message
+set -uo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+NEW=$here/check-gatefixture-imports
+T=$(mktemp -d "${TMPDIR:-/tmp}/selftest-gatefixture.XXXXXX")
+trap 'rm -rf "$T"' EXIT
+pass=0; failn=0
+ok() { pass=$((pass+1)); echo "  ok   $1"; }
+bad() { failn=$((failn+1)); echo "  FAIL $1"; shift; [ $# -gt 0 ] && printf '%s\n' "$@" | sed 's/^/       /'; }
+
+# the loop this script used before it became one grep (git history: check-gatefixture-imports)
+old_check() { # ROOT -> exit 0/1
+  ( cd "$1" || exit 2
+    fail=0
+    while IFS= read -r f; do
+      case "$f" in internal/objectgraph/gatefixture/gatefixture.go) continue ;; esac
+      hits=$(grep -nE 'internal/objectgraph/gatefixture"|SetModeForTest[[:space:]]*\(' "$f" \
+        | grep -vE '^[0-9]+:[[:space:]]*//' \
+        | grep -vE '^[0-9]+:[[:space:]]*func[[:space:]]+SetModeForTest[[:space:]]*\(' || true)
+      [ -n "$hits" ] && fail=1
+    done < <(find . -name '*.go' ! -name '*_test.go' -not -path './.git/*' -not -path './.claude/*' -not -path './node_modules/*' -not -path '*/testdata/*' | sed 's#^\./##' | sort)
+    exit "$fail" )
+}
+case_() { # name, want (0 clean / 1 hit), file, content
+  local d; d=$(mktemp -d "$T/c.XXXXXX"); mkdir -p "$(dirname "$d/$3")"; printf '%s\n' "$4" >"$d/$3"
+  local o n; old_check "$d"; o=$?; "$NEW" "$d" >"$d.out" 2>&1; n=$?
+  if [ "$n" = "$2" ] && [ "$o" = "$2" ]; then ok "$1 (old $o, new $n)"; else bad "$1" "want $2, old $o, new $n" "$(cat "$d.out")"; fi
+}
+imp='package x
+import _ "go-choir/internal/objectgraph/gatefixture"'
+call='package x
+func a() { SetModeForTest(1) }'
+case_ "comment line is not a hit" 0 internal/x/a.go 'package x
+// SetModeForTest(1)'
+case_ "the definition line alone is not a hit" 0 internal/x/a.go 'package x
+func SetModeForTest(m int) {}'
+case_ "a call is a hit" 1 internal/x/a.go "$call"
+case_ "an import is a hit" 1 internal/x/a.go "$imp"
+case_ "_test.go is not scanned" 0 internal/x/a_test.go "$call"
+case_ "vendor is scanned" 1 vendor/m/a.go "$call"
+case_ "generated files are scanned" 1 internal/x/zz_generated.go "$call"
+case_ "build-tagged files are scanned" 1 internal/x/a_linux.go "//go:build linux
+
+$call"
+case_ "testdata is skipped" 0 internal/x/testdata/a.go "$call"
+case_ "the gatefixture package's own file is exempt" 0 internal/objectgraph/gatefixture/gatefixture.go "$imp
+$call"
+# a file with a NUL byte: grep without -a prints "binary file matches" and no line (stdout or stderr by grep). The old loop
+# counted that message as a hit (it is not a comment or definition line): old 1 for a file that
+# calls the seam, 0 without a match. The new check scans it as text: the same verdicts, with the line.
+d=$T/nul1; mkdir -p "$d/internal/x"; printf 'package x\nfunc a() { SetModeForTest(1) }\n\0\n' >"$d/internal/x/a.go"
+old_check "$d"; o=$?; "$NEW" "$d" >"$d.out" 2>&1; n=$?
+if [ "$n" = 1 ] && grep -q 'internal/x/a.go:2:' "$d.out"; then ok "a NUL byte file with a call is a hit, with its line (old $o: 0 on GNU grep, which says "binary file matches" on stderr and the old loop missed it; 1 where grep says it on stdout; new $n)"; else bad "NUL file with a call" "old $o new $n" "$(cat "$d.out")"; fi
+d=$T/nul2; mkdir -p "$d/internal/x"; printf 'package x\n\0\n' >"$d/internal/x/a.go"
+old_check "$d"; o=$?; "$NEW" "$d" >"$d.out" 2>&1; n=$?
+[ "$o" = 0 ] && [ "$n" = 0 ] && ok "a NUL byte file with no match is clean (old $o, new $n)" || bad "NUL file, no match" "old $o new $n" "$(cat "$d.out")"
+# a file name with a colon: the report names it whole
+d=$T/colon; mkdir -p "$d/internal/x"; printf '%s\n' "$call" >"$d/internal/x/a:b.go"
+"$NEW" "$d" >"$d.out" 2>&1; n=$?
+if [ "$n" = 1 ] && grep -q 'internal/x/a:b.go:2:' "$d.out"; then ok "a name with ':' is reported whole"; else bad "a name with ':'" "$(cat "$d.out")"; fi
+
+echo "errors"
+d=$T/err; mkdir -p "$d/internal/x/sub"; printf '%s\n' "$call" >"$d/internal/x/a.go"; printf 'package x\n' >"$d/internal/x/b.go"
+mkdir -p "$T/stub"
+printf '#!/bin/sh\nexit 2\n' >"$T/stub/grep"; chmod +x "$T/stub/grep"
+PATH="$T/stub:$PATH" "$NEW" "$d" >"$d.out" 2>&1; n=$?
+[ "$n" = 2 ] && ok "grep failing (exit 2) is exit 2, not a pass" || bad "grep failure" "exit $n" "$(cat "$d.out")"
+rm "$T/stub/grep"; printf '#!/bin/sh\nexit 1\n' >"$T/stub/find"; chmod +x "$T/stub/find"
+PATH="$T/stub:$PATH" "$NEW" "$d" >"$d.out" 2>&1; n=$?
+[ "$n" = 2 ] && ok "find failing is exit 2, not a pass" || bad "find failure" "exit $n" "$(cat "$d.out")"
+rm "$T/stub/find"; printf '#!/bin/sh\nexit 3\n' >"$T/stub/sort"; chmod +x "$T/stub/sort"
+PATH="$T/stub:$PATH" "$NEW" "$d" >"$d.out" 2>&1; n=$?
+[ "$n" = 2 ] && ok "sort failing is exit 2" || bad "sort failure" "exit $n" "$(cat "$d.out")"
+"$NEW" "$T/does-not-exist" >"$d.out" 2>&1; n=$?
+[ "$n" != 0 ] && ok "a missing root is not a pass (exit $n)" || bad "missing root" "$(cat "$d.out")"
+"$NEW" "$d" >"$d.out" 2>&1; n=$?
+[ "$n" = 1 ] && ok "the real run still finds the hit" || bad "sanity" "exit $n"
+echo "$pass passed, $failn failed"
+[ "$failn" = 0 ]

@@ -15,22 +15,32 @@ set -euo pipefail
 ROOT="${1:-$(git rev-parse --show-toplevel)}"
 cd "$ROOT"
 
+die() { echo "check-gatefixture-imports: error: $*" >&2; exit 2; }
+work=$(mktemp -d "${TMPDIR:-/tmp}/gatefixture.XXXXXX") || die "cannot make a temp directory"
+trap 'rm -rf "$work"' EXIT
+
+# One grep over every file (not three processes per file: the loop took about a minute on the
+# 10,000 files). -a: a file with a NUL byte is scanned as text, not reported as "Binary file matches".
+# Same rule: drop whole-line comments and the SetModeForTest definitions, skip the
+# gatefixture package's own file. Each stage writes a file, so a failure of find, sort or grep is
+# seen and is exit 2; grep's exit 1 (no match) is the only tolerated non-zero, and is handled in
+# the wrapper below.
+find . -name '*.go' ! -name '*_test.go' -not -path './.git/*' -not -path './.claude/*' -not -path './node_modules/*' -not -path '*/testdata/*' ! -path './internal/objectgraph/gatefixture/gatefixture.go' -print0 >"$work/files.raw" \
+  || die "find failed"
+sort -z "$work/files.raw" >"$work/files" || die "sort failed"
+# up to 500 files per grep; a wrapper maps grep's 1 (no match) to 0 and anything above 1 to 2
+xargs -0 -n 500 sh -c 'grep -a --null -HnE "internal/objectgraph/gatefixture\"|SetModeForTest[[:space:]]*\(" "$@"; rc=$?; [ "$rc" -le 1 ] || exit 2' _ <"$work/files" >"$work/hits" \
+  || die "grep failed (xargs exit $?)"
+
+# "file NUL line:text": the NUL keeps a ':' in a file name from shifting fields
 fail=0
-while IFS= read -r f; do
-  case "$f" in
-    internal/objectgraph/gatefixture/gatefixture.go) continue ;;
-  esac
-  # Drop whole-line comments, then look for the import or a call.
-  hits=$(grep -nE 'internal/objectgraph/gatefixture"|SetModeForTest[[:space:]]*\(' "$f" \
-    | grep -vE '^[0-9]+:[[:space:]]*//' \
-    | grep -vE '^[0-9]+:[[:space:]]*func[[:space:]]+SetModeForTest[[:space:]]*\(' || true)
-  if [ -n "$hits" ]; then
-    while IFS= read -r h; do
-      echo "check-gatefixture-imports: $f:$h" >&2
-    done <<<"$hits"
-    fail=1
-  fi
-done < <(find . -name '*.go' ! -name '*_test.go' -not -path './.git/*' -not -path './.claude/*' -not -path './node_modules/*' -not -path '*/testdata/*' | sed 's#^\./##' | sort)
+while IFS= read -r -d '' f && IFS= read -r rest; do
+  f=${f#./}
+  [[ "$rest" =~ ^[0-9]+:[[:space:]]*// ]] && continue
+  [[ "$rest" =~ ^[0-9]+:[[:space:]]*func[[:space:]]+SetModeForTest[[:space:]]*\( ]] && continue
+  echo "check-gatefixture-imports: $f:$rest" >&2
+  fail=1
+done <"$work/hits"
 
 if [ "$fail" -ne 0 ]; then
   echo "check-gatefixture-imports: product code reaches a gate mode seam (FM10); only _test.go files may" >&2

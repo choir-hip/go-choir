@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+# Selftest for the parallel runner in scripts/gates (run, gate_tag, gates_finish).
+# Drives the real functions: scripts/gates is sourced with GATES_SOURCE_ONLY=1, then
+# fake checks are run. Writes only under mktemp -d. About 4 s.
+#
+# Failure list, written before the code (each is a case below):
+#   F1  a failing check among passing ones: exit 1, "GATES FAILED", the check named
+#   F2  every failure is listed, none stops the others, in file order whatever order they finished
+#   F3  GATES_JOBS=1 and GATES_JOBS=4 give the same verdict and the same set of failures
+#   F4  a check's stdout and stderr are both captured and shown for a failure
+#   F5  a check killed by a signal counts as failed
+#   F6  all passing: "ALL GATES PASS", exit 0, nothing else of the checks printed
+#   F7  GATES_VERBOSE=1 prints a passing check's output
+#   F8  GATES_JOBS=2 never runs more than two checks at once; GATES_JOBS=1 never more than one
+#   F9  checks tagged serial do not overlap each other
+#   N1  every check whose script calls the nix command is tagged serial
+#   F11 the timing log gets one "gates" line, and a log that cannot be written changes nothing
+#   F12 a check's arguments reach it intact (spaces, quotes), on the serial path with several jobs too
+#   F13 a serial check starts only after EVERY non-serial check has finished (a slow one runs
+#       in the background while serial ones are queued; start/end stamps are compared)
+#   F14 a check whose status file is missing after the run counts as FAILED, never passed
+#   F16 a job whose wrapper subshell is SIGKILLed (no done-marker, no status file) neither hangs the
+#       throttle nor passes: the run ends in bounded time, exits 1 and names the check (GATES_JOBS=2)
+#   F17 no job finishing for GATES_STALL seconds prints the running checks and exits non-zero
+#   F18 mktemp failing is exit 2 at once
+#   F19 two gate_tag lines before one run both apply
+#   F20 a check that reads stdin gets EOF (every check runs with stdin from /dev/null), in every mode
+#   F21 a serial check that outlives GATES_STALL ends the run: bounded, non-zero, named
+#   F22 a job that is STOPPED (SIGSTOP to its wrapper) ends the run the same way, with 4 jobs and with 1
+#   F23 GATES_JOBS=1 is guarded too: a hung check ends the run
+#   F15 a throttled pool of 2 still finishes every check when jobs end out of order
+set -uo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+GATES=$here/gates
+T=$(mktemp -d "${TMPDIR:-/tmp}/selftest-gates-runner.XXXXXX")
+trap 'rm -rf "$T"' EXIT
+export LAND_TIMING_LOG=$T/timings.tsv
+pass=0; failn=0
+ok() { pass=$((pass+1)); echo "  ok   $1"; }
+bad() { failn=$((failn+1)); echo "  FAIL $1"; shift; [ $# -gt 0 ] && printf '%s\n' "$@" | sed 's/^/       /'; }
+expect() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "want: $2" "got:  $3"; fi; }
+has() { case "$3" in *"$2"*) ok "$1" ;; *) bad "$1" "missing: $2" "in: $3" ;; esac; }
+hasnt() { case "$3" in *"$2"*) bad "$1" "unexpected: $2" "in: $3" ;; *) ok "$1" ;; esac; }
+
+# drive <jobs> <script body> [gates args]: runs the body (run lines) then gates_finish
+drive() {
+  local jobs=$1 body=$2; shift 2
+  printf '%s\n' ". '$GATES' \"\$@\"" "$body" 'gates_finish' >"$T/drive.sh"
+  # sourcing with arguments passes them to the sourced file
+  ( cd "$here/.." && GATES_SOURCE_ONLY=1 GATES_JOBS=$jobs GATES_VERBOSE=${VERBOSE:-} bash -c ". '$GATES' \"\$@\"; . '$T/body.sh'; gates_finish" x "$@" ) 2>&1
+}
+body() { printf '%s\n' "$1" >"$T/body.sh"; }
+
+echo "verdicts"
+body 'run true
+run sh -c "echo boom-out; echo boom-err >&2; exit 3"
+run true'
+out=$(drive 4 "" ); rc=$?
+expect "F1 exit 1 for a failing check among passing" 1 "$rc"
+has "F1 GATES FAILED" "GATES FAILED" "$out"
+has "F1 the check is named" "FAIL: sh -c echo boom-out" "$out"
+has "F4 stdout captured" "boom-out" "$out"
+has "F4 stderr captured" "boom-err" "$out"
+
+body 'run sh -c "sleep 0.6; echo slow-fail; exit 1"
+run sh -c "echo fast-fail; exit 1"
+run true
+run sh -c "echo third-fail; exit 2"'
+out4=$(drive 4 ""); rc4=$?
+out1=$(GATES_JOBS=1 drive 1 ""); rc1=$?
+fails() { printf '%s\n' "$1" | grep '^FAIL:' | tr '\n' ';'; }
+expect "F2 failures in file order (slowest first)" "FAIL: sh -c sleep 0.6; echo slow-fail; exit 1;FAIL: sh -c echo fast-fail; exit 1;FAIL: sh -c echo third-fail; exit 2;" "$(fails "$out4")"
+expect "F3 the same failures with one job and four" "$(fails "$out1")" "$(fails "$out4")"
+expect "F3 the same exit code" "$rc1" "$rc4"
+expect "F3 the whole output is the same up to timing lines" \
+  "$(printf '%s\n' "$out1" | grep -v '^gates: \|^  *[0-9.]* ')" "$(printf '%s\n' "$out4" | grep -v '^gates: \|^  *[0-9.]* ')"
+
+body 'run sh -c "kill -9 \$\$"
+run true'
+out=$(drive 4 ""); rc=$?
+expect "F5 a check killed by a signal fails" 1 "$rc"
+has "F5 and is named" "FAIL: sh -c kill -9" "$out"
+
+body 'run true
+run sh -c "x=quiet; echo \${x}pass"'
+out=$(drive 4 ""); rc=$?
+expect "F6 exit 0" 0 "$rc"
+has "F6 ALL GATES PASS" "ALL GATES PASS" "$out"
+hasnt "F6 a passing check's output is not printed" "quietpass" "$out"
+out=$(VERBOSE=1 drive 4 ""); has "F7 GATES_VERBOSE shows a passing check" "quietpass" "$out"
+
+body 'run printf "%s|" "a b" "it'"'"'s" "\$HOME"
+run sh -c "exit 4"'
+out=$(VERBOSE=1 drive 1 ""); has "F12 arguments arrive intact" 'a b|it'"'"'s|$HOME|' "$out"
+body 'gate_tag serial
+run printf "%s|" "a b" "it'"'"'s" "\$HOME"
+run true'
+out=$(VERBOSE=1 drive 4 ""); has "F12 arguments arrive intact on the serial path with 4 jobs" 'a b|it'"'"'s|$HOME|' "$out"
+
+echo "concurrency"
+# each check records "start"/"end" lines to a shared file; a counter file gives the peak
+cat >"$T/probe.sh" <<'PROBE'
+#!/usr/bin/env bash
+# probe.sh <dir> <name> <seconds>: marks itself running, records the peak, sleeps, unmarks
+d=$1; n=$2
+: >"$d/run.$n"
+c=$(ls "$d" | grep -c '^run\.')
+echo "$c" >>"$d/peaks"
+sleep "$3"
+echo "$n" >>"$d/order"
+rm -f "$d/run.$n"
+PROBE
+chmod +x "$T/probe.sh"
+peak() { sort -n "$1/peaks" | tail -1; }
+mkdir "$T/p2"; body "for n in 1 2 3 4; do run '$T/probe.sh' '$T/p2' \$n 0.3; done"
+out=$(drive 2 ""); expect "F8 GATES_JOBS=2 peaks at 2" 2 "$(peak "$T/p2")"
+mkdir "$T/p1"; body "for n in 1 2 3; do run '$T/probe.sh' '$T/p1' \$n 0.1; done"
+out=$(drive 1 ""); expect "F8 GATES_JOBS=1 peaks at 1" 1 "$(peak "$T/p1")"
+# F9/F13: stamps. stamp.sh <dir> <name> <seconds> writes "<start> <end>" (high resolution) to <dir>/<name>
+cat >"$T/stamp.sh" <<'STAMP'
+#!/usr/bin/env bash
+now() { perl -MTime::HiRes=time -e 'printf "%.3f", time'; }
+s=$(now); sleep "$3"; e=$(now); echo "$s $e" >"$1/$2"
+STAMP
+chmod +x "$T/stamp.sh"
+mkdir "$T/ps"; body "run '$T/stamp.sh' '$T/ps' bg1 0.8
+run '$T/stamp.sh' '$T/ps' bg2 0.5
+gate_tag serial
+run '$T/stamp.sh' '$T/ps' s1 0.2
+gate_tag serial
+run '$T/stamp.sh' '$T/ps' s2 0.2"
+out=$(drive 4 "")
+ov=$(cd "$T/ps" && for sn in s1 s2; do for o in bg1 bg2 s1 s2; do [ "$sn" = "$o" ] && continue
+  awk -v n="$sn/$o" 'NR==FNR{a=$1;b=$2;next}{c=$1;d=$2} END{ if (a < d && c < b) print "OVERLAP " n }' "$sn" "$o"; done; done)
+expect "F9/F13 no serial check overlaps any other check" "" "$ov"
+expect "F9 all four ran" 4 "$(ls "$T/ps" | wc -l | tr -d ' ')"
+body 'gate_tag serial
+run sh -c "exit 0"
+run sh -c "sleep 0.1"'
+out=$(drive 4 ""); has "F9 a serial check passes" "ALL GATES PASS" "$out"
+
+echo "status files"
+body 'run true
+run sleep 0.2
+sleep 0.5
+rm -f "$gd/0.rc"'
+out=$(drive 4 ""); rc=$?
+expect "F14 a missing status file fails the run" 1 "$rc"
+has "F14 and the check is named" "FAIL: true" "$out"
+body 'run true
+run sleep 0.2
+sleep 0.5
+echo "not a number" >"$gd/1.rc"'
+out=$(drive 4 ""); rc=$?
+expect "F14 an unreadable status fails the run" 1 "$rc"
+body 'run sh -c "sleep 0.3; exit 0"
+run sh -c "exit 0"
+run sh -c "sleep 0.1; exit 5"
+run true
+run true'
+out=$(drive 2 ""); has "F15 a pool of 2 finishes everything and reports the failure" "FAIL: sh -c sleep 0.1; exit 5" "$out"
+
+echo "killed wrappers, stalls, tags"
+# bounded <seconds> <command...>: run in the background, kill it if it outlives the bound
+bounded() { local lim=$1; shift; "$@" >"$T/b.out" 2>&1 & local p=$! t=0
+  while kill -0 "$p" 2>/dev/null; do sleep 0.2; t=$((t+1)); [ "$t" -gt $((lim*5)) ] && { kill -9 "$p" 2>/dev/null; echo "TIMED OUT" >>"$T/b.out"; return 124; }; done
+  wait "$p"; }
+body 'run sh -c "sleep 0.3"
+run sh -c "kill -9 \$PPID; sleep 5"
+run sh -c "kill -9 \$PPID; sleep 5"
+run sh -c "sleep 0.1"
+run true'
+bounded 20 drive 2 ""; rc=$?; out=$(cat "$T/b.out")
+expect "F16 a killed wrapper does not hang the run, exit non-zero" 1 "$rc"
+has "F16 the check is named" "FAIL: sh -c kill -9" "$out"
+has "F16 and the others still ran to the verdict" "GATES FAILED" "$out"
+body 'run sleep 6
+run true'
+GATES_STALL=1 bounded 15 drive 2 ""; rc=$?; out=$(cat "$T/b.out")
+expect "F17 a stall ends the run, non-zero" 1 "$rc"
+has "F17 and names the running check" "sleep 6" "$out"
+has "F17 and says why" "stalled" "$out"
+TMPDIR=/nonexistent/none bounded 10 bash -c ". '$GATES'"; rc=$?; out=$(cat "$T/b.out")
+expect "F18 mktemp failing is exit 2" 2 "$rc"
+mkdir "$T/pt"; body "run '$T/stamp.sh' '$T/pt' bg 0.6
+gate_tag serial
+gate_tag serial
+run '$T/stamp.sh' '$T/pt' s 0.2"
+out=$(drive 4 ""); ov=$(cd "$T/pt" && awk 'NR==FNR{a=$1;b=$2;next}{c=$1;d=$2} END{ if (a < d && c < b) print "OVERLAP" }' s bg)
+expect "F19 the serial tag of a two-tag line applied (no overlap)" "" "$ov"
+body 'gate_tag serial
+gate_tag foo
+run sh -c "echo two-tags-ran"'
+out=$(VERBOSE=1 drive 4 ""); has "F19 two tag lines before one run: it runs" "two-tags-ran" "$out"
+
+echo "hangs"
+mkfifo "$T/fifo"; sleep 14 >"$T/fifo" & fifopid=$!
+body 'run sh -c "cat >/dev/null; echo eof-seen"
+gate_tag serial
+run sh -c "cat >/dev/null; echo eof-serial"'
+VERBOSE=1 bounded 10 drive 4 "" <"$T/fifo"; rc=$?; out=$(cat "$T/b.out")
+expect "F20 stdin reads get EOF (parallel and serial), exit 0" 0 "$rc"
+has "F20 the parallel check finished" "eof-seen" "$out"
+has "F20 the serial check finished" "eof-serial" "$out"
+kill "$fifopid" 2>/dev/null
+body 'gate_tag serial
+run sleep 7
+run true'
+GATES_STALL=1 bounded 20 drive 4 ""; rc=$?; out=$(cat "$T/b.out")
+expect "F21 a hung serial check ends the run, non-zero" 1 "$rc"
+has "F21 and is named" "sleep 7" "$out"
+has "F21 and the reason is given" "stalled" "$out"
+for j in 4 1; do
+  body 'run sh -c "kill -STOP \$PPID; sleep 1"
+run true'
+  GATES_STALL=1 bounded 20 drive $j ""; rc=$?; out=$(cat "$T/b.out")
+  expect "F22 a stopped job ends the run ($j jobs), non-zero" 1 "$rc"
+  has "F22 and is named ($j jobs)" "kill -STOP" "$out"
+done
+body 'run sleep 7
+run true'
+GATES_STALL=1 bounded 20 drive 1 ""; rc=$?; out=$(cat "$T/b.out")
+expect "F23 GATES_JOBS=1 is guarded: a hung check ends the run" 1 "$rc"
+has "F23 and is named" "sleep 7" "$out"
+
+echo "timing"
+n=$(grep -c '^gates	' "$T/timings.tsv" 2>/dev/null); [ "${n:-0}" -ge 1 ] && ok "F11 a gates line is in the timing log" || bad "F11 a gates line is in the timing log" "$(cat "$T/timings.tsv" 2>/dev/null)"
+out=$(LAND_TIMING_LOG=/nonexistent/x/y drive 4 ""); has "F11 an unwritable log changes nothing" "ALL GATES PASS" "$out"
+
+echo "nix"
+# N1: a check whose script text calls nix (an evaluation, a build, a flake command, the nix-* tools,
+# a probe for nix) must carry gate_tag serial. Heuristic: the entry script of each run line only.
+nixbad=$(cd "$here/.." && awk '/^[[:space:]]*gate_tag/{t=t" "$0} /^[[:space:]]*run /{print t "\t" $0; t=""}' scripts/gates | while IFS="$(printf '\t')" read -r tags line; do
+  sc=$(printf '%s\n' "$line" | grep -oE '(scripts|\.github/scripts|frontend/scripts)/[A-Za-z0-9_][A-Za-z0-9._-]*' | head -1)
+  [ -f "$sc" ] || continue
+  [ "$sc" = scripts/selftest-gates-runner ] && continue
+  if grep -vE '^[[:space:]]*(#|//)' "$sc" | grep -qE '(^|[;&|(!]|then|do|\$\()[[:space:]]*nix (eval|build|flake|develop|run)([^A-Za-z0-9_-]|$)|nix-(instantiate|build|store|shell)([^A-Za-z0-9_-]|$)|command -v nix([^A-Za-z0-9_-]|$)'; then
+    case "$tags" in *serial*) ;; *) echo "$sc" ;; esac
+  fi
+done)
+expect "N1 every check that calls nix is tagged serial" "" "$nixbad"
+echo "$pass passed, $failn failed"
+[ "$failn" = 0 ]
