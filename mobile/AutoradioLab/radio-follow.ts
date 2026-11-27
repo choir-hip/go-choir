@@ -80,20 +80,21 @@ export function saying(playing: boolean, address: string, now: SpokenNow): strin
   return playing && address !== '' && now.sentenceIndex >= 0 && now.sentenceIndex < now.sentences.length ? now.sentences[now.sentenceIndex] : '';
 }
 
-/** What native told, in one answer taken at one moment: the document the block is in, a key that changes when the block or its words do, and the words only when the key is new to us. */
-export type SpokenSnapshot = SpokenFacts & { key: string; document: string };
-export const NO_SPOKEN: SpokenSnapshot = { key: '', document: '', spoken: '', block: 0, blocks: 0, fraction: 0 };
+/** What native told in one answer taken at one moment: the document it is speaking (its own id), the block's number and count, its spoken words and the audio's place in it; `entry` is the entry that was on air in shared code
+ *  when the answer arrived (read in the same turn), so an answer is never taken for a later entry's, even of the same story. */
+export type SpokenSnapshot = SpokenFacts & { document: string; entry: string };
+export const NO_SPOKEN: SpokenSnapshot = { document: '', entry: '', spoken: '', block: 0, blocks: 0, fraction: 0 };
 const text = (v: unknown): string => (typeof v === 'string' ? v : '');
 const number = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-/** The `radioFacts` answer as a snapshot. Native sends the words only when `have` (the key we sent) was not the block's key, so the words of the same key are the ones we held. */
-export function readSpoken(o: Record<string, unknown>, held: SpokenSnapshot): SpokenSnapshot {
-  const key = text(o.blockKey);
-  if (key === '') return NO_SPOKEN;
-  const words = typeof o.spoken === 'string' ? o.spoken : held.key === key ? held.spoken : '';
-  return { key, document: text(o.document), spoken: words, block: number(o.block), blocks: number(o.blocks), fraction: number(o.blockFraction) };
+/** The `radioFacts` answer as a snapshot. No `document` is nothing. */
+export function readSpoken(o: Record<string, unknown>, entry: string): SpokenSnapshot {
+  const document = text(o.document);
+  if (document === '') return NO_SPOKEN;
+  return { document, entry, spoken: text(o.spoken), block: number(o.block), blocks: number(o.blocks), fraction: number(o.blockFraction) };
 }
 
-/** Whether the document native is speaking is the entry on air: a story read from the paper is `pub:<route>`, any other entry is `rs:<entry id>`. Anything else is not this entry's, and nothing is lit. */
-export function ownsAir(document: string, address: string, entryId: string): boolean {
-  return document !== '' && (document === `rs:${entryId}` || document === address.split('@')[0]);
+/** Whether the answer is the entry on air, exactly: the entry that was on air when it arrived is the one on air now, and the document native speaks is that entry's (`rs:<entry id>`) or the story's own
+ *  address, whole, revision included (`pub:a/x@3` is not `pub:a/x`). The page shown must be the page on air. Anything else lights nothing. */
+export function ownsAir(s: SpokenSnapshot, air: { id: string; address: string }, shown: string): boolean {
+  return s.document !== '' && s.entry === air.id && air.address !== '' && shown === air.address && (s.document === `rs:${air.id}` || s.document === air.address);
 }

@@ -12,15 +12,19 @@
 //  F4  the sentence said is nothing unless the radio plays and a page address is on air.
 //  S5  a place at the very end of a block is capped at 0.99 (as native always capped it): progress mid-programme is never the next block's start; a block or count that is not a number is 0, never NaN.
 //  S6  text after the last stop is a sentence of its own; an ellipsis, a newline with no stop, and a stop with no space after it behave as the one splitter says; a mark made of several code points counts as several characters (see the test).
-//  N1  native's one answer: the words are sent only when the block key is new, and held words answer for the same key; no key is nothing.
-//  N2  the document native speaks must be the entry on air (`rs:<entry>` or the story's `pub:` address), or nothing is lit.
-//  L1-L6 readerFollow through its real path (the radio, the pulse, native's answer faked, the reader's held page): playing on a held page lights its block and sentence; paused lights nothing; a page not held lights
-//      nothing; after the wipe nothing is lit and the next play lights again; a document replaced mid-play is followed in its new blocks; words of another entry light nothing; one native read a pulse, words sent once a block.
+//  N1  native's one answer is read whole every pulse: the document, the words, the block number and count, the place; no document is nothing.
+//  N2  the answer is the entry on air exactly: the entry that was on air when it arrived is on air now, the document is `rs:<that entry>` or the story's whole address (a revision is another address), and the page shown is the
+//      page on air. A different entry of the same story, another revision of the address, or another page shown lights nothing.
+//  N3  an older answer never overwrites a newer one (two reads resolving out of order), a failed read clears only what is older than itself.
+//  N4  the sign-out wipe clears the held answer: the page facts return no words from before it, and nothing is lit.
+//  L1-L7 readerFollow through its real path (the radio, the pulse, native's answers faked, the reader's held page): playing on a held multi-block page lights its block and sentence; paused lights nothing; a page not held lights
+//      nothing; after the wipe nothing is lit and the next play lights again; a document replaced mid-play, with what native speaks, is followed in its new blocks; another entry, another revision and another page shown light
+//      nothing; one native read a pulse serves the page facts and the follow.
 import { describe, expect, test, beforeEach } from 'bun:test';
 import { followOf, locate, NO_FOLLOW, NO_SPOKEN, normalised, ownsAir, readSpoken, saying, sentenceAt, sentencesOf, spokenNow } from './radio-follow.ts';
 import { parseBundle } from './reader-parse.ts';
-import { adoptNative, resetSeam, type Reply } from './api.ts';
-import { radioListen, radioPageFacts, radioPulse, readerFollow, wipeRadio } from './radio-bridge.ts';
+import { adoptNative, nextGeneration, resetSeam, type Reply } from './api.ts';
+import { getRadio, radioListen, radioPageFacts, radioPulse, readerFollow, wipeRadio } from './radio-bridge.ts';
 import * as R from './reader.ts';
 
 const page = (content: string, address = 'pub:pub/x') => parseBundle({ publication: { title: 'Harbor', kind: 'story', dek: 'A dek.' }, artifact: { content }, nav: {} } as never, address);
@@ -140,36 +144,36 @@ describe('S5 and S6 the edges', () => {
 });
 
 describe('N1 and N2 native answers', () => {
-  test('N1 words only for a new key', () => {
-    const first = readSpoken({ blockKey: 'k1', document: 'rs:a', spoken: 'Words.', block: 1, blocks: 3, blockFraction: 0.5 }, NO_SPOKEN);
-    expect(first).toEqual({ key: 'k1', document: 'rs:a', spoken: 'Words.', block: 1, blocks: 3, fraction: 0.5 });
-    expect(readSpoken({ blockKey: 'k1', document: 'rs:a', block: 1, blocks: 3, blockFraction: 0.6 }, first).spoken).toBe('Words.');
-    expect(readSpoken({ blockKey: 'k2', document: 'rs:a', spoken: 'Other.', block: 2, blocks: 3, blockFraction: 0 }, first).spoken).toBe('Other.');
-    expect(readSpoken({ blockKey: 'k2', document: 'rs:a', block: 2, blocks: 3, blockFraction: 0 }, first).spoken).toBe('');     // a key we do not hold and no words: nothing, never the old block's
-    expect(readSpoken({}, first)).toEqual(NO_SPOKEN);
+  test('N1 the answer whole, no document is nothing', () => {
+    expect(readSpoken({ document: 'rs:a', spoken: 'Words.', block: 1, blocks: 3, blockFraction: 0.5 }, 'a')).toEqual({ document: 'rs:a', entry: 'a', spoken: 'Words.', block: 1, blocks: 3, fraction: 0.5 });
+    expect(readSpoken({ spoken: 'Words.' }, 'a')).toEqual(NO_SPOKEN);
   });
-  test('N2 the document is the entry on air', () => {
-    expect(ownsAir('rs:e1', 'pub:a/x', 'e1')).toBe(true);
-    expect(ownsAir('pub:a/x', 'pub:a/x@3', 'e9')).toBe(true);
-    expect(ownsAir('rs:e0', 'pub:a/x', 'e1')).toBe(false);
-    expect(ownsAir('', 'pub:a/x', 'e1')).toBe(false);
+  const snap = (document: string, entry: string) => ({ document, entry, spoken: 'x', block: 0, blocks: 1, fraction: 0 });
+  test('N2 exactly the entry on air', () => {
+    const air = { id: 'e1', address: 'pub:a/x' };
+    expect(ownsAir(snap('rs:e1', 'e1'), air, 'pub:a/x')).toBe(true);
+    expect(ownsAir(snap('pub:a/x', 'e1'), air, 'pub:a/x')).toBe(true);
+    expect(ownsAir(snap('rs:e1', 'e0'), air, 'pub:a/x')).toBe(false);                                   // another entry's answer
+    expect(ownsAir(snap('rs:e0', 'e1'), air, 'pub:a/x')).toBe(false);                                   // another entry's document
+    expect(ownsAir(snap('pub:a/x', 'e1'), { id: 'e1', address: 'pub:a/x@3' }, 'pub:a/x@3')).toBe(false);   // a revision is not the bare address
+    expect(ownsAir(snap('pub:a/x@3', 'e1'), { id: 'e1', address: 'pub:a/x@3' }, 'pub:a/x@3')).toBe(true);
+    expect(ownsAir(snap('pub:a/x@3', 'e1'), { id: 'e1', address: 'pub:a/x@3' }, 'pub:a/x')).toBe(false);   // another page shown
+    expect(ownsAir(snap('', 'e1'), air, 'pub:a/x')).toBe(false);
   });
 });
 
 // The real path: the radio on air, native's answers faked (the deck and the facts), the reader's held page.
 type Deck = { why: string; item: string; seq: number };
-let deck: Deck, nowS: number, facts: Record<string, unknown> | undefined, factCalls: { have: unknown }[], wordsSent: number;
-const BLOCKS = 'The first sentence is here. The second sentence follows it.';
-const words = { text: BLOCKS, key: 'k-main', fraction: 0.8, document: undefined as string | undefined };
+let deck: Deck, nowS: number, factCalls: number;
+const P1 = 'The first sentence is here. The second sentence follows it.', P2 = 'A middle paragraph speaks next. It has two sentences too.', P3 = 'The last paragraph ends it. Nothing follows.';
+const PAGE = `${P1}\n\n${P2}\n\n${P3}`;
+const said = { text: P2, fraction: 0.8, document: undefined as string | undefined };
 const nat = {
   available: true,
-  later: async (r: { op: string; name?: string; have?: unknown; args?: Record<string, unknown> }) => {
+  later: async (r: { op: string; name?: string; args?: Record<string, unknown> }) => {
     if (r.op === 'radioFacts') {
-      factCalls.push({ have: r.have });
-      const doc = words.document ?? `rs:${deck.item}`;
-      const o: Record<string, unknown> = { foreground: true, at: nowS * 1000, ready: true, turnOpen: false, position: { block: 0, seconds: 0 }, wants: false, inbox: [], document: doc, blockKey: words.key, block: 0, blocks: 1, blockFraction: words.fraction };
-      if (r.have !== words.key) { o.spoken = words.text; wordsSent++; }
-      return o;
+      factCalls++;
+      return { foreground: true, at: nowS * 1000, ready: true, turnOpen: false, position: { block: 0, seconds: 0 }, wants: false, inbox: [], document: said.document ?? `rs:${deck.item}`, spoken: said.text, block: 1, blocks: 3, blockFraction: said.fraction };
     }
     if (r.op === 'deck') {
       const a = r.args ?? {};
@@ -185,85 +189,147 @@ const pulse = async (): ReturnType<typeof radioPulse> => { nowS += 1; return rad
 const reply = (body: unknown): Reply => ({ body, serverTime: 0, raw: '' });
 const net = (content: () => string): R.Net => ({ pub: async (path) => reply(path.endsWith('/related') ? { links: [] } : { publication: { title: 'Harbor', kind: 'story' }, route: { bare: 'pub/x', permalink: 'pub/x/v1' }, artifact: { content: content() }, nav: { revision: 1, latest: 1 } }), authed: async () => reply({}) });
 const ADDRESS = 'pub:pub/x';
-async function playPage(content: () => string = () => BLOCKS): Promise<R.Net> {
+async function playPage(content: () => string = () => PAGE, address = ADDRESS): Promise<R.Net> {
   const n = net(content);
   R.setHandOverForTest(null);
-  await R.readerDocShared(ADDRESS, 'in', false, n);
-  await radioListen(undefined, nat as never, ADDRESS, 'Harbor', BLOCKS);
+  await R.readerDocShared(address, 'in', false, n);
+  await radioListen(undefined, nat as never, address, 'Harbor', PAGE);
   await pulse(); await pulse();
   return n;
 }
-const follow = (): ReturnType<typeof readerFollow> => readerFollow(undefined, nat as never);
+const follow = (shown = ADDRESS): ReturnType<typeof readerFollow> => readerFollow(undefined, nat as never, shown);
+const blocksOf = (address = ADDRESS) => R.heldDocument(address)!.blocks.filter((b) => b.text !== '');
 
-describe('L1-L6 readerFollow', () => {
+describe('L1-L7 readerFollow', () => {
   beforeEach(async () => {
     resetSeam(); R.resetReaderForTest();
     await wipeRadio(undefined); adoptNative(nat as never, 'test');
-    deck = { why: 'empty', item: '', seq: 0 }; nowS = 1_700_000_000; factCalls = []; wordsSent = 0;
-    words.text = BLOCKS; words.key = 'k-main'; words.fraction = 0.8; words.document = undefined;
+    deck = { why: 'empty', item: '', seq: 0 }; nowS = 1_700_000_000; factCalls = 0;
+    said.text = P2; said.fraction = 0.8; said.document = undefined;
   });
-  test('L1 playing on a held page lights its block and the sentence being said', async () => {
+  test('L1 playing on a held page of three blocks lights the block being said and the sentence in it', async () => {
     await playPage();
-    const doc = R.heldDocument(ADDRESS)!;
-    expect(doc.blocks.length).toBe(1);
-    expect(await follow()).toEqual({ address: ADDRESS, blockId: doc.blocks[0].id, sentence: 1 });
-    words.fraction = 0.1; await pulse();
-    expect((await follow()).sentence).toBe(0);
+    const b = blocksOf();
+    expect(b.length).toBe(3);
+    expect(await follow()).toEqual({ address: ADDRESS, blockId: b[1].id, sentence: 1 });
+    said.fraction = 0.1; await pulse();
+    expect(await follow()).toEqual({ address: ADDRESS, blockId: b[1].id, sentence: 0 });
+    said.text = P3; said.fraction = 0.1; await pulse();
+    expect(await follow()).toEqual({ address: ADDRESS, blockId: b[2].id, sentence: 0 });
   });
   test('L2 paused lights nothing, resumed lights again', async () => {
     await playPage();
-    expect((await follow()).sentence).toBe(1);
+    const lit = { address: ADDRESS, blockId: blocksOf()[1].id, sentence: 1 };
+    expect(await follow()).toEqual(lit);
     await nat.later({ op: 'deck', name: 'deckAct', args: { op: 'pause' } }); await pulse();
     expect(await follow()).toEqual(NO_FOLLOW);
     await nat.later({ op: 'deck', name: 'deckAct', args: { op: 'resume' } }); await pulse();
-    expect((await follow()).sentence).toBe(1);
+    expect(await follow()).toEqual(lit);
   });
   test('L3 a page that is not held lights nothing', async () => {
     R.setHandOverForTest(null);
-    await radioListen(undefined, nat as never, ADDRESS, 'Harbor', BLOCKS); await pulse(); await pulse();
+    await radioListen(undefined, nat as never, ADDRESS, 'Harbor', PAGE); await pulse(); await pulse();
     expect(R.heldDocument(ADDRESS)).toBeUndefined();
     expect(await follow()).toEqual(NO_FOLLOW);
   });
-  test('L4 after the wipe nothing is lit, and the next play lights again', async () => {
+  test('L4 the wipe clears the held answer: no words, nothing lit, and the next play lights again (the reader is not reset by hand)', async () => {
     await playPage();
+    expect((await radioPageFacts(undefined, nat as never)).sentences.length).toBe(2);
     expect((await follow()).blockId).not.toBe('');
-    await wipeRadio(undefined); R.resetReaderForTest();                         // sign-out: the radio forgets its sheet, the reader its pages
+    const old = await getRadio(undefined, nat as never, false);
+    await wipeRadio(undefined); nextGeneration();
+    expect(old.spoken).toEqual(NO_SPOKEN);                                       // the held answer itself is cleared, not only left behind                                // sign-out: the radio is wiped and the account generation moves; the reader drops its pages by that generation alone
     deck = { why: 'empty', item: '', seq: 0 };
+    const after = await radioPageFacts(undefined, nat as never);
+    expect(after.sentences).toEqual([]); expect(after.sentenceIndex).toBe(0); expect(after.progress).toBe(0);
     expect(await follow()).toEqual(NO_FOLLOW);
+    expect(R.heldDocument(ADDRESS)).toBeUndefined();
     await playPage();
-    expect((await follow()).sentence).toBe(1);
+    expect(await follow()).toEqual({ address: ADDRESS, blockId: blocksOf()[1].id, sentence: 1 });
   });
-  test('L5 a document replaced mid-play is followed in its new blocks', async () => {
-    let content = BLOCKS;
+  test('L4b a new account generation alone returns no held words', async () => {
+    await playPage();
+    expect((await radioPageFacts(undefined, nat as never)).sentences.length).toBe(2);
+    nextGeneration();                                                            // the account moved; the wipe has not run yet
+    expect((await radioPageFacts(undefined, nat as never)).sentences).toEqual([]);
+    expect(await follow()).toEqual(NO_FOLLOW);
+  });
+  test('L5 a document replaced mid-play, and what native speaks with it, is followed in its new blocks', async () => {
+    let content = PAGE;
     const n = await playPage(() => content);
     const before = await follow();
-    content = 'A new heading line here.\n\nThe first sentence is here. The second sentence follows it.';
+    const NEW = 'A new heading line here.';
+    content = `${NEW}\n\n${P1}\n\n${P3}`;
     await R.readerReload(ADDRESS); await R.readerDocShared(ADDRESS, 'in', false, n);
-    const after = await follow();
-    const blocks = R.heldDocument(ADDRESS)!.blocks.filter((b) => b.text !== '');
-    expect(blocks.length).toBe(2);
-    expect(after.blockId).toBe(blocks[1].id);
-    expect(after.blockId).not.toBe(before.blockId);
-    expect(after.sentence).toBe(1);
+    expect(await follow()).toEqual(NO_FOLLOW);                                   // native still speaks the old second paragraph, which the new page does not hold
+    said.text = P1; said.fraction = 0.1; await pulse();
+    const b = blocksOf();
+    expect(b.length).toBe(3);
+    expect(await follow()).toEqual({ address: ADDRESS, blockId: b[1].id, sentence: 0 });
+    expect(before.blockId).not.toBe('');
   });
-  test('L6 words of another entry light nothing', async () => {
+  test('L6 another entry, another revision and another page shown light nothing', async () => {
     await playPage();
-    words.document = 'rs:some-other-entry'; await pulse();
+    const lit = { address: ADDRESS, blockId: blocksOf()[1].id, sentence: 1 };
+    expect(await follow()).toEqual(lit);
+    // a different entry of the same story: the answer read for the first entry is not the second's, until the pulse reads again
+    await radioListen(undefined, nat as never, ADDRESS, 'Harbor again', PAGE);
+    const r = await getRadio(undefined, nat as never, false);
+    r.spoken = { ...r.spoken, entry: 'the-entry-before' };
     expect(await follow()).toEqual(NO_FOLLOW);
-    words.document = ADDRESS; await pulse();
-    expect((await follow()).sentence).toBe(1);                                  // the story's own address is the entry too
+    await pulse();
+    expect(await follow()).toEqual(lit);
+    // another page shown while this one plays
+    await R.readerDocShared('pub:pub/other', 'in', false, net(() => PAGE));
+    expect(await follow('pub:pub/other')).toEqual(NO_FOLLOW);
+    expect(await follow(ADDRESS)).toEqual(lit);
   });
-  test('L7 one native read a pulse, shared by the page facts and the follow; the words go once a block', async () => {
+  test('L6b another revision of the same address lights nothing', async () => {
+    const REV = `${ADDRESS}@3`;
     await playPage();
-    factCalls = []; wordsSent = 0;
+    await R.readerDocShared(REV, 'in', false, net(() => PAGE));                   // the revision is held too
+    said.document = REV; await pulse();                                           // native speaks the revision, the entry on air is the bare address
+    expect(await follow(ADDRESS)).toEqual(NO_FOLLOW);
+    expect(await follow(REV)).toEqual(NO_FOLLOW);
+    said.document = ADDRESS; await pulse();
+    expect(await follow(ADDRESS)).toEqual({ address: ADDRESS, blockId: blocksOf()[1].id, sentence: 1 });
+    expect(await follow(REV)).toEqual(NO_FOLLOW);                                 // the page shown is the revision, not the page on air
+  });
+  test('L7 one native read a pulse serves both the page facts and the follow', async () => {
+    await playPage();
+    factCalls = 0;
     for (let i = 0; i < 3; i++) { await pulse(); await follow(); await radioPageFacts(undefined, nat as never); }
-    expect(factCalls.length).toBe(3);
-    expect(wordsSent).toBe(0);                                                  // the block did not change: only its key travelled
+    expect(factCalls).toBe(3);
     const f = await radioPageFacts(undefined, nat as never);
-    expect(f.sentences).toEqual(['The first sentence is here.', 'The second sentence follows it.']);
-    expect(f.sentenceIndex).toBe(1); expect(f.progress).toBe(0.8);
-    words.key = 'k-next'; words.text = 'Next block words. More of them.'; await pulse();
-    expect(wordsSent).toBe(1);
-    expect((await radioPageFacts(undefined, nat as never)).sentences).toEqual(['Next block words.', 'More of them.']);
+    expect(f.sentences).toEqual(['A middle paragraph speaks next.', 'It has two sentences too.']);
+    expect(f.sentenceIndex).toBe(1); expect(f.progress).toBeCloseTo((1 + 0.8) / 3, 9);
+  });
+});
+
+describe('N3 the order of answers', () => {
+  type Pending = { resolve: (v: unknown) => void; reject: (e: unknown) => void };
+  test('an older answer resolving later never overwrites a newer one; a failed read clears only what is older', async () => {
+    await wipeRadio(undefined);
+    const pending: Pending[] = [];
+    const slow = { available: true, later: (r: { op: string }) => (r.op === 'radioFacts' ? new Promise((resolve, reject) => { pending.push({ resolve, reject }); }) : Promise.resolve({})) };
+    adoptNative(slow as never, 'test');
+    const answer = (words: string) => ({ at: 1_700_000_000_000, ready: true, inbox: [], position: { block: 0, seconds: 0 }, foreground: true, document: 'rs:e', spoken: words, block: 0, blocks: 1, blockFraction: 0 });
+    const r = await getRadio(undefined, slow as never, false);
+    const first = getRadio(undefined, slow as never, true), second = getRadio(undefined, slow as never, true);
+    await new Promise((res) => setTimeout(res, 20));
+    expect(pending.length).toBe(2);
+    pending[1].resolve(answer('Newer words.')); await second;
+    expect(r.spoken.spoken).toBe('Newer words.');
+    pending[0].resolve(answer('Older words.')); await first;
+    expect(r.spoken.spoken).toBe('Newer words.');
+    const third = getRadio(undefined, slow as never, true), fourth = getRadio(undefined, slow as never, true);
+    await new Promise((res) => setTimeout(res, 20));
+    pending[3].resolve(answer('Fourth words.')); await fourth;
+    pending[2].reject(new Error('down')); await third;
+    expect(r.spoken.spoken).toBe('Fourth words.');                               // the older read failed: the newer answer stays
+    const fifth = getRadio(undefined, slow as never, true);
+    await new Promise((res) => setTimeout(res, 20));
+    pending[4].reject(new Error('down')); await fifth;
+    expect(r.spoken.spoken).toBe('');                                            // a failed read newer than what is held clears it
   });
 });

@@ -687,6 +687,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     private let st: Locked<State>
     public var document: ProgrammeDocument { st.read { $0.document } }
     public var blockIndex: Int { st.read { $0.blockIndex } }
+    public var place: (document: ProgrammeDocument, blockIndex: Int) { st.read { ($0.document, $0.blockIndex) } }
     public var level: PlayLevel { st.read { $0.level } }
     public var userPaused: Bool { st.read { $0.userPaused } }
     /// Paused by the listener (or by a lost route): only their Play ends it. A system interruption's pause is not this.

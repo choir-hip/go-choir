@@ -111,19 +111,20 @@ public final class BarTracker: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         return Raw(holding: holdingLine, revisedAt: revisedAt?.timeIntervalSince1970 ?? 0, errorAt: errorAt?.timeIntervalSince1970 ?? 0, errorStage: errorStage, errorMessage: errorMessage)
     }
-    /// The audio's own place in the block now, 0...1 (`index`: the block `blockOnAir` clamped to, if not `s.blockIndex`); a block with no audio yet is at 0.
-    public func blockFraction(_ s: LabSnapshot, index: Int? = nil) -> Double {
-        lock.lock(); let src = positionSource; lock.unlock()
-        guard let src, let p = src(), p.index == (index ?? s.blockIndex) else { return 0 }
+    public func blockFraction(_ s: LabSnapshot) -> Double {
+        lock.lock(); defer { lock.unlock() }
+        guard let p = positionSource?(), p.index == s.blockIndex else { return 0 }
         return min(0.99, max(0, p.fraction))
     }
 
-    /// The block on air as the document holds it (the document is native's): which document, its spoken words (a clip's summary), its number clamped into the programme, how many, and a `key` that changes with the document, the block or its words.
-    public static func blockOnAir(_ s: LabSnapshot, document d: ProgrammeDocument) -> (document: String, key: String, spoken: String, index: Int, count: Int) {
+    /// The block on air from one moment: the document and index read together (`ProgrammePlayer.place`), its words (a clip's summary) and the audio's place under the same lock; a position for another block is 0.
+    public func blockOnAir(document d: ProgrammeDocument, index i: Int) -> (document: String, spoken: String, index: Int, count: Int, fraction: Double) {
+        lock.lock(); defer { lock.unlock() }
         let n = d.blocks.count
-        guard n > 0 else { return (d.id, "", "", 0, 0) }
-        let idx = min(max(s.blockIndex, 0), n - 1), text = d.blocks[idx].spokenText ?? d.blocks[idx].summary
-        return (d.id, "\(d.id)|\(idx)|\(text.utf8.count)|\(text.hashValue)", text, idx, n)
+        guard n > 0 else { return (d.id, "", 0, 0, 0) }
+        let idx = min(max(i, 0), n - 1), text = d.blocks[idx].spokenText ?? d.blocks[idx].summary
+        guard let p = positionSource?(), p.index == idx else { return (d.id, text, idx, n, 0) }
+        return (d.id, text, idx, n, min(0.99, max(0, p.fraction)))
     }
 
     public func radioInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, document d: ProgrammeDocument) -> RadioInfo {
