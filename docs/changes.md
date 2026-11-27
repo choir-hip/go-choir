@@ -140,6 +140,10 @@ stage, including its `UtteranceEnd` rule; the first-run voice download card.
 
 # What changed
 
+> From 2026-11-27 a new entry is one file in [docs/changes/](changes/README.md), not a
+> section here; `scripts/changes` prints both, newest first. The entries below are
+> the record up to then and stay where they are.
+
 One entry per thing built, newest first. This is the page to read to catch up
 (owner, 2026-11-22: "its hard to catch up on what claude has done since i last
 looked"). Every landing that changes behavior adds or updates its entry in the

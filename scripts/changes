@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""Print the change log newest first: the entries in docs/changes/ and, after them
+on the same date, the entries of the older single file docs/changes.md.
+
+  scripts/changes [--since YYYY-MM-DD] [--limit N] [--full] [--root DIR]
+
+One line per entry (date, title, source); --full prints each entry's text."""
+import argparse, os, re, sys
+import importlib.machinery, importlib.util
+_l = importlib.machinery.SourceFileLoader("entrieslib", os.path.join(os.path.dirname(os.path.abspath(__file__)), "entrieslib.py"))
+L = importlib.util.module_from_spec(importlib.util.spec_from_loader("entrieslib", _l))
+_l.exec_module(L)
+
+
+def new_entries(root):
+    d = os.path.join(root, "docs/changes")
+    out = []
+    if os.path.isdir(d):
+        for n in sorted(L.entry_names(d), reverse=True):
+            if not n.endswith(".md"):
+                continue
+            f, body, _ = L.parse_front(open(os.path.join(d, n), encoding="utf-8").read())
+            f = f or {}
+            date = f.get("date") or n[:10]
+            title = f.get("title", n)
+            if f.get("class"):
+                title += " (%s)" % f["class"]
+            out.append((date, 0, title, "docs/changes/" + n, body))
+    return out
+
+
+def old_entries(root):
+    p = os.path.join(root, "docs/changes.md")
+    if not os.path.isfile(p):
+        return []
+    out, cur = [], None
+    for l in open(p, encoding="utf-8").read().split("\n"):
+        m = re.match(r"^## (\d{4}-\d{2}-\d{2})(?::\s*(.*))?$", l)
+        if m:
+            cur = [m.group(1), 1, (m.group(2) or "").strip(), "docs/changes.md", [l]]
+            out.append(cur)
+        elif l.startswith("# ") or l.startswith("## "):
+            cur = None
+        elif cur is not None:
+            cur[4].append(l)
+    return [(d, k, t, s, "\n".join(b).strip("\n")) for d, k, t, s, b in out]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--since")
+    ap.add_argument("--limit", type=int)
+    ap.add_argument("--full", action="store_true")
+    ap.add_argument("--root", default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    a = ap.parse_args()
+    if a.limit is not None and a.limit < 1:
+        print("changes: --limit wants a positive number", file=sys.stderr)
+        return 2
+    if a.since and L.parse_date(a.since) is None:
+        print("changes: --since wants YYYY-MM-DD", file=sys.stderr)
+        return 2
+    es = new_entries(a.root) + old_entries(a.root)
+    if a.since:
+        es = [e for e in es if e[0] >= a.since]
+    es.sort(key=lambda e: (e[0], -e[1]), reverse=True)  # stable: new dir before old file on one date
+    if a.limit is not None:
+        es = es[: a.limit]
+    for date, _, title, src, body in es:
+        if a.full:
+            print("== %s  %s  [%s]\n%s\n" % (date, title, src, body))
+        else:
+            print("%s  %s  [%s]" % (date, title, src))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

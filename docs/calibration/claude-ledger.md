@@ -18,6 +18,10 @@ Rules:
 - Scoring: Brier score per claim (p - outcome)^2; reported per agent kind
   and per claim type, with counts.
 
+From 2026-11-27 a new claim is one file in [claims/](claims/README.md), whose id is
+the file name (a UTC time and a slug), and settling it edits that file. Claims C1 to
+C257 stay in this file with their ids; `scripts/ledger` scores the directory.
+
 Level 2 (`choir precommit`, `choir mcp`):
 [docs/archive/reports/choir-mcp-precommitments-2026-10-14.md](../archive/reports/choir-mcp-precommitments-2026-10-14.md).
 `choir precommit import-ledger` reads the two tables below, so keep their

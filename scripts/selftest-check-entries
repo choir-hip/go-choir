@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+"""Selftest for check-entries and its two readers, changes and ledger: the rules
+check-entries enforces each have a case that must fail, and a valid case that must pass,
+and the two readers are run against small trees. It does not cover every message text,
+and it does not run the checker against the real docs tree (scripts/gates does)."""
+import importlib.machinery, importlib.util, os, sys, tempfile
+
+here = os.path.dirname(os.path.abspath(__file__))
+loader = importlib.machinery.SourceFileLoader("check_entries", os.path.join(here, "check-entries"))
+spec = importlib.util.spec_from_loader("check_entries", loader)
+ce = importlib.util.module_from_spec(spec)
+loader.exec_module(ce)
+
+CHANGE = """---
+date: 2026-11-27
+title: a thing
+class: yellow
+---
+What: it did a thing.
+Why: because.
+Proof: not proved.
+Replaced: nothing.
+Undo: revert.
+"""
+CLAIM_OPEN = """---
+id: 20261127T1432Z-a-claim
+recorded: 2026-11-27T14:32Z
+who: lead
+kind: landing
+p: 0.8
+settle_by: 2026-11-28T14:00Z
+evidence_source: a CI run on main
+status: open
+---
+The lane lands green on its first attempt.
+"""
+CLAIM_SETTLED = CLAIM_OPEN.replace("status: open", """status: settled
+settled: 2026-11-28T09:00Z
+outcome: true
+evidence: CI run 123 on commit abc, conclusion success
+brier: 0.04""")
+
+fails = []
+def case(name, kind, name_file, text, want_ok, extra=None):
+    with tempfile.TemporaryDirectory() as d:
+        sub = os.path.join(d, "docs/changes" if kind == "change" else "docs/calibration/claims")
+        os.makedirs(sub)
+        open(os.path.join(sub, name_file), "w").write(text)
+        if extra:
+            for n, t in extra.items():
+                open(os.path.join(sub, n), "w").write(t)
+        probs = ce.check(d)
+        ok = not probs
+        if ok != want_ok:
+            fails.append("%s: wanted %s, got %s" % (name, "ok" if want_ok else "problems", probs or "ok"))
+
+def sub(text, a, b): 
+    assert a in text, a
+    return text.replace(a, b)
+
+C = "2026-11-27-a-thing.md"
+case("change valid", "change", C, CHANGE, True)
+case("change README skipped", "change", C, CHANGE, True, {"README.md": "# notes\n"})
+case("change no front matter", "change", C, "What: x\n", False)
+case("change bad date", "change", C, sub(CHANGE, "date: 2026-11-27", "date: 2026-13-45"), False)
+case("change missing title", "change", C, sub(CHANGE, "title: a thing\n", ""), False)
+case("change bad class", "change", C, sub(CHANGE, "yellow", "purple"), False)
+for lab in ("What", "Why", "Proof", "Replaced", "Undo"):
+    case("change missing " + lab, "change", C, sub(CHANGE, lab + ":", "X" + lab + ":"), False)
+case("change empty Proof", "change", C, sub(CHANGE, "Proof: not proved.", "Proof:"), False)
+case("change bad filename", "change", "thing.md", CHANGE, False)
+case("change filename date differs", "change", "2026-11-26-a-thing.md", CHANGE, False)
+case("change not markdown", "change", "2026-11-27-a-thing.txt", CHANGE, False)
+
+K = "20261127T1432Z-a-claim.md"
+case("claim open valid", "claim", K, CLAIM_OPEN, True)
+case("claim settled valid", "claim", K, CLAIM_SETTLED, True)
+case("claim README skipped", "claim", K, CLAIM_OPEN, True, {"README.md": "x\n"})
+case("claim bad filename", "claim", "C258.md", CLAIM_OPEN, False)
+case("claim id differs from file", "claim", "20261127T1433Z-a-claim.md", CLAIM_OPEN, False)
+for fld in ("recorded", "who", "kind", "p", "settle_by", "evidence_source", "status"):
+    case("claim missing " + fld, "claim", K, "\n".join(l for l in CLAIM_OPEN.split("\n") if not l.startswith(fld + ":")), False)
+case("claim p above 1", "claim", K, sub(CLAIM_OPEN, "p: 0.8", "p: 1.2"), False)
+case("claim p negative", "claim", K, sub(CLAIM_OPEN, "p: 0.8", "p: -0.1"), False)
+case("claim p not a number", "claim", K, sub(CLAIM_OPEN, "p: 0.8", "p: high"), False)
+case("claim settle_by unparsable", "claim", K, sub(CLAIM_OPEN, "2026-11-28T14:00Z", "tomorrow"), False)
+case("claim bad status", "claim", K, sub(CLAIM_OPEN, "status: open", "status: done"), False)
+case("claim no body", "claim", K, CLAIM_OPEN.split("---\n")[0] + "---" + CLAIM_OPEN.split("---")[1] + "---\n", False)
+case("claim open but has outcome", "claim", K, sub(CLAIM_OPEN, "status: open", "status: open\noutcome: true"), False)
+case("claim settled no outcome", "claim", K, sub(CLAIM_SETTLED, "outcome: true\n", ""), False)
+case("claim settled bad outcome", "claim", K, sub(CLAIM_SETTLED, "outcome: true", "outcome: maybe"), False)
+case("claim settled no evidence", "claim", K, sub(CLAIM_SETTLED, "evidence: CI run 123 on commit abc, conclusion success\n", ""), False)
+case("claim settled thin evidence", "claim", K, sub(CLAIM_SETTLED, "CI run 123 on commit abc, conclusion success", "yes"), False)
+case("claim settled no settled time", "claim", K, sub(CLAIM_SETTLED, "settled: 2026-11-28T09:00Z\n", ""), False)
+case("claim settled before recorded", "claim", K, sub(CLAIM_SETTLED, "settled: 2026-11-28T09:00Z", "settled: 2026-11-26T09:00Z"), False)
+case("claim true wrong brier", "claim", K, sub(CLAIM_SETTLED, "brier: 0.04", "brier: 0.64"), False)
+case("claim false brier ok", "claim", K, sub(sub(CLAIM_SETTLED, "outcome: true", "outcome: false"), "brier: 0.04", "brier: 0.64"), True)
+case("claim true no brier", "claim", K, sub(CLAIM_SETTLED, "brier: 0.04\n", ""), False)
+case("claim lapsed needs no brier", "claim", K, sub(sub(CLAIM_SETTLED, "outcome: true", "outcome: lapsed"), "brier: 0.04\n", ""), True)
+
+# the readers, against a tree with one open overdue claim, two settled, one change entry
+import subprocess
+with tempfile.TemporaryDirectory() as d:
+    cd = os.path.join(d, "docs/calibration/claims"); os.makedirs(cd)
+    os.makedirs(os.path.join(d, "docs/changes"))
+    open(os.path.join(cd, "20261127T1432Z-a-claim.md"), "w").write(CLAIM_OPEN)
+    open(os.path.join(cd, "20261120T1000Z-s1.md"), "w").write(CLAIM_SETTLED.replace("20261127T1432Z-a-claim", "20261120T1000Z-s1").replace("2026-11-27T14:32Z", "2026-11-20T10:00Z"))
+    s2 = CLAIM_SETTLED.replace("20261127T1432Z-a-claim", "20261121T1000Z-s2").replace("2026-11-27T14:32Z", "2026-11-21T10:00Z")
+    s2 = s2.replace("outcome: true", "outcome: false").replace("brier: 0.04", "brier: 0.64")
+    open(os.path.join(cd, "20261121T1000Z-s2.md"), "w").write(s2)
+    open(os.path.join(d, "docs/changes/2026-11-27-a-thing.md"), "w").write(CHANGE)
+    open(os.path.join(d, "docs/changes.md"), "w").write("# What changed\n\n## 2026-11-26: old entry (green)\n\nWhat: x\n")
+    if ce.check(d):
+        fails.append("reader fixture is not valid: %s" % ce.check(d))
+    def run(*a):
+        r = subprocess.run([sys.executable, "-I", *a, "--root", d], capture_output=True, text=True)
+        if r.returncode != 0: fails.append("%s exited %d: %s" % (a, r.returncode, r.stderr))
+        return r.stdout
+    out = run(os.path.join(here, "ledger"), "all", "--now", "2026-12-01T00:00Z")
+    for want in ("past their settle-by time (1)", "20261127T1432Z-a-claim", "2 settled"):
+        if want not in out: fails.append("ledger output lacks %r:\n%s" % (want, out))
+    if "0.8 to 1.0        2    1 (50%)  0.34" not in out: fails.append("ledger band row wrong:\n" + out)
+    out = run(os.path.join(here, "changes"))
+    if out.splitlines()[:2] != ["2026-11-27  a thing (yellow)  [docs/changes/2026-11-27-a-thing.md]", "2026-11-26  old entry (green)  [docs/changes.md]"]:
+        fails.append("changes order wrong:\n" + out)
+    if "old entry" in run(os.path.join(here, "changes"), "--since", "2026-11-27"):
+        fails.append("changes --since did not filter")
+
+# --- review round: new cases ---
+def nl(text, key, val):
+    return "\n".join((key + ": " + val) if l.startswith(key + ":") else l for l in text.split("\n"))
+K2 = "20261127T1432Z-a-claim.md"
+case("brier nan", "claim", K2, nl(CLAIM_SETTLED, "brier", "nan"), False)
+case("brier inf", "claim", K2, nl(CLAIM_SETTLED, "brier", "inf"), False)
+case("p nan", "claim", K2, nl(CLAIM_OPEN, "p", "nan"), False)
+case("p inf", "claim", K2, nl(CLAIM_OPEN, "p", "inf"), False)
+case("fm block indicator |", "claim", K2, nl(CLAIM_OPEN, "who", "|"), False)
+case("fm block indicator >-", "claim", K2, nl(CLAIM_OPEN, "who", ">-"), False)
+case("fm indented continuation", "claim", K2, CLAIM_OPEN.replace("who: lead\n", "who: lead\n  more\n"), False)
+case("fm line not key value", "claim", K2, CLAIM_OPEN.replace("who: lead\n", "who: lead\nstray line\n"), False)
+case("fm blank line", "claim", K2, CLAIM_OPEN.replace("who: lead\n", "who: lead\n\n"), False)
+case("change title with quotes ok", "change", C, nl(CHANGE, "title", 'fix "bug"'), True)
+case("claim name time impossible", "claim", "99999999T9999Z-bad.md", CLAIM_OPEN.replace("20261127T1432Z-a-claim", "99999999T9999Z-bad"), False)
+case("claim name time differs from recorded", "claim", "20261127T1433Z-a-claim.md", CLAIM_OPEN.replace("20261127T1432Z-a-claim", "20261127T1433Z-a-claim"), False)
+case("unpadded change date", "change", "2026-9-01-a.md", nl(CHANGE, "date", "2026-9-01"), False)
+case("recorded date only", "claim", K2, nl(CLAIM_OPEN, "recorded", "2026-11-27"), False)
+case("settle_by date only", "claim", K2, nl(CLAIM_OPEN, "settle_by", "2026-11-28"), False)
+case("settled date only", "claim", K2, nl(CLAIM_SETTLED, "settled", "2026-11-28"), False)
+case("unpadded timestamp", "claim", K2, nl(CLAIM_OPEN, "settle_by", "2026-11-8T14:00Z"), False)
+case("settled same day as recorded", "claim", K2, nl(CLAIM_SETTLED, "settled", "2026-11-27T15:00Z"), True)
+case("Proof whitespace line then label", "change", C, CHANGE.replace("Proof: not proved.", "Proof:\n   \t\n"), False)
+case("Proof then only a label", "change", C, CHANGE.replace("Proof: not proved.\nReplaced:", "Proof: Replaced:\nReplaced:"), False)
+
+import subprocess
+def git(d, *a):
+    subprocess.run(["git", "-C", d, "-c", "user.name=t", "-c", "user.email=t@t", *a], check=True, capture_output=True)
+def based(name, base_text, new_text, want_ok):
+    """a repo whose base commit holds the claim as base_text; the working tree holds new_text (None deletes)."""
+    with tempfile.TemporaryDirectory() as d:
+        cd = os.path.join(d, "docs/calibration/claims"); os.makedirs(cd)
+        f = os.path.join(cd, K2)
+        git(d, "init", "-q"); open(f, "w").write(base_text); git(d, "add", "-A"); git(d, "commit", "-q", "-m", "b"); git(d, "tag", "base")
+        if new_text is None: os.remove(f)
+        else: open(f, "w").write(new_text)
+        probs = ce.check(d, base="base")
+        if (not probs) != want_ok:
+            fails.append("base %s: wanted %s, got %s" % (name, "ok" if want_ok else "problems", probs or "ok"))
+based("settle an open claim", CLAIM_OPEN, CLAIM_SETTLED, True)
+based("unchanged", CLAIM_OPEN, CLAIM_OPEN, True)
+based("change p", CLAIM_OPEN, nl(CLAIM_SETTLED, "p", "0.2").replace("brier: 0.04", "brier: 0.64"), False)
+based("change settle_by", CLAIM_OPEN, nl(CLAIM_SETTLED, "settle_by", "2026-12-30T00:00Z"), False)
+based("change who", CLAIM_OPEN, nl(CLAIM_SETTLED, "who", "x"), False)
+based("change evidence_source", CLAIM_OPEN, nl(CLAIM_SETTLED, "evidence_source", "my own say"), False)
+based("change body", CLAIM_OPEN, CLAIM_SETTLED.replace("The lane lands", "A lane lands"), False)
+based("edit a settled claim", CLAIM_SETTLED, nl(CLAIM_SETTLED, "evidence", "something different entirely here"), False)
+based("delete a claim", CLAIM_OPEN, None, False)
+
+# readers: return codes and edge cases
+with tempfile.TemporaryDirectory() as d:
+    os.makedirs(os.path.join(d, "docs/changes"))
+    open(os.path.join(d, "docs/changes/2026-11-27-a-thing.md"), "w").write(nl(CHANGE, "title", 'fix "bug"'))
+    for args, check_out in (([], lambda o: 'fix "bug" (yellow)' in o), (["--limit", "1"], lambda o: len(o.splitlines()) == 1)):
+        r = subprocess.run([sys.executable, "-I", os.path.join(here, "changes"), *args, "--root", d], capture_output=True, text=True)
+        if r.returncode != 0 or not check_out(r.stdout): fails.append("changes %s: rc=%d out=%r" % (args, r.returncode, r.stdout))
+with tempfile.TemporaryDirectory() as d:
+    cd = os.path.join(d, "docs/calibration/claims"); os.makedirs(cd)
+    for nm, sb in (("20261127T1432Z-late", "2026-12-10T00:00Z"), ("20261127T1433Z-early", "2026-12-02T00:00Z"), ("20261127T1434Z-mid", "2026-12-05T00:00Z")):
+        t = nl(CLAIM_OPEN.replace("20261127T1432Z-a-claim", nm), "settle_by", sb)
+        open(os.path.join(cd, nm + ".md"), "w").write(t)
+    r = subprocess.run([sys.executable, "-I", os.path.join(here, "ledger"), "due", "--now", "2027-01-01T00:00Z", "--root", d], capture_output=True, text=True)
+    names = [l.split()[0] for l in r.stdout.splitlines()[1:]]
+    if r.returncode != 0 or names != ["20261127T1433Z-early", "20261127T1434Z-mid", "20261127T1432Z-late"]: fails.append("ledger sort by time: rc=%d %r" % (r.returncode, r.stdout))
+
+# --- second review round ---
+def tree(files, links=None):
+    """a temp dir (caller removes) holding {relpath: text}"""
+    d = tempfile.mkdtemp()
+    for rel, t in files.items():
+        os.makedirs(os.path.dirname(os.path.join(d, rel)), exist_ok=True)
+        open(os.path.join(d, rel), "w").write(t)
+    return d
+def expect(name, d, want_ok, base=None):
+    probs = ce.check(d, base=base) if base else ce.check(d)
+    if (not probs) != want_ok:
+        fails.append("%s: wanted %s, got %s" % (name, "ok" if want_ok else "problems", probs or "ok"))
+def run_script(script, d, *a):
+    return subprocess.run([sys.executable, "-I", os.path.join(here, script), *a, "--root", d], capture_output=True, text=True)
+
+# brier must be the true rounding
+def p_brier(p, outcome, b):
+    return nl(nl(nl(CLAIM_SETTLED, "p", p), "outcome", outcome), "brier", b)
+case("brier 0.95 true 0.008 too loose", "claim", K2, p_brier("0.95", "true", "0.008"), False)
+case("brier 0.95 true 0.002 ok", "claim", K2, p_brier("0.95", "true", "0.002"), True)
+case("brier 0.95 true 0.003 ok", "claim", K2, p_brier("0.95", "true", "0.003"), True)
+case("brier 0.8 true 0.045 too loose", "claim", K2, p_brier("0.8", "true", "0.045"), False)
+case("brier 0.8 true 0.040 ok", "claim", K2, p_brier("0.8", "true", "0.040"), True)
+# partial and lapsed carry no brier
+case("partial with brier", "claim", K2, nl(CLAIM_SETTLED, "outcome", "partial"), False)
+case("lapsed with brier", "claim", K2, nl(CLAIM_SETTLED, "outcome", "lapsed"), False)
+case("partial without brier", "claim", K2, nl(CLAIM_SETTLED, "outcome", "partial").replace("brier: 0.04\n", ""), True)
+# settle_by before recorded
+case("settle_by before recorded", "claim", K2, nl(CLAIM_OPEN, "settle_by", "2026-11-26T00:00Z"), False)
+case("settle_by equals recorded", "claim", K2, nl(CLAIM_OPEN, "settle_by", "2026-11-27T14:32Z"), True)
+# duplicates
+case("duplicate front matter key", "claim", K2, CLAIM_OPEN.replace("who: lead\n", "who: lead\nwho: other\n"), False)
+case("duplicate What label", "change", C, CHANGE.replace("Why:", "What: again.\nWhy:"), False)
+case("duplicate Undo label", "change", C, CHANGE + "Undo: twice.\n", False)
+# unclosed front matter
+case("unclosed front matter", "claim", K2, CLAIM_OPEN.replace("---\nThe lane", "The lane"), False)
+case("unclosed front matter change", "change", C, CHANGE.replace("---\nWhat", "What"), False)
+# symlinks and dotfiles
+d = tree({"real.md": CLAIM_OPEN, "docs/calibration/claims/.keep": ""})
+os.symlink(os.path.join(d, "real.md"), os.path.join(d, "docs/calibration/claims/" + K2))
+expect("symlink claim", d, False)
+d = tree({"real.md": CHANGE, "docs/changes/.keep": ""})
+os.symlink(os.path.join(d, "real.md"), os.path.join(d, "docs/changes/" + C))
+expect("symlink change", d, False)
+case("dotfile in claims skipped", "claim", K2, CLAIM_OPEN, True, {".hidden.md": "junk", ".DS_Store": "x"})
+case("dotfile in changes skipped", "change", C, CHANGE, True, {".hidden.md": "junk"})
+d = tree({"docs/changes/2026-11-27-a-thing.md": CHANGE, "docs/changes/.2026-11-28-hidden.md": nl(CHANGE, "title", "hidden one"),
+          "docs/calibration/claims/" + K2: CLAIM_OPEN, "docs/calibration/claims/.20261127T1500Z-h.md": CLAIM_OPEN.replace("a-claim", "h")})
+o = run_script("changes", d).stdout
+if "hidden one" in o: fails.append("changes lists a dotfile: " + o)
+o = run_script("ledger", d, "open", "--now", "2027-01-01T00:00Z").stdout
+if "open claims (1)" not in o or "-h" in o: fails.append("ledger reads a dotfile: " + o)
+
+# the base check
+def based2(name, base_text, op, want_ok):
+    with tempfile.TemporaryDirectory() as d:
+        cd = os.path.join(d, "docs/calibration/claims"); os.makedirs(cd)
+        f = os.path.join(cd, K2)
+        git(d, "init", "-q"); open(f, "w").write(base_text); git(d, "add", "-A"); git(d, "commit", "-q", "-m", "b"); git(d, "tag", "base")
+        op(cd, f)
+        probs = ce.check(d, base="base")
+        if (not probs) != want_ok:
+            fails.append("base %s: wanted %s, got %s" % (name, "ok" if want_ok else "problems", probs or "ok"))
+        return probs
+def write(t):
+    return lambda cd, f: open(f, "w").write(t)
+def rename(cd, f):
+    os.rename(f, os.path.join(cd, "20261127T1432Z-a-renamed.md"))
+    t = open(os.path.join(cd, "20261127T1432Z-a-renamed.md")).read().replace("a-claim", "a-renamed")
+    open(os.path.join(cd, "20261127T1432Z-a-renamed.md"), "w").write(t)
+based2("rename a recorded claim", CLAIM_OPEN, rename, False)
+based2("edit kind", CLAIM_OPEN, write(nl(CLAIM_OPEN, "kind", "other")), False)
+based2("edit recorded", CLAIM_OPEN, write(nl(CLAIM_OPEN, "recorded", "2026-11-27T14:33Z")), False)
+based2("settle and add a blank line", CLAIM_OPEN, write(CLAIM_SETTLED + "\n\n"), True)
+based2("settle with trailing whitespace on the body", CLAIM_OPEN, write(CLAIM_SETTLED.replace("first attempt.", "first attempt.   ")), True)
+based2("settle with leading blank lines", CLAIM_OPEN, write(CLAIM_SETTLED.replace("---\nThe lane", "---\n\n\nThe lane")), True)
+based2("body word changed", CLAIM_OPEN, write(CLAIM_SETTLED.replace("green", "red")), False)
+# an unverifiable side fails and names the file, never crashes or skips
+no_fm = "just text, no front matter\n"
+based2("base without front matter", no_fm, write(CLAIM_OPEN), False)
+based2("new side without front matter", CLAIM_OPEN, write(no_fm), False)
+based2("new side unclosed front matter", CLAIM_OPEN, write(CLAIM_OPEN.replace("---\nThe lane", "The lane")), False)
+def to_symlink(cd, f):
+    os.remove(f); open(os.path.join(cd, "..", "elsewhere.txt"), "w").write(CLAIM_OPEN); os.symlink("../elsewhere.txt", f)
+probs = based2("new side is a symlink", CLAIM_OPEN, to_symlink, False)
+if not any(K2 in x for x in probs): fails.append("symlink problem does not name the file: %r" % probs)
+# a base claim that is itself a symlink in git
+with tempfile.TemporaryDirectory() as d:
+    cd = os.path.join(d, "docs/calibration/claims"); os.makedirs(cd)
+    open(os.path.join(cd, "..", "elsewhere.txt"), "w").write(CLAIM_OPEN)
+    os.symlink("../elsewhere.txt", os.path.join(cd, K2))
+    git(d, "init", "-q"); git(d, "add", "-A"); git(d, "commit", "-q", "-m", "b"); git(d, "tag", "base")
+    try:
+        probs = ce.check(d, base="base")
+    except Exception as e:
+        probs = None; fails.append("base symlink raised %r" % e)
+    if probs is not None and not any(K2 in x for x in probs): fails.append("base symlink not reported by name: %r" % probs)
+# a base that git cannot show
+with tempfile.TemporaryDirectory() as d:
+    cd = os.path.join(d, "docs/calibration/claims"); os.makedirs(cd)
+    open(os.path.join(cd, K2), "w").write(CLAIM_OPEN)
+    git(d, "init", "-q"); git(d, "add", "-A"); git(d, "commit", "-q", "-m", "b"); git(d, "tag", "base")
+    real = ce.git_show
+    ce.git_show = lambda root, base, path: None
+    try:
+        probs = ce.check(d, base="base")
+        if not any(K2 in x for x in probs): fails.append("unreadable base not reported by name: %r" % probs)
+    except Exception as e:
+        fails.append("unreadable base raised %r" % e)
+    ce.git_show = real
+
+# the ledger: an unparsable settle_by is shown first; a missing or bad p does not crash
+d = tree({"docs/calibration/claims/20261127T1432Z-ok.md": nl(CLAIM_OPEN, "settle_by", "2026-12-02T00:00Z").replace("a-claim", "ok"),
+          "docs/calibration/claims/20261127T1433Z-badtime.md": nl(CLAIM_OPEN, "settle_by", "2026-12-9T00:00Z").replace("a-claim", "badtime")})
+r = run_script("ledger", d, "due", "--now", "2027-01-01T00:00Z")
+ls = r.stdout.splitlines()
+if r.returncode != 0 or len(ls) < 3 or "badtime" not in ls[1] or "bad settle_by" not in ls[1] or "-ok" not in ls[2]:
+    fails.append("ledger bad settle_by: rc=%d %r %s" % (r.returncode, r.stdout, r.stderr))
+r = run_script("ledger", d, "open", "--now", "2027-01-01T00:00Z")
+if "badtime" not in r.stdout.splitlines()[1]: fails.append("ledger open does not put the bad time first: %r" % r.stdout)
+d = tree({"docs/calibration/claims/20261127T1432Z-nop.md": CLAIM_SETTLED.replace("p: 0.8\n", "").replace("a-claim", "nop"),
+          "docs/calibration/claims/20261127T1433Z-pbad.md": nl(CLAIM_SETTLED, "p", "high").replace("a-claim", "pbad"),
+          "docs/calibration/claims/20261127T1434Z-good.md": CLAIM_SETTLED.replace("a-claim", "good"),
+          "docs/calibration/claims/20261127T1435Z-openbad.md": nl(CLAIM_OPEN, "p", "x").replace("a-claim", "openbad")})
+r = run_script("ledger", d, "all", "--now", "2027-01-01T00:00Z")
+if r.returncode != 0 or "Traceback" in r.stderr: fails.append("ledger crashed on a bad p: rc=%d %s" % (r.returncode, r.stderr))
+elif "excluded" not in r.stdout or "2 " not in r.stdout.split("excluded")[0][-6:] and "(2" not in r.stdout or "p ?" not in r.stdout:
+    fails.append("ledger does not say what it excluded: %r" % r.stdout)
+
+# the changes reader: limits, and the real shape of an old heading
+for lim in ("-1", "0", "0x", "-5"):
+    r = run_script("changes", d, "--limit", lim)
+    if r.returncode != 2: fails.append("changes --limit %s: rc=%d" % (lim, r.returncode))
+d = tree({"docs/changes.md": "# What changed\n\n## 2026-11-26: Android passkeys, the association file and the shared account boundary (red; lane `android-auth`)\n\nWhat: x\n\n## 2026-11-24\n\nbody\n"})
+o = run_script("changes", d).stdout
+if "Android passkeys, the association file and the shared account boundary (red; lane `android-auth`)  [docs/changes.md]" not in o or "2026-11-24" not in o:
+    fails.append("changes does not read a real-shaped old heading: %r" % o)
+
+
+if fails:
+    print("selftest-check-entries: %d failure(s)" % len(fails))
+    for f in fails: print("  " + f)
+    sys.exit(1)
+print("selftest-check-entries: ok")

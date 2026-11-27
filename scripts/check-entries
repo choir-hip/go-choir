@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""Validate the one-file-per-entry change log and claim ledger.
+
+  docs/changes/YYYY-MM-DD-<slug>.md            one change-log entry
+  docs/calibration/claims/<YYYYMMDDTHHMMZ>-<slug>.md   one calibration claim
+
+A change entry: front matter (date, title, class) and the five parts the
+contract names, each a line starting `What:`, `Why:`, `Proof:`, `Replaced:`,
+`Undo:` with text after it ("not proved" is a valid Proof).
+A claim: front matter (id equal to the file name, recorded, who, kind, p,
+settle_by, evidence_source, status open|settled) and a body that is the claim and
+its test. A settled claim also carries settled, outcome (true, false, partial,
+lapsed), evidence (what the author could not write) and, for true or false,
+brier equal to (p - outcome)^2.
+
+Which claims are fixed: a claim counts as recorded when it reaches main, so
+--base checks only claims that exist at the base. A lane may correct its own
+claim before it lands, and a claim must be on main before its evidence exists.
+A claim at the base that cannot be read on either side (no front matter, a
+symlink, unreadable) is a problem, never a skip.
+
+The two long history files (docs/changes.md, docs/calibration/claude-ledger.md)
+are not read here. README.md in either directory is skipped.
+
+  scripts/check-entries [--root DIR] [--base REF]      exit 0 and "check-entries: ok", or 1 with each problem
+"""
+import argparse, importlib.machinery, importlib.util, os, re, subprocess, sys
+
+_here = os.path.dirname(os.path.abspath(__file__))
+_l = importlib.machinery.SourceFileLoader("entrieslib", os.path.join(_here, "entrieslib.py"))
+L = importlib.util.module_from_spec(importlib.util.spec_from_loader("entrieslib", _l))
+_l.exec_module(L)
+
+CLASSES = {"green", "yellow", "orange", "red", "black"}
+LABELS = ("What", "Why", "Proof", "Replaced", "Undo")
+OUTCOMES = {"true", "false", "partial", "lapsed"}
+CHANGE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-[a-z0-9][a-z0-9-]*\.md$")
+CLAIM_RE = re.compile(r"^(\d{8}T\d{4}Z)-[a-z0-9][a-z0-9-]*\.md$")
+SETTLING = ("status", "settled", "outcome", "evidence", "brier")
+LABEL_LINE = re.compile(r"^(%s):" % "|".join(LABELS), re.M)
+
+
+def sections(body):
+    """{label: text} where the text runs from after the label to the next label line."""
+    ms = list(LABEL_LINE.finditer(body))
+    out, dups = {}, []
+    for i, m in enumerate(ms):
+        end = ms[i + 1].start() if i + 1 < len(ms) else len(body)
+        if m.group(1) in out:
+            dups.append(m.group(1))
+        else:
+            out[m.group(1)] = body[m.end():end].strip()
+    return out, dups
+
+
+def check_change(name, text):
+    m = CHANGE_RE.match(name)
+    if not m:
+        return ["%s: name must be YYYY-MM-DD-<slug>.md (lowercase letters, digits, hyphens)" % name]
+    f, body, p = L.parse_front(text)
+    p = ["%s: %s" % (name, x) for x in p]
+    if f is None:
+        return p
+    d = f.get("date", "")
+    if L.parse_date(d) is None:
+        p.append("%s: date %r is not a zero-padded YYYY-MM-DD" % (name, d))
+    elif d != m.group(1):
+        p.append("%s: date %s differs from the file name's %s" % (name, d, m.group(1)))
+    if not f.get("title"):
+        p.append("%s: no title" % name)
+    if f.get("class") not in CLASSES:
+        p.append("%s: class %r is not one of %s" % (name, f.get("class"), "/".join(sorted(CLASSES))))
+    secs, dups = sections(body)
+    for lab in sorted(set(dups)):
+        p.append("%s: '%s:' appears more than once" % (name, lab))
+    for lab in LABELS:
+        if lab not in secs:
+            p.append("%s: no '%s:' part" % (name, lab))
+        elif not secs[lab] or re.fullmatch(r"(%s):" % "|".join(LABELS), secs[lab]):
+            p.append("%s: '%s:' is empty" % (name, lab))
+    return p
+
+
+def check_claim(name, text):
+    m = CLAIM_RE.match(name)
+    if not m:
+        return ["%s: name must be <YYYYMMDDTHHMMZ>-<slug>.md" % name]
+    f, body, p = L.parse_front(text)
+    p = ["%s: %s" % (name, x) for x in p]
+    if f is None:
+        return p
+    stem = name[:-3]
+    name_t = L.parse_name_ts(m.group(1))
+    if name_t is None:
+        p.append("%s: the time in the name is not a real UTC time" % name)
+    if f.get("id") != stem:
+        p.append("%s: id %r must equal the file name %r" % (name, f.get("id"), stem))
+    for k in ("recorded", "who", "kind", "p", "settle_by", "evidence_source", "status"):
+        if not f.get(k):
+            p.append("%s: no %s" % (name, k))
+    times = {}
+    for k in ("recorded", "settle_by", "settled"):
+        if f.get(k):
+            times[k] = L.parse_ts(f[k])
+            if times[k] is None:
+                p.append("%s: %s %r is not a full UTC time YYYY-MM-DDTHH:MMZ" % (name, k, f[k]))
+    rec = times.get("recorded")
+    if rec is not None and name_t is not None and rec != name_t:
+        p.append("%s: recorded %s differs from the time in the file name" % (name, f["recorded"]))
+    pv = None
+    if f.get("p"):
+        pv = L.finite(f["p"])
+        if pv is None:
+            p.append("%s: p %r is not a finite number" % (name, f["p"]))
+        elif not 0 <= pv <= 1:
+            p.append("%s: p %s is not between 0 and 1" % (name, f["p"]))
+    if rec is not None and times.get("settle_by") is not None and times["settle_by"] < rec:
+        p.append("%s: settle_by is earlier than recorded" % name)
+    if not body.strip():
+        p.append("%s: no claim text after the front matter" % name)
+    st = f.get("status")
+    if st not in (None, "", "open", "settled"):
+        p.append("%s: status %r must be open or settled" % (name, st))
+    if st == "open":
+        for k in ("settled", "outcome", "evidence", "brier"):
+            if k in f:
+                p.append("%s: an open claim has %s" % (name, k))
+    if st == "settled":
+        oc = f.get("outcome")
+        if oc not in OUTCOMES:
+            p.append("%s: outcome %r must be one of %s" % (name, oc, "/".join(sorted(OUTCOMES))))
+        if len(f.get("evidence", "").strip()) < 15:
+            p.append("%s: a settled claim needs evidence (a CI run, a count, a commit; at least 15 characters)" % name)
+        if not f.get("settled"):
+            p.append("%s: settled time missing" % name)
+        elif times.get("settled") is not None and rec is not None and times["settled"] < rec:
+            p.append("%s: settled before it was recorded" % name)
+        if oc in ("partial", "lapsed") and "brier" in f:
+            p.append("%s: a %s claim carries no brier" % (name, oc))
+        if oc in ("true", "false"):
+            b = L.finite(f.get("brier", ""))
+            if b is None:
+                p.append("%s: brier missing or not a finite number for a %s claim" % (name, oc))
+            elif pv is not None and 0 <= pv <= 1:
+                want = (pv - (1.0 if oc == "true" else 0.0)) ** 2
+                if abs(b - want) > 0.0005 + 1e-9:
+                    p.append("%s: brier %s should be %.3f (to within 0.0005)" % (name, f["brier"], want))
+    return p
+
+
+def git_show(root, base, path):
+    r = subprocess.run(["git", "-C", root, "show", "%s:%s" % (base, path)], capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def check_against_base(root, base):
+    """A claim is fixed once it is on the base (main): against the base only the settling
+    keys may change, a settled claim not at all, no claim file may go or be renamed, and a
+    claim that cannot be compared (no front matter, a symlink, unreadable) is a problem."""
+    probs = []
+    r = subprocess.run(["git", "-C", root, "ls-tree", "-r", base, "docs/calibration/claims"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return ["cannot list claims at base %s: %s" % (base, r.stderr.strip())]
+    for row in r.stdout.split("\n"):
+        meta, _, path = row.partition("\t")
+        if not path.endswith(".md") or os.path.basename(path) == "README.md" or os.path.basename(path).startswith("."):
+            continue
+        if meta.split(" ")[0] == "120000":
+            probs.append("%s: a symlink at the base cannot be checked" % path)
+            continue
+        old = git_show(root, base, path)
+        if old is None:
+            probs.append("%s: cannot be read at base %s" % (path, base))
+            continue
+        full = os.path.join(root, path)
+        if os.path.islink(full):
+            probs.append("%s: a claim file may not be a symlink" % path)
+            continue
+        if not os.path.isfile(full):
+            probs.append("%s: a recorded claim file may not be deleted or renamed" % path)
+            continue
+        try:
+            new = open(full, encoding="utf-8").read()
+        except (OSError, UnicodeDecodeError) as e:
+            probs.append("%s: cannot be read: %s" % (path, e))
+            continue
+        if new == old:
+            continue
+        of, ob, op = L.parse_front(old)
+        nf, nb, np_ = L.parse_front(new)
+        if of is None:
+            probs.append("%s: the claim at the base has no readable front matter (%s)" % (path, "; ".join(op)))
+            continue
+        if nf is None:
+            probs.append("%s: the claim has no readable front matter (%s)" % (path, "; ".join(np_)))
+            continue
+        if of.get("status") == "settled":
+            probs.append("%s: a settled claim may not change" % path)
+            continue
+        if L.norm_body(ob) != L.norm_body(nb):
+            probs.append("%s: the claim text changed after it was recorded" % path)
+        for k in sorted(set(of) | set(nf)):
+            if k not in SETTLING and of.get(k) != nf.get(k):
+                probs.append("%s: %s changed after the claim was recorded (only %s may change)" % (path, k, ", ".join(SETTLING)))
+    return probs
+
+
+def check(root, base=None):
+    probs = []
+    for sub, fn in (("docs/changes", check_change), ("docs/calibration/claims", check_claim)):
+        d = os.path.join(root, sub)
+        for n in L.entry_names(d):
+            path = os.path.join(d, n)
+            if not n.endswith(".md"):
+                probs.append("%s/%s: not a Markdown file" % (sub, n))
+                continue
+            if os.path.islink(path):
+                probs.append("%s/%s: a symlink is not allowed" % (sub, n))
+                continue
+            try:
+                text = open(path, encoding="utf-8").read()
+            except (OSError, UnicodeDecodeError) as e:
+                probs.append("%s/%s: %s" % (sub, n, e))
+                continue
+            probs += ["%s/%s" % (sub, x) for x in fn(n, text)]
+    if base:
+        probs += check_against_base(root, base)
+    return probs
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default=None)
+    ap.add_argument("--base", default=None, help="a git ref: claims that exist there may only be settled, never rewritten, renamed or deleted")
+    a = ap.parse_args()
+    root = a.root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    probs = check(root, a.base)
+    if probs:
+        print("check-entries: %d problem(s)" % len(probs))
+        for x in probs:
+            print("  " + x)
+        return 1
+    print("check-entries: ok")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

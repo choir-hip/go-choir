@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""Read the one-file-per-claim ledger in docs/calibration/claims/.
+
+  scripts/ledger [due|open|score|all] [--now YYYY-MM-DDTHH:MMZ] [--root DIR]
+
+due    open claims whose settle-by time has passed, or does not parse (shown first)
+open   every open claim
+score  settled claims by probability band: counts, came true, mean Brier
+
+Claims C1 to C257 are in docs/calibration/claude-ledger.md and are scored there;
+this reads only the directory."""
+import argparse, datetime, os, sys
+import importlib.machinery, importlib.util
+_l = importlib.machinery.SourceFileLoader("entrieslib", os.path.join(os.path.dirname(os.path.abspath(__file__)), "entrieslib.py"))
+L = importlib.util.module_from_spec(importlib.util.spec_from_loader("entrieslib", _l))
+_l.exec_module(L)
+
+
+def load(root):
+    d = os.path.join(root, "docs/calibration/claims")
+    out = []
+    if not os.path.isdir(d):
+        return out
+    for n in L.entry_names(d):
+        if not n.endswith(".md"):
+            continue
+        f, _, _ = L.parse_front(open(os.path.join(d, n), encoding="utf-8").read())
+        f = f or {}
+        f["_name"] = n[:-3]
+        out.append(f)
+    return out
+
+
+BANDS = [(0.0, 0.3), (0.3, 0.6), (0.6, 0.8), (0.8, 1.0001)]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("what", nargs="?", default="all", choices=["due", "open", "score", "all"])
+    ap.add_argument("--now")
+    ap.add_argument("--root", default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    a = ap.parse_args()
+    now = L.parse_ts(a.now) if a.now else datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    if now is None:
+        print("ledger: --now does not parse", file=sys.stderr)
+        return 2
+    cs = load(a.root)
+    opens = [c for c in cs if c.get("status") == "open"]
+
+    def when(c):
+        return L.parse_ts(c.get("settle_by"))
+
+    def order(c):  # an unparsable time sorts first, so it is seen
+        return (0, datetime.datetime.min) if when(c) is None else (1, when(c))
+
+    def line(c):
+        t = when(c)
+        pv = L.finite(c.get("p"))
+        return "  %s  p %s  %s  (%s)" % (c["_name"], c.get("p") if pv is not None else "?",
+                                       "settle-by " + c["settle_by"] if t is not None else "bad settle_by %r" % c.get("settle_by"), c.get("who"))
+    if a.what in ("due", "all"):
+        due = [c for c in opens if when(c) is None or when(c) < now]
+        print("open claims past their settle-by time (%d):" % len(due))
+        for c in sorted(due, key=order):
+            print(line(c))
+    if a.what == "open":
+        print("open claims (%d):" % len(opens))
+        for c in sorted(opens, key=order):
+            print(line(c))
+    if a.what in ("score", "all"):
+        st = [c for c in cs if c.get("status") == "settled"]
+        tf = [c for c in st if c.get("outcome") in ("true", "false")]
+        scored = [c for c in tf if L.finite(c.get("p")) is not None and 0 <= L.finite(c["p"]) <= 1]
+        print("\nscorecard, claims in docs/calibration/claims/ (C1 to C257 are scored in docs/calibration/claude-ledger.md):")
+        print("  %d claims: %d open, %d settled (%d true or false, %d partial or lapsed)" % (
+            len(cs), len(opens), len(st), len(tf), len(st) - len(tf)))
+        if len(tf) != len(scored):
+            print("  %d true or false claim(s) excluded from the scores: p missing or not a number in 0 to 1 (%s)" % (
+                len(tf) - len(scored), ", ".join(c["_name"] for c in tf if c not in scored)))
+        print("  band        settled  came true   mean Brier")
+        for lo, hi in BANDS:
+            b = [c for c in scored if lo <= float(c["p"]) < hi]
+            if b:
+                t = sum(1 for c in b if c["outcome"] == "true")
+                br = sum((float(c["p"]) - (1 if c["outcome"] == "true" else 0)) ** 2 for c in b) / len(b)
+                print("  %.1f to %.1f  %7d  %3d (%d%%)  %.2f" % (lo, min(hi, 1.0), len(b), t, round(100 * t / len(b)), br))
+            else:
+                print("  %.1f to %.1f  %7d" % (lo, min(hi, 1.0), 0))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

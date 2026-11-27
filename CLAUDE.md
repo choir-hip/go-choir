@@ -178,8 +178,8 @@ A commit subject ends with its class and rollback, for example
   guards and automatic rollback. Name every expedite in the next report.
 - **Every landing is in the change log** (owner, 2026-11-22: "its hard to
   catch up on what claude has done since i last looked"). A landing that
-  changes behavior adds or updates its entry in [docs/changes.md](docs/changes.md)
-  in the same change: what, why, proof (or "not proved"), what it replaced,
+  changes behavior adds or updates its entry, one file in [docs/changes/](docs/changes/README.md)
+  (`docs/changes.md` is the record to 2026-11-27), in the same change: what, why, proof (or "not proved"), what it replaced,
   how to undo it. One entry per thing built, not per commit.
 - **Landing loop** for any behavior change: commit, push `origin main`, watch
   CI, watch the staging deploy, verify the deployed commit, run the deployed
@@ -199,8 +199,10 @@ A commit subject ends with its class and rollback, for example
 
 - **Precommit, then score** (owner, 2026-11-10). Before a landing, an
   experiment or a diagnosis is settled by evidence, enter the claim with a
-  probability, its test and a settle-by time in
-  [docs/calibration/claude-ledger.md](docs/calibration/claude-ledger.md).
+  probability, its test and a settle-by time as one file in
+  [docs/calibration/claims/](docs/calibration/claims/README.md), cited by its
+  file name as id (C1 to C257 are in
+  [docs/calibration/claude-ledger.md](docs/calibration/claude-ledger.md)).
   Settle it when the evidence arrives, true or false, and read the
   scorecard before stating confidence in the next claim of that kind.
   The outcome must be one you cannot write: a CI run, a deployed proof, a
