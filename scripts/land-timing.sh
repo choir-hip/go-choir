@@ -4,12 +4,17 @@
 # Log: ${LAND_TIMING_LOG:-$HOME/.cache/go-choir/land-timings.tsv}, tab separated,
 # one line per record, no header, columns:
 #   kind  start_utc  outcome  failed_step  total_s  head  lanes  steps
-# kind     "land" (one per scripts/land run) or "wait" (scripts/land-queue waiting
-#          for a previous lane's CI and for staging to serve it)
-# outcome  land: landed | failed | no-push;  wait: ok | failed
+# kind     "land" (one per scripts/land run), "wait" (scripts/land-queue waiting
+#          for a push's CI, and for staging when asked) or "queue" (one per
+#          scripts/land-queue run, written by lt_queue_record)
+# outcome  land: landed | failed | no-push;  wait: ok | failed;
+#          queue: landed | partial | failed | ci-red
 # lanes    the lanes of the train, comma separated
 # steps    name:seconds pairs joined by "|" (a name has no tab, newline or "|";
-#          the seconds follow the LAST colon; a step run twice is summed)
+#          the seconds follow the LAST colon; a step run twice is summed).
+#          A queue line carries counts, not seconds, in the same shape:
+#          given:N|landed:N|aside:N|attempts:N|pushes:N|ci_wait:SECONDS
+#          (total_s is the whole run; head is the last pushed commit)
 #
 # Timing never changes a landing: every function returns 0, writes nothing but
 # the table and the log line, and a log that cannot be written is ignored.
@@ -86,6 +91,17 @@ lt_finish() {
   done
   printf '  %-56s %6s\n' "total" "$total"
   line=$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "$LT_KIND" "$LT_START" "$outcome" "$(lt_clean "$failed")" "$total" "$LT_HEAD" "$LT_LANES" "$steps")
+  log=$(lt_log_path); dir=$(dirname "$log")
+  { mkdir -p "$dir" && printf '%s\n' "$line" >>"$log"; } 2>/dev/null || true
+  return 0
+}
+
+# lt_queue_record <outcome> <start_utc> <total_s> <head> <lanes> <given> <landed> <aside> <attempts> <pushes> <ci_wait_s>
+# One "queue" line per scripts/land-queue run. Never fails.
+lt_queue_record() {
+  local line log dir
+  line=$(printf 'queue\t%s\t%s\t\t%s\t%s\t%s\tgiven:%s|landed:%s|aside:%s|attempts:%s|pushes:%s|ci_wait:%s' \
+    "$(lt_clean "$2")" "$(lt_clean "$1")" "$3" "$(lt_clean "$4")" "$(lt_clean "$5")" "$6" "$7" "$8" "$9" "${10}" "${11}")
   log=$(lt_log_path); dir=$(dirname "$log")
   { mkdir -p "$dir" && printf '%s\n' "$line" >>"$log"; } 2>/dev/null || true
   return 0

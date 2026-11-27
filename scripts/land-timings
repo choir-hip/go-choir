@@ -5,7 +5,9 @@ Run as python3 -I scripts/land-timings [N]. Reads the log scripts/land and scrip
 (${LAND_TIMING_LOG:-$HOME/.cache/go-choir/land-timings.tsv}; columns in
 scripts/land-timing.sh) and prints, over the last N landings (default 20), the
 count of landed and failed runs and the count, median and max seconds of every
-step; then the same for the waits the queue records (CI, then staging).
+step; then the same for the waits the queue records (CI, then staging); then,
+for the "queue" lines, the lanes per push, attempts per run and seconds waiting
+for CI.
 """
 import os
 import statistics
@@ -27,7 +29,7 @@ def main():
         with open(log, encoding="utf-8", errors="replace") as f:
             for line in f:
                 c = line.rstrip("\n").split("\t")
-                if len(c) >= 8 and c[0] in ("land", "wait"):
+                if len(c) >= 8 and c[0] in ("land", "wait", "queue"):
                     rows.append(c)
     except OSError:
         pass
@@ -36,6 +38,7 @@ def main():
         return 0
     lands = [r for r in rows if r[0] == "land"][-n:]
     waits = [r for r in rows if r[0] == "wait"][-n:]
+    queues = [r for r in rows if r[0] == "queue"][-n:]
     print("land-timings: %s" % log)
     landed = sum(1 for r in lands if r[2] == "landed")
     failed = sum(1 for r in lands if r[2] == "failed")
@@ -46,7 +49,43 @@ def main():
     if waits:
         print()
         table("waiting (the queue, between lanes)", waits)
+    if queues:
+        print()
+        queue_summary(queues)
     return 0
+
+
+def queue_counts(r):
+    d = {}
+    for part in r[7].split("|"):
+        k, sep, v = part.partition(":")
+        if sep:
+            try:
+                d[k] = int(v)
+            except ValueError:
+                pass
+    return d
+
+
+def queue_summary(rows):
+    counts = [queue_counts(r) for r in rows]
+    outcomes = {}
+    for r in rows:
+        outcomes[r[2]] = outcomes.get(r[2], 0) + 1
+    print("queue runs (land-queue): %d  (%s)" % (
+        len(rows), ", ".join("%s %d" % kv for kv in sorted(outcomes.items()))))
+    per_push = [d["landed"] / d["pushes"] for d in counts if d.get("pushes")]
+
+    def line(label, vals, fmt="%d"):
+        if vals:
+            print("%-40s %7s %7s" % (label, fmt % statistics.median(vals), fmt % max(vals)))
+    print("%-40s %7s %7s" % ("", "median", "max"))
+    line("lanes per push", per_push, "%.1f")
+    line("attempts per run", [d["attempts"] for d in counts if "attempts" in d])
+    line("pushes per run", [d["pushes"] for d in counts if "pushes" in d])
+    line("lanes set aside per run", [d["aside"] for d in counts if "aside" in d])
+    line("seconds per run", [int(r[4]) for r in rows if r[4].isdigit()])
+    line("seconds waiting for CI", [d["ci_wait"] for d in counts if "ci_wait" in d])
 
 
 def table(title, rows):

@@ -14,9 +14,23 @@
 # A conflict only in docs/changes.md or the calibration ledger (every lane adds
 # at the top) keeps both sides; any other conflict stops. A changed agentcore or
 # textureowner runs its race suite in LAND_RACE_SHARDS shards side by side
-# (default 4; 1 keeps one process). To land several lanes one after another
-# with each one's suites overlapping the last one's CI and deploy, use
-# scripts/land-queue.
+# (default 4; 1 keeps one process). Several lanes given to one run are one train:
+# one verify, one push. To land lanes that may not all be good (it finds the bad
+# one and lands the rest in as few pushes as it can), use scripts/land-queue.
+#
+# Why a run ended, for a caller that splits a train (scripts/land-queue): the
+# result is written to the file named by LAND_RESULT_FILE (and printed as a line
+# "land-result: <kind> ..." for people; output is never the source, since a build
+# or a test can print any line). The first line is one of landed sha=<sha>,
+# conflict lane=<lane> (a cherry-pick conflict, the only failure that names a
+# lane), failed step=<step> (build, go vet, gates, nix eval, suites),
+# bad-lane lane=<lane> (does not resolve), empty-train, main-moved (origin/main
+# moved and the rebase or the push could not take it), refused reason=<why> (a guard
+# stopped it before any lane was tried: usage, primary, dirty, lock, fetch, checkout,
+# vm, vm-lost), pushing head=<sha> (written, with its skipped lane=<lane> lines,
+# just before git push and replaced by landed after it: a run that dies in between leaves this, and the caller asks
+# origin/main whether the sha arrived). Exit codes are unchanged:
+# 1 for all of those, 3 and 4 for the VM, 6 from the after-verify hook.
 #
 # Hidden modes (used by scripts/land.test.sh): --select <from-ref> prints the
 # test plan for the diff <from-ref>..HEAD of the current tree and exits;
@@ -41,12 +55,32 @@ set -uo pipefail
 # scripts/gates) in the worktree, and bash reads a running script lazily.
 if [ -z "${LAND_STAGE_DIR:-}" ]; then
   stage=$(mktemp -d "${TMPDIR:-/tmp}/land-stage.XXXXXX") || exit 1
+  echo $$ >"$stage/.stage-owner" || exit 1
   src=$(cd "$(dirname "$0")" && pwd -P)
   cp "$src/land" "$stage/land" && { cp "$src/gates" "$stage/gates" 2>/dev/null || true; }
   cp "$src/land-timing.sh" "$stage/land-timing.sh" 2>/dev/null || true
   LAND_STAGE_DIR=$stage exec bash "$stage/land" "$@"
 fi
+# A LAND_STAGE_DIR the caller set is not trusted: it must be a stage this script made
+# (a marker with a live creator pid, and the directory this file lives in).
+_opid=$(cat "$LAND_STAGE_DIR/.stage-owner" 2>/dev/null)
+if [ -z "$_opid" ] || ! kill -0 "$_opid" 2>/dev/null \
+   || [ "$(cd "$LAND_STAGE_DIR" 2>/dev/null && pwd -P)" != "$(cd "$(dirname "$0")" && pwd -P)" ]; then
+  echo "land: LAND_STAGE_DIR=$LAND_STAGE_DIR is not a stage directory this script made; refusing to run (nothing removed)" >&2
+  exit 2
+fi
 SELF_DIR=$LAND_STAGE_DIR
+# The result of this run for scripts/land-queue: a line printed for people, and the
+# same line written to the file named by LAND_RESULT_FILE. The variable is unset
+# at once, so no build, gate, test or hook this script runs can see the path; the
+# queue reads only the file, never the output.
+RESULT_FILE=${LAND_RESULT_FILE:-}; unset LAND_RESULT_FILE
+SKIPPED_LANES=""
+result() {
+  echo "land-result: $*"
+  [ -z "$RESULT_FILE" ] || printf '%s\n' "$*" >"$RESULT_FILE" 2>/dev/null || true
+  return 0
+}
 LAND_LOCK=""  # set once this run holds the tree's lock (guards, below)
 # Step timings (scripts/land-timing.sh, staged beside this file). They only observe:
 # without the helper file they are no-ops, and nothing they do can fail a landing.
@@ -149,20 +183,20 @@ for a in "$@"; do
     --local) LOCAL=1 ;;
     --print-runner) PRINT_RUNNER=1 ;;  # hidden (scripts/land.test.sh): print the VM runner for the train and exit
     -h|--help) sed -n 2,5p "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    -*) die "unknown flag $a (usage: scripts/land [--dry-run] [--no-push] [--local] <branch-or-sha>...)" ;;
+    -*) result "refused reason=usage"; die "unknown flag $a (usage: scripts/land [--dry-run] [--no-push] [--local] <branch-or-sha>...)" ;;
     *) LANES+=("$a") ;;
   esac
 done
-[ "${#LANES[@]}" -gt 0 ] || die "usage: scripts/land [--dry-run] [--no-push] [--local] <branch-or-sha>..."
+[ "${#LANES[@]}" -gt 0 ] || { result "refused reason=usage"; die "usage: scripts/land [--dry-run] [--no-push] [--local] <branch-or-sha>..."; }
 
 lt_init land "$(IFS=,; echo "${LANES[*]}")"; lt_step guards
 # ------------------------------------------------------------ 1. guards
-top=$(git rev-parse --show-toplevel 2>/dev/null) || die "not in a git checkout"
+top=$(git rev-parse --show-toplevel 2>/dev/null) || { result "refused reason=notrepo"; die "not in a git checkout"; }
 cd "$top" || exit 1
 gd=$(cd "$(git rev-parse --git-dir)" && pwd -P); cgd=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
-[ "$gd" != "$cgd" ] || die "refusing to run in a primary checkout ($top); use a worktree"
-[ "$(pwd -P)" != "$(cd "$PRIMARY" 2>/dev/null && pwd -P)" ] || die "refusing to run in the primary checkout $PRIMARY"
-[ -z "$(git status --porcelain --untracked-files=normal)" ] || die "dirty tree; commit or remove: $(git status --short | head -5 | tr '\n' ' ')"
+[ "$gd" != "$cgd" ] || { result "refused reason=primary"; die "refusing to run in a primary checkout ($top); use a worktree"; }
+[ "$(pwd -P)" != "$(cd "$PRIMARY" 2>/dev/null && pwd -P)" ] || { result "refused reason=primary"; die "refusing to run in the primary checkout $PRIMARY"; }
+[ -z "$(git status --porcelain --untracked-files=normal)" ] || { result "refused reason=dirty"; die "dirty tree; commit or remove: $(git status --short | head -5 | tr '\n' ' ')"; }
 ORIG=$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)
 # One landing per tree. A run identifies its train by this tree's HEAD, so a second
 # run here (or one left waiting in LAND_HOOK_AFTER_VERIFY) can push the other's
@@ -171,10 +205,10 @@ lockdir="$gd/land.lock"
 if ! mkdir "$lockdir" 2>/dev/null; then
   opid=$(cat "$lockdir/pid" 2>/dev/null || true)
   if [ -n "$opid" ] && kill -0 "$opid" 2>/dev/null; then
-    die "another scripts/land (pid $opid) holds this tree ($top); one landing per tree. It may be waiting in LAND_HOOK_AFTER_VERIFY. Stop that pid, or use another worktree."
+    result "refused reason=lock"; die "another scripts/land (pid $opid) holds this tree ($top); one landing per tree. It may be waiting in LAND_HOOK_AFTER_VERIFY. Stop that pid, or use another worktree."
   fi
   say "removing the lock of a landing that is gone (pid ${opid:-unknown})"
-  rm -rf "$lockdir"; mkdir "$lockdir" || die "cannot take the lock $lockdir"
+  rm -rf "$lockdir"; mkdir "$lockdir" || { result "refused reason=lock"; die "cannot take the lock $lockdir"; }
 fi
 echo $$ > "$lockdir/pid"; LAND_LOCK=$lockdir
 # Default: the gates beside this script, so a train based on a main that lacks them still runs them.
@@ -182,6 +216,7 @@ GATES=${LAND_GATES:-$SELF_DIR/gates}
 
 restore() { git cherry-pick --abort >/dev/null 2>&1; git rebase --abort >/dev/null 2>&1; git checkout -q "$ORIG" 2>/dev/null; }
 fail_step() { # name file
+  result "failed step=${1%% (*}"
   echo; echo "land: FAILED at $1; nothing pushed to main. HEAD stays at the train for inspection."
   [ -n "${2:-}" ] && { echo "--- last 40 lines ($2)"; tail -n 40 "$2"; }
   exit 1
@@ -189,8 +224,8 @@ fail_step() { # name file
 
 lt_step fetch
 say "fetching origin"
-git fetch -q origin main "+refs/heads/lane/*:refs/remotes/origin/lane/*" 2>/dev/null || git fetch -q origin main || die "git fetch origin failed (stale origin would mislead the plan)"
-BASE=$(git rev-parse origin/main) || die "no origin/main"
+git fetch -q origin main "+refs/heads/lane/*:refs/remotes/origin/lane/*" 2>/dev/null || git fetch -q origin main || { result "refused reason=fetch"; die "git fetch origin failed (stale origin would mislead the plan)"; }
+BASE=$(git rev-parse origin/main) || { result "refused reason=fetch"; die "no origin/main"; }
 
 # ------------------------------------------------------------ 2. the train
 # Every lane adds its entry at the top of the change log and its row to the
@@ -213,24 +248,25 @@ union_docs() {
   say "lane $lane: kept both sides of a conflict in $(printf '%s ' $u)"
 }
 lt_step train
-git checkout -q --detach "$BASE" || die "cannot check out origin/main"
+git checkout -q --detach "$BASE" || { result "refused reason=checkout"; die "cannot check out origin/main"; }
 TRAIN_LANES=(); skipped=0
 for lane in "${LANES[@]}"; do
-  sha=$(git rev-parse --verify -q "$lane^{commit}" || git rev-parse --verify -q "origin/$lane^{commit}") || { restore; die "lane '$lane' does not resolve to a commit"; }
+  sha=$(git rev-parse --verify -q "$lane^{commit}" || git rev-parse --verify -q "origin/$lane^{commit}") || { restore; result "bad-lane lane=$lane"; die "lane '$lane' does not resolve to a commit"; }
   commits=$(git rev-list --reverse --no-merges --right-only --cherry-pick "$BASE...$sha")
-  if [ -z "$commits" ]; then say "lane $lane ($(git rev-parse --short "$sha")): nothing to land (already on main or empty); skipped"; skipped=$((skipped+1)); continue; fi
+  if [ -z "$commits" ]; then say "lane $lane ($(git rev-parse --short "$sha")): nothing to land (already on main or empty); skipped"; skipped=$((skipped+1)); SKIPPED_LANES="$SKIPPED_LANES $lane"; continue; fi
   n=$(printf '%s\n' "$commits" | wc -l | tr -d ' ')
   say "lane $lane: cherry-picking $n commit(s)"
   for c in $commits; do
     if ! git cherry-pick --empty=drop "$c" >/dev/null 2>&1 && ! union_docs; then
       files=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
       git cherry-pick --abort >/dev/null 2>&1; restore
+      result "conflict lane=$lane"
       die "CONFLICT in lane '$lane' at $(git log -1 --format='%h %s' "$c"): $files(rebase that lane onto origin/main and retry)"
     fi
   done
   TRAIN_LANES+=("$lane")
 done
-[ "$(git rev-list --count "$BASE..HEAD")" -gt 0 ] || { restore; die "empty train: no lane has commits that are not already on origin/main"; }
+[ "$(git rev-list --count "$BASE..HEAD")" -gt 0 ] || { restore; result "empty-train"; die "empty train: no lane has commits that are not already on origin/main"; }
 
 lt_set_lanes "$(IFS=,; echo "${TRAIN_LANES[*]}")"; lt_set_head "$(git rev-parse HEAD 2>/dev/null)"
 lt_step plan
@@ -349,7 +385,7 @@ run_suites_remote() {
   sha=$(git rev-parse HEAD); short=$(git rev-parse --short=10 HEAD)
   R="\$HOME/mirror/land-$short.result"; W="\$HOME/mirror/land-$short"
   ssh -o ConnectTimeout=10 -o BatchMode=yes "$VM" true 2>/dev/null || {
-    echo "land: build VM '$VM' unreachable. Fix ssh, or rerun with --local to run the suites on this machine (slower, no sharding)." >&2; exit 4; }
+    echo "land: build VM '$VM' unreachable. Fix ssh, or rerun with --local to run the suites on this machine (slower, no sharding)." >&2; result "refused reason=vm"; exit 4; }
   lt_step "suites: ship to vm"
   runner=$(mktemp "${TMPDIR:-/tmp}/land-runner.XXXXXX"); write_runner "$runner"
   say "pushing lane ref lane/land-$short and starting the run on $VM"
@@ -382,7 +418,7 @@ run_suites_remote() {
     else
       fails=$((fails+1)); say "$(date +%H:%M:%S) ssh poll failed ($fails/$POLL_FAILS); the run on the VM is unaffected, retrying"
       if [ "$fails" -ge "$POLL_FAILS" ]; then
-        echo "land: lost the VM for too long. The run may still finish: ssh $VM 'tail -n 40 ~/mirror/land-$short.result'. Nothing pushed to main." >&2; exit 3; fi
+        echo "land: lost the VM for too long. The run may still finish: ssh $VM 'tail -n 40 ~/mirror/land-$short.result'. Nothing pushed to main." >&2; result "refused reason=vm-lost"; exit 3; fi
     fi
     sleep "$POLL"
   done
@@ -429,6 +465,7 @@ verify() { # $1 = run suites (1/0)
   if [ "$LOCAL" = 1 ]; then lt_step "suites (local)"; run_suites_local; else run_suites_remote; fi
   t=$?
   if [ "$t" -ne 0 ]; then
+    result "failed step=suites"
     echo; echo "land: suites FAILED (exit $t); nothing pushed to main."
     echo "--- failing packages / tests"; grep -E '^(FAIL|--- FAIL|panic:|WARNING: DATA RACE|STEP FAILED)' "$RESULT_TMP" | sort -u | head -30
     echo "--- last 40 lines"; tail -n 40 "$RESULT_TMP"
@@ -456,11 +493,12 @@ while :; do
   NEW=$(git rev-parse origin/main)
   [ "$NEW" != "$BASE" ] || break
   moves=$((moves+1))
-  [ "$moves" -le 1 ] || die "origin/main moved again after one rebase and rerun; giving up. Nothing pushed. Run scripts/land again."
+  [ "$moves" -le 1 ] || { result "main-moved"; die "origin/main moved again after one rebase and rerun; giving up. Nothing pushed. Run scripts/land again."; }
   lt_step rebase
   say "origin/main moved $(git rev-parse --short "$BASE") -> $(git rev-parse --short "$NEW"); rebasing the train"
   if ! git rebase -q "$NEW" >/dev/null 2>&1; then
     files=$(git diff --name-only --diff-filter=U | tr '\n' ' '); git rebase --abort >/dev/null 2>&1
+    result "main-moved"
     die "rebase onto moved origin/main conflicted in: $files(nothing pushed)"
   fi
   OLD=$BASE; BASE=$NEW; TRAIN_HEAD=$(git rev-parse HEAD); lt_set_head "$TRAIN_HEAD"
@@ -483,11 +521,15 @@ done
 # ------------------------------------------------------------- push + report
 same_train
 lt_step push
-git push origin HEAD:main || die "push to main was rejected (main moved at the last instant?). Nothing landed; run scripts/land again."
+result "pushing head=$(git rev-parse HEAD)"
+for l in $SKIPPED_LANES; do [ -z "$RESULT_FILE" ] || printf 'skipped lane=%s\n' "$l" >>"$RESULT_FILE" 2>/dev/null || true; done
+git push origin HEAD:main || { result "main-moved"; die "push to main was rejected (main moved at the last instant?). Nothing landed; run scripts/land again."; }
 short=$(git rev-parse --short=10 HEAD)
 git push -q origin ":refs/heads/lane/land-$short" 2>/dev/null || true
 lt_step report
 echo "=== pushed to origin/main ==="
+result "landed sha=$(git rev-parse HEAD)"
+for l in $SKIPPED_LANES; do [ -z "$RESULT_FILE" ] || printf 'skipped lane=%s\n' "$l" >>"$RESULT_FILE" 2>/dev/null || true; done
 echo "land: main is now $(git rev-parse HEAD)"
 re=""
 [ -f .github/scripts/node-b-ci-deploy ] && re=$(awk -F"'" '/loop_hit=\$\(printf/ {print $4; exit}' .github/scripts/node-b-ci-deploy)

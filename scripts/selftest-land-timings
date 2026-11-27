@@ -48,6 +48,20 @@ out3=$(LAND_TIMING_LOG=$T/none.tsv "$here/land-timings" 2>&1); rc=$?
 expect_eq "missing log: exit 0" 0 "$rc"
 expect_has "missing log: says so" "no timings" "$out3"
 
+# queue lines: lanes per push, attempts per run, seconds waiting for CI
+QL=$T/queue.tsv
+{
+  printf 'queue\t2026-11-27T05:00:00Z\tlanded\t\t900\tabc\ta,b,c\tgiven:3|landed:3|aside:0|attempts:1|pushes:1|ci_wait:600\n'
+  printf 'queue\t2026-11-27T06:00:00Z\tpartial\t\t1500\tdef\ta,b,c,d\tgiven:4|landed:3|aside:1|attempts:5|pushes:2|ci_wait:300\n'
+} >"$QL"
+outq=$(LAND_TIMING_LOG=$QL "$here/land-timings" 2>&1); rc=$?
+expect_eq "queue-only log: exit 0" 0 "$rc"
+expect_has "queue summary heading" "queue runs (land-queue): 2" "$outq"
+# lanes per push: 3/1=3.0 and 3/2=1.5 -> median 2.2 (round-half-even of 2.25), max 3.0
+echo "$outq" | grep -Eq '^lanes per push +2\.[23] +3\.0$' && ok "median and max lanes per push" || bad "median and max lanes per push" "$outq"
+echo "$outq" | grep -Eq '^attempts per run +3 +5$' && ok "median and max attempts per run" || bad "median and max attempts per run" "$outq"
+echo "$outq" | grep -Eq '^seconds waiting for CI +450 +600$' && ok "median and max CI wait" || bad "median and max CI wait" "$outq"
+
 # ---- the helpers, in isolation
 run_lib() { # body... : runs it in a fresh bash that sources the helpers with a fake clock
   bash -c '
@@ -107,12 +121,16 @@ expect_eq "wait line" "wait|ok|45|laneA|ci:30|staging:15" "$(awk -F'\t' '{print 
 expect_eq "suite name counts packages" "suite: go test -race -count=1 [3 pkgs]" "$(run_lib 'lt_suite_name "## go test -race -count=1 ./a ./b ./c"')"
 expect_eq "suite name without packages" "suite: bash x.sh" "$(run_lib 'lt_suite_name "## bash x.sh"')"
 
-# the queue's wait path, with a fake gh: no CI run appears, so the wait is a docs-only push
+# the queue's wait path, with a fake gh that answers with no run and no known docs-only range: CI unknown (2), never docs-only
 mkdir -p "$T/bin"; printf '#!/bin/sh\nexit 0\n' >"$T/bin/gh"; chmod +x "$T/bin/gh"
 L6=$T/l6.tsv
 PATH="$T/bin:$PATH" LAND_TIMING_LOG=$L6 LAND_QUEUE_CI_APPEAR=0 LAND_QUEUE_LANE=laneW "$here/land-queue" --wait-green 0123456789abcdef >/dev/null 2>&1; rc=$?
-expect_eq "queue wait path exits 0" 0 "$rc"
-expect_eq "queue wait line: kind, outcome, lane, head, step" "wait|ok|laneW|0123456789abcdef|ci" "$(awk -F'\t' '{split($8,a,":"); print $1"|"$3"|"$7"|"$6"|"a[1]}' "$L6")"
+expect_eq "queue wait path: no run and no docs-only range exits 2 (unknown)" 2 "$rc"
+expect_eq "queue wait line: kind, outcome, lane, head, step" "wait|failed|laneW|0123456789abcdef|ci" "$(awk -F'\t' '{split($8,a,":"); print $1"|"$3"|"$7"|"$6"|"a[1]}' "$L6")"
+
+LQ=$T/lq.tsv
+LAND_TIMING_LOG=$LQ run_lib 'lt_queue_record ci-red 2026-11-27T05:00:00Z 77 deadbeef "a	b,c" 3 2 1 4 2 31' >/dev/null 2>&1
+expect_eq "lt_queue_record line" "queue|ci-red||77|deadbeef|a b,c|given:3|landed:2|aside:1|attempts:4|pushes:2|ci_wait:31|8" "$(awk -F'\t' '{print $1"|"$3"|"$4"|"$5"|"$6"|"$7"|"$8"|"NF}' "$LQ")"
 
 # ---- wiring: the scripts source and stage the helpers
 grep -q 'land-timing.sh' "$here/land" && ok "land sources the helpers" || bad "land sources the helpers"

@@ -266,7 +266,7 @@ import "example.com/t/a"
 func B() int { return a.A() + 22 }'
 git checkout -q --detach "$base"
 rm -f "$T/green.calls"
-out=$(cd "$W" && LAND_QUEUE_GREEN="bash $T/green.sh" LAND_QUEUE_LOGS=$T/qlogs bash "$QUEUE" --local laneQ1 laneQ2 2>&1); rc=$?
+out=$(cd "$W" && LAND_QUEUE_GREEN="bash $T/green.sh" LAND_QUEUE_LOGS=$T/qlogs bash "$QUEUE" --local --serial --tree "$W" laneQ1 laneQ2 2>&1); rc=$?
 expect "queue: both lanes land" 0 $rc
 git fetch -q origin main
 q1=$(git log --format='%H %s' origin/main | awk '$2=="lane" && $3=="laneQ1"{print $1}')
@@ -278,7 +278,7 @@ lane laneQ4 b/b.go 'package b
 import "example.com/t/a"
 func B() int { return a.A() + 24 }'
 git checkout -q --detach "$base"
-out=$(cd "$W" && GREEN_RC=1 LAND_QUEUE_GREEN="bash $T/green.sh" LAND_QUEUE_LOGS=$T/qlogs2 bash "$QUEUE" --local laneQ3 laneQ4 2>&1); rc=$?
+out=$(cd "$W" && GREEN_RC=1 LAND_QUEUE_GREEN="bash $T/green.sh" LAND_QUEUE_LOGS=$T/qlogs2 bash "$QUEUE" --local --serial --tree "$W" laneQ3 laneQ4 2>&1); rc=$?
 expect "queue: a red landing stops the queue" 1 $rc
 git fetch -q origin main
 expect "queue: lane 3 landed before it went red" 1 "$(git log --format=%s origin/main | grep -c '^lane laneQ3$')"

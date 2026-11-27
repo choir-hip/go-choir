@@ -1,76 +1,303 @@
 #!/usr/bin/env bash
-# scripts/land-queue [--tree DIR] [--local] <lane>...
+# scripts/land-queue [--tree DIR] [--keep-tree] [--local] [--serial] [--wait-staging] <lane>...
 #
-# Lands lanes in order with scripts/land, overlapping each lane's suites with the
-# previous landing's CI and deploy. Lane N+1 starts as soon as lane N is on main
-# (its train already holds lane N), and its push waits until lane N's CI passed
-# and staging serves lane N's commit or a later one. Done one after the other,
-# each lane waited about 25 minutes for the one before it to pass CI and deploy
-# before its own suites even started (2026-11-24).
+# Lands every lane it is given as ONE batch where it can: one scripts/land run
+# with all the lanes in order, so one verify and one push. A queue of N lanes
+# used to take N verifies and N pushes, each push waiting for the last push's CI
+# and deploy (about 25 minutes a lane, 2026-11-24). The deploy job already
+# lets a newer commit supersede a queued one and skips a target older than what
+# is live (measured 2026-11-27), so nothing in the deploy needs a push per lane.
 #
-# A red CI or a deploy that never arrives stops the queue: the waiting lane exits
-# without pushing and no later lane runs. A lane that fails its own checks (a
-# conflict, a red suite) is reported and skipped; the queue goes on.
+# When the batch fails the queue finds the lane and keeps going:
+#   - a cherry-pick conflict names its lane: that lane is set aside and named,
+#     and the batch is retried without it;
+#   - a failed check (build, vet, gates, nix eval, a suite) names no lane: the
+#     remaining lanes are split into two halves in order, the first half is
+#     tried as a batch, and then the second on top of whatever landed (never
+#     assumed good); a single lane that fails alone is set aside with its
+#     failing step. At most ceil(log2 n)+1 levels of splitting. Each attempt is
+#     printed before it runs ("attempt 3: lanes [c d] on main <sha>").
+# Every check scripts/land runs still runs on every commit that reaches main.
 #
-#   --tree DIR   the lane worktree scripts/land runs in (default: this checkout;
-#                never the primary checkout, which scripts/land refuses)
-#   --local      passed to scripts/land
-#   --wait-green <sha>   (used by the queue itself) wait for <sha>'s CI and deploy
+# Pushes do not wait for CI or staging. The one exception keeps main safe: before
+# each later push the queue looks (without waiting) at the CI of what it pushed
+# last, and stops, pushing nothing more, if that is red. After the last push it
+# waits for CI and reports green or red. --wait-staging also waits until staging
+# serves the newest code push, for a caller that runs a deployed proof next.
 #
-# Environment: LAND_QUEUE_LOGS (directory for one log per lane, default a new
-# temporary one), LAND_QUEUE_GREEN (a command run with a sha instead of
-# --wait-green; the selftest uses it), LAND_QUEUE_CI_APPEAR (seconds a CI run
-# has to appear before a push counts as docs-only, default 300),
-# LAND_QUEUE_TIMEOUT (seconds to wait for CI and for the deploy, each, default
-# 3600), STAGING_URL (default https://choir.news/). Every LAND_* variable
-# scripts/land reads is passed through.
+# --serial is the old order: one scripts/land per lane, lane N+1's push waiting
+# until lane N's CI is green and staging serves lane N's commit. Use it when each
+# lane needs its own deployed proof (the contract gives each red-class station
+# one). A red CI or a deploy that never arrives stops that queue. It is not the
+# old behaviour to the letter: its waits use the same stricter CI rules as the
+# batch (below), so a gh that keeps failing, or no run for a push that is not
+# docs-only, is "CI unknown" and stops it, where the old wait called that green.
+#
+# CI. The queue must end with a green CI result that covers every push that
+# changed more than docs-like paths. It looks at the runs on main for the newest
+# such ("code") push, or for a later commit that holds it (a run plans against the
+# deployed commit, so it covers what came before): the newest of those runs that
+# was not cancelled decides. Green is only a finished run whose conclusion is
+# success; failure, skipped, neutral and any other finished conclusion is red and
+# is reported by its name. cancelled is not red: a later push to main cancels an
+# earlier run, so it means "look at the next run"; if none covers the push within
+# the wait, CI is unknown. A run still queued or running is pending. gh failing
+# (auth, network, rate limit) is an error, retried while polling; if it never
+# answers, or no run appears for a code push, CI is UNKNOWN, never green. Docs-only
+# is concluded only when gh answered, no run appeared within LAND_QUEUE_CI_APPEAR
+# seconds, and every path the pushes changed is docs-like by
+# .github/scripts/ci-docs-like-paths (is_docs_like_path, read from the pushed
+# commit), the rule the CI classifier itself applies. Before a later push the same
+# reading runs without waiting and stops the queue only on red. When every lane was
+# already on main nothing is pushed: the queue says so, reports the CI state of
+# origin/main's head without waiting, and exits 0.
+#
+# The tree. Without --tree the queue makes its own (lane new land-queue-<pid>-<epoch>
+# --base origin/main, run from the primary checkout; LAND_QUEUE_MKTREE and
+# LAND_QUEUE_RMTREE replace the lane tool, for the selftest), runs every attempt
+# there, resets and cleans it (git reset --hard, git clean -fd; ignored files stay)
+# only there and only between attempts, and removes it at exit on every path, a
+# signal included. --keep-tree leaves it when an attempt failed, and prints its
+# path. With --tree DIR the queue never resets or cleans: a dirty tree stops it,
+# naming the dirty paths. The primary checkout is refused before any git command
+# runs in it.
+#
+# Lane names are [A-Za-z0-9._/-]+, each given once (exit 2 otherwise).
+#
+# Exit code (batch): 0 every lane landed and CI is green (or it was docs-only, or
+# nothing needed pushing); 1 no lane landed (every lane set aside, or the queue
+# could not go on: guard refusal, VM unreachable, main kept moving); 3 some lanes
+# landed and the others were set aside or not run (including a queue that stopped
+# after a push); 4 CI is red, or unknown (it wins over 3). --serial: 0, or 1 on
+# any failure.
+#
+# How the queue learns why a landing ended: only from the file scripts/land writes
+# to LAND_RESULT_FILE (a path the queue passes and scripts/land hides from the
+# commands it runs), never from the log, which a build or a test can write to.
+# Only an explicit "failed step=<step>" splits the lanes. "refused reason=<why>" (a
+# guard: lock, primary, dirty tree, usage, VM) stops the queue with the lanes "not
+# attempted"; so does a missing or malformed file. "pushing head=<sha>" (the
+# landing died around its push) is settled by asking origin/main whether the sha is
+# on it. Every step either shrinks the set of lanes or stops, and the attempts are
+# capped at 2n + ceil(log2 n) + 2 (LAND_QUEUE_MAX_ATTEMPTS lowers it, for the
+# selftest).
+#
+#   --tree DIR       a worktree scripts/land runs in, never reset or cleaned by the
+#                    queue (default: the queue's own tree)
+#   --keep-tree      keep the queue's own tree if an attempt failed, and print it
+#   --local          passed to scripts/land
+#   --serial         one lane at a time, each waiting for the last one's CI and staging
+#   --wait-staging   after the last push, also wait for staging to serve it
+#   --wait-green <sha> [--base <sha>] [--no-staging]   (used by the queue itself) wait
+#                    for CI covering <sha> and its deploy; --base is origin/main
+#                    before the push
+#   --check-red <sha> [file]   (used by the queue itself) exit 1, and create <file>, if
+#                    CI covering <sha> has ended and is not success; never waits
+#
+# Environment: LAND_QUEUE_LOGS (directory for one log per attempt, default a new
+# temporary one), LAND_QUEUE_GREEN (a command run with a sha for the last wait
+# instead of waiting here; the selftest uses it), LAND_QUEUE_CI_APPEAR (seconds a
+# CI run has to appear, default 300), LAND_QUEUE_TIMEOUT (seconds to wait for CI
+# and for the deploy, each, default 3600), LAND_QUEUE_POLL (seconds between polls,
+# default 30), LAND_QUEUE_MKTREE and LAND_QUEUE_RMTREE (commands that make the
+# queue's own tree, given a name, printing its path, and remove it, given the path;
+# default the lane tool), STAGING_URL (default https://choir.news/). Every LAND_*
+# variable scripts/land reads is passed through; a LAND_HOOK_AFTER_VERIFY runs
+# between two of the queue's own red-CI checks and keeps its own exit status. One
+# "queue" line per run goes to the timing log (scripts/land-timing.sh; read it with
+# scripts/land-timings).
 set -uo pipefail
+set -f   # lane names are validated, and nothing here should glob
 
+LANDPID=""; OWN_TREE=0; OWN_NAME=""; OWN_PRIMARY=""; OWN_ROOT=""; OWN_GITDIR=""; LANE_CREATED=""; KEEP_TREE=0; FAILED_ATTEMPT=0; TREE=""
 if [ -z "${LAND_QUEUE_STAGE:-}" ]; then
   # Run from a copy, with the scripts/land and gates beside it: scripts/land
-  # checks out other commits in the tree.
+  # checks out other commits in the tree. The directory carries a marker with the
+  # creating pid; a run re-executed from it removes it at exit only if the marker is
+  # there, its creator is alive and the directory is the one this file lives in.
   stage=$(mktemp -d "${TMPDIR:-/tmp}/land-queue.XXXXXX") || exit 1
+  echo $$ >"$stage/.stage-owner" || exit 1
   src=$(cd "$(dirname "$0")" && pwd -P)
   cp "$0" "$stage/land-queue" && cp "$src/land" "$stage/land" || exit 1
   cp "$src/gates" "$stage/gates" 2>/dev/null || true
   cp "$src/land-timing.sh" "$stage/land-timing.sh" 2>/dev/null || true
   LAND_QUEUE_STAGE=$stage exec bash "$stage/land-queue" "$@"
 fi
+# A LAND_QUEUE_STAGE the caller set is not trusted: it must be a stage this script made.
+_opid=$(cat "$LAND_QUEUE_STAGE/.stage-owner" 2>/dev/null)
+if [ -z "$_opid" ] || ! kill -0 "$_opid" 2>/dev/null \
+   || [ "$(cd "$LAND_QUEUE_STAGE" 2>/dev/null && pwd -P)" != "$(cd "$(dirname "$0")" && pwd -P)" ]; then
+  echo "land-queue: LAND_QUEUE_STAGE=$LAND_QUEUE_STAGE is not a stage directory this script made; refusing to run (nothing removed)" >&2
+  exit 2
+fi
 STAGE=$LAND_QUEUE_STAGE
-[ "${1:-}" = "--wait-green" ] || trap 'rm -rf "$STAGE"' EXIT
 say() { echo "land-queue: $*"; }
+
+# own_expected: the one path the queue's own tree may have: <lane root>/<name>, the
+# root resolved of symlinks. Never taken from what the tree-maker prints.
+own_expected() {
+  local root
+  root=$(cd "$OWN_ROOT" 2>/dev/null && pwd -P) || return 1
+  printf '%s/%s' "$root" "$OWN_NAME"
+}
+# verify_own_tree: true only for a linked worktree this queue made. Called before the
+# tree is first used and again immediately before every git reset, git clean and
+# removal, so no path reaches them on an unverified tree. Before the first use
+# (OWN_GITDIR empty) the tree must be on the branch asked for; afterwards its git
+# dir must be the one recorded then and that branch must exist.
+verify_own_tree() {
+  local exp top gd cgd br
+  [ -n "$OWN_NAME" ] && [ -n "$OWN_ROOT" ] || { say "ownership check failed: no tree was asked for"; return 1; }
+  exp=$(own_expected) || { say "ownership check failed: the lane root $OWN_ROOT does not exist"; return 1; }
+  [ -d "$exp" ] || { say "ownership check failed: $exp does not exist"; return 1; }
+  [ "$(cd "$exp" && pwd -P)" = "$exp" ] || { say "ownership check failed: $exp resolves to $(cd "$exp" && pwd -P)"; return 1; }
+  top=$(git -C "$exp" rev-parse --show-toplevel 2>/dev/null) && top=$(cd "$top" && pwd -P)
+  [ "${top:-}" = "$exp" ] || { say "ownership check failed: the top of the checkout at $exp is '${top:-none}', not $exp"; return 1; }
+  gd=$(cd "$exp" && cd "$(git rev-parse --git-dir 2>/dev/null)" 2>/dev/null && pwd -P)
+  cgd=$(cd "$exp" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)
+  { [ -n "$gd" ] && [ -n "$cgd" ] && [ "$gd" != "$cgd" ]; } || { say "ownership check failed: $exp is not a linked worktree (git dir '${gd:-none}', common dir '${cgd:-none}')"; return 1; }
+  if [ -z "$OWN_GITDIR" ]; then
+    br=$(git -C "$exp" symbolic-ref -q --short HEAD 2>/dev/null)
+    [ "$br" = "$OWN_NAME" ] || { say "ownership check failed: $exp is on branch '${br:-none}', not $OWN_NAME"; return 1; }
+    OWN_GITDIR=$gd
+  else
+    [ "$gd" = "$OWN_GITDIR" ] || { say "ownership check failed: $exp's git dir is $gd, not the $OWN_GITDIR it had"; return 1; }
+    git -C "$exp" rev-parse --verify -q "refs/heads/$OWN_NAME" >/dev/null 2>&1 || { say "ownership check failed: branch $OWN_NAME is gone"; return 1; }
+  fi
+  return 0
+}
+rm_tree() { # the queue's own tree: the lane tool by default; only a verified one
+  verify_own_tree || { say "not removing $TREE"; return 1; }
+  cd / || true
+  if [ -n "${LAND_QUEUE_RMTREE:-}" ]; then eval "$LAND_QUEUE_RMTREE $(printf '%q' "$(own_expected)")" >/dev/null 2>&1
+  else (cd "$OWN_PRIMARY" && lane rm "$OWN_NAME" --force) >/dev/null 2>&1; fi
+}
+cleanup() {
+  local wd n
+  if [ -n "$LANDPID" ]; then
+    # scripts/land gets TERM and the time to leave; only then is the tree touched
+    kill "$LANDPID" 2>/dev/null
+    { sleep 20; kill -KILL "$LANDPID" 2>/dev/null; } & wd=$!
+    wait "$LANDPID" 2>/dev/null
+    kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
+    LANDPID=""
+  fi
+  if [ -n "$LANE_CREATED" ]; then
+    # a lane this queue asked for exists whether or not it got as far as OWN_TREE
+    TREE=$(own_expected 2>/dev/null) || TREE=""
+    if [ -n "$TREE" ] && [ -d "$TREE" ]; then
+      if [ "$OWN_TREE" = 1 ] && [ "$KEEP_TREE" = 1 ] && [ "$FAILED_ATTEMPT" = 1 ]; then say "kept tree: $TREE"
+      else rm_tree || say "could not remove the queue's tree $TREE"; fi
+    fi
+  fi
+  rm -rf "$STAGE"
+}
+case "${1:-}" in --wait-green|--check-red) ;; *)
+  trap cleanup EXIT; trap 'exit 143' TERM; trap 'exit 130' INT; trap 'exit 129' HUP ;; esac
 
 # Timings (scripts/land-timing.sh): each wait for a landing's CI and for staging to
 # serve it is one "wait" line in the same log scripts/land writes, so waiting and
 # working can be told apart. They only observe; without the helper they are no-ops.
 if [ -f "$STAGE/land-timing.sh" ]; then . "$STAGE/land-timing.sh"; else
-  lt_init() { :; }; lt_step() { :; }; lt_set_head() { :; }; lt_finish() { :; }
+  lt_init() { :; }; lt_step() { :; }; lt_set_head() { :; }; lt_finish() { :; }; lt_queue_record() { :; }
 fi
 
-# wait_green <sha>: records "ci" (until CI passed, or until no CI run was expected)
-# and "staging" (until staging served the sha) as steps of one wait line.
+# ------------------------------------------------------------------ CI state
+# run_state "<status> <conclusion>": the one mapping from a run to green, red,
+# superseded (cancelled: a later run on main replaced it) or pending.
+run_state() {
+  case "$1" in
+    "completed success") echo green ;;
+    "completed cancelled") echo superseded ;;
+    "completed "*) echo red ;;
+    *) echo pending ;;
+  esac
+}
+# ci_decide <target>: CI_STATE is green|red|pending|superseded|none (gh answered,
+# no relevant run)|error (gh failed); CI_DESC is "<status> <conclusion>" of the run
+# that decided. Relevant runs are those for the target or a commit that holds it;
+# the newest relevant run that was not cancelled decides.
+CI_STATE=""; CI_DESC=""; CI_RUNSHA=""
+ci_decide() {
+  local target=$1 out grc sha st concl state saw=0
+  CI_STATE=none; CI_DESC=""; CI_RUNSHA=""
+  git fetch -q origin main 2>/dev/null || true
+  out=$(gh run list --branch main --workflow CI --limit 30 --json headSha,status,conclusion \
+          -q '.[]|.headSha+" "+.status+" "+.conclusion' 2>/dev/null); grc=$?
+  if [ "$grc" != 0 ]; then CI_STATE=error; return 0; fi
+  while read -r sha st concl; do
+    [ -n "$sha" ] || continue
+    if [ "$sha" != "$target" ]; then
+      git cat-file -e "$sha^{commit}" 2>/dev/null && git merge-base --is-ancestor "$target" "$sha" 2>/dev/null || continue
+    fi
+    state=$(run_state "$st $concl")
+    if [ "$state" = superseded ]; then saw=1; CI_DESC="$st $concl"; continue; fi
+    CI_STATE=$state; CI_DESC="$st $concl"; CI_RUNSHA=$sha; return 0
+  done <<EOF
+$out
+EOF
+  [ "$saw" = 0 ] || CI_STATE=superseded
+  return 0
+}
+
+# docs_only_range <base> <sha>: every path changed from base to sha is docs-like,
+# by the classifier's own function from the pushed commit.
+docs_only_range() {
+  local base=$1 sha=$2 files
+  [ -n "$base" ] || return 1
+  git show "$sha:.github/scripts/ci-docs-like-paths" >"$STAGE/docs-like-paths" 2>/dev/null || return 1
+  files=$(git diff --name-only --no-renames "$base" "$sha" 2>/dev/null) || return 1
+  [ -n "$files" ] || return 1
+  (
+    # shellcheck disable=SC1091
+    . "$STAGE/docs-like-paths" || exit 1
+    while IFS= read -r f; do is_docs_like_path "$f" || exit 1; done <<<"$files"
+    exit 0
+  )
+}
+
+CI_SECS=0; DOCS_ONLY=0
+# wait_green <sha> [staging 1|0] [base]: records "ci" (until CI passed, or until no
+# CI run was expected) and "staging" (until staging served the sha) as steps of one
+# wait line. Returns 0 green or docs-only, 1 red, 2 unknown. A base (origin/main
+# before the push) lets "no run" mean docs-only; without one it means unknown.
 wait_green() {
   local rc
   lt_init wait "${LAND_QUEUE_LANE:-}"; lt_set_head "$1"; lt_step ci
-  wait_green_run "$1"; rc=$?
+  wait_green_run "$1" "${2:-1}" "${3:-}"; rc=$?
   lt_finish "$rc" || true
   return "$rc"
 }
-wait_green_run() { # sha
-  local sha=$1 t0 r c appear=${LAND_QUEUE_CI_APPEAR:-300} limit=${LAND_QUEUE_TIMEOUT:-3600}
-  t0=$(date +%s); r=""
+wait_green_run() { # sha [staging 1|0] [base]
+  local sha=$1 base=${3:-} t0 c appear=${LAND_QUEUE_CI_APPEAR:-300} limit=${LAND_QUEUE_TIMEOUT:-3600} poll=${LAND_QUEUE_POLL:-30}
+  t0=$(date +%s); DOCS_ONLY=0
   while :; do
-    r=$(gh run list --branch main --workflow CI --limit 30 --json headSha,status,conclusion \
-          -q ".[]|select(.headSha==\"$sha\")|.status+\" \"+.conclusion" 2>/dev/null | head -1)
-    case "$r" in
-      "completed success") break ;;
-      "completed "*) say "CI for ${sha:0:9} ended: $r"; return 1 ;;
-      "") if [ $(( $(date +%s) - t0 )) -ge "$appear" ]; then
-            say "no CI run for ${sha:0:9} after ${appear}s: a docs-only push, which neither runs CI nor deploys"; return 0; fi ;;
+    ci_decide "$sha"
+    case "$CI_STATE" in
+      green) break ;;
+      red) CI_SECS=$(( $(date +%s) - t0 )); say "CI for ${sha:0:9} ended: $CI_DESC (not success)"; return 1 ;;
+      none) if [ $(( $(date +%s) - t0 )) -ge "$appear" ]; then
+              CI_SECS=$(( $(date +%s) - t0 ))
+              if docs_only_range "$base" "$sha"; then
+                DOCS_ONLY=1
+                say "no CI run for ${sha:0:9} after ${appear}s and the push changed only docs-like paths: a docs-only push, which neither runs CI nor deploys"; return 0
+              fi
+              say "CI unknown for ${sha:0:9}: no CI run appeared after ${appear}s, and the push is not (known to be) docs-only"; return 2
+            fi ;;
     esac
-    [ $(( $(date +%s) - t0 )) -lt "$limit" ] || { say "CI for ${sha:0:9} did not finish in ${limit}s"; return 1; }
-    sleep 30
+    if [ $(( $(date +%s) - t0 )) -ge "$limit" ]; then
+      CI_SECS=$(( $(date +%s) - t0 ))
+      case "$CI_STATE" in
+        error) say "CI unknown for ${sha:0:9}: gh could not read the runs in ${limit}s" ;;
+        superseded) say "CI unknown for ${sha:0:9}: its run was cancelled and no later run on main covered it in ${limit}s" ;;
+        *) say "CI unknown for ${sha:0:9}: still ${CI_DESC:-without a run} after ${limit}s" ;;
+      esac
+      return 2
+    fi
+    sleep "$poll"
   done
+  CI_SECS=$(( $(date +%s) - t0 ))
+  [ "${2:-1}" = 1 ] || { say "CI for ${sha:0:9} passed${CI_RUNSHA:+ (run on ${CI_RUNSHA:0:9})}"; return 0; }
   say "CI for ${sha:0:9} passed; waiting for staging to serve it"
   lt_step staging
   t0=$(date +%s)
@@ -82,56 +309,380 @@ wait_green_run() { # sha
       if git cat-file -e "$c^{commit}" 2>/dev/null && git merge-base --is-ancestor "$sha" "$c" 2>/dev/null; then
         say "staging serves ${c:0:9}, which holds ${sha:0:9}"; return 0; fi
     fi
-    [ $(( $(date +%s) - t0 )) -lt "$limit" ] || { say "staging did not serve ${sha:0:9} in ${limit}s (it serves ${c:-nothing readable})"; return 1; }
-    sleep 30
+    [ $(( $(date +%s) - t0 )) -lt "$limit" ] || { say "staging did not serve ${sha:0:9} in ${limit}s (it serves ${c:-nothing readable})"; return 2; }
+    sleep "$poll"
   done
 }
 
+# check_red <sha> [markfile]: never waits. 1 (and the mark file made) only when the
+# CI that covers the sha has ended and is not success (not cancelled); no run yet, a
+# run in progress, a cancelled one, gh failing and a success are all 0.
+check_red() {
+  ci_decide "$1"
+  case "$CI_STATE" in
+    red) say "CI for ${1:0:9} is red: $CI_DESC (not success)"; [ -z "${2:-}" ] || : >"$2"; return 1 ;;
+    error) say "gh could not read CI for ${1:0:9}; not treated as red" ;;
+  esac
+  return 0
+}
+
+# green_cmd <sha> <base> <staging 1|0>: shell text that waits for the sha, every
+# path in it quoted (a TMPDIR may hold a space).
+green_cmd() {
+  if [ -n "${LAND_QUEUE_GREEN:-}" ]; then printf '%s %s' "$LAND_QUEUE_GREEN" "$1"
+  else printf 'bash %q --wait-green %s --base %q%s' "$STAGE/land-queue" "$1" "$2" "$([ "$3" = 1 ] || echo ' --no-staging')"; fi
+}
+
 if [ "${1:-}" = "--wait-green" ]; then
-  wait_green "${2:?usage: land-queue --wait-green <sha>}"; exit $?
+  _sha=${2:?usage: land-queue --wait-green <sha> [--base <sha>] [--no-staging]}; shift 2
+  _base=""; _st=1
+  while [ $# -gt 0 ]; do
+    case "$1" in --base) _base=${2:-}; shift ;; --no-staging) _st=0 ;; esac
+    shift
+  done
+  wait_green "$_sha" "$_st" "$_base"; exit $?
+fi
+if [ "${1:-}" = "--check-red" ]; then
+  check_red "${2:?usage: land-queue --check-red <sha> [file]}" "${3:-}"; exit $?
 fi
 
-TREE=$(pwd -P); LANDFLAGS=(); LANES=()
+TREE_ARG=""; LANDFLAGS=(); LANES=(); MODE=batch; WAIT_STAGING=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --tree) TREE=$(cd "${2:?--tree needs a directory}" && pwd -P) || exit 1; shift ;;
+    --tree) TREE_ARG=${2:?--tree needs a directory}; shift ;;
+    --keep-tree) KEEP_TREE=1 ;;
     --local) LANDFLAGS+=(--local) ;;
-    -h|--help) sed -n 2,26p "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --serial) MODE=serial ;;
+    --wait-staging) WAIT_STAGING=1 ;;
+    -h|--help) awk 'NR>1 && /^#/{sub(/^# ?/,""); print; next} NR>1{exit}' "$0"; exit 0 ;;
     -*) echo "land-queue: unknown flag $1" >&2; exit 2 ;;
     *) LANES+=("$1") ;;
   esac
   shift
 done
-[ "${#LANES[@]}" -gt 0 ] || { echo "usage: scripts/land-queue [--tree DIR] [--local] <lane>..." >&2; exit 2; }
+[ "${#LANES[@]}" -gt 0 ] || { echo "usage: scripts/land-queue [--tree DIR] [--keep-tree] [--local] [--serial] [--wait-staging] <lane>..." >&2; exit 2; }
+# Lane names: one word of [A-Za-z0-9._/-], each once.
+_seen=" "
+for l in "${LANES[@]}"; do
+  printf '%s' "$l" | grep -Eq '^[A-Za-z0-9._/-]+$' || { echo "land-queue: lane name '$l' is not [A-Za-z0-9._/-]+" >&2; exit 2; }
+  case "$_seen" in *" $l "*) echo "land-queue: lane '$l' is named twice" >&2; exit 2 ;; esac
+  _seen="$_seen$l "
+done
+
+# ---- the tree this queue runs in
+if [ -n "$TREE_ARG" ]; then
+  TREE=$(cd "$TREE_ARG" 2>/dev/null && pwd -P) || { echo "land-queue: no such directory: $TREE_ARG" >&2; exit 2; }
+  _gd=$(cd "$TREE" && cd "$(git rev-parse --git-dir 2>/dev/null)" 2>/dev/null && pwd -P)
+  _cgd=$(cd "$TREE" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)
+  { [ -n "$_gd" ] && [ -n "$_cgd" ]; } || { echo "land-queue: $TREE is not a git checkout" >&2; exit 2; }
+  [ "$_gd" != "$_cgd" ] || { echo "land-queue: refusing --tree $TREE: it is a primary checkout; use a worktree" >&2; exit 2; }
+else
+  _cgd=$(cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P) || { echo "land-queue: not in a git checkout" >&2; exit 2; }
+  OWN_PRIMARY=$(dirname "$_cgd")
+  OWN_NAME=land-queue-$$-$(date +%s)
+  # a name for the selftest, honoured only in the queue's own namespace
+  if printf '%s' "${LAND_QUEUE_OWN_NAME:-}" | grep -Eq '^land-queue-[A-Za-z0-9._-]+$'; then OWN_NAME=$LAND_QUEUE_OWN_NAME; fi
+  OWN_ROOT=${LAND_QUEUE_TREE_ROOT:-$OWN_PRIMARY/.lane/trees}
+  # Never take over a lane that was there before this run: if the path or a branch of
+  # the name exists, stop before anything is created or recorded as ours.
+  if [ -e "$OWN_ROOT/$OWN_NAME" ] || git -C "$OWN_PRIMARY" show-ref --verify -q "refs/heads/$OWN_NAME" 2>/dev/null \
+     || git -C "$OWN_PRIMARY" show-ref --verify -q "refs/heads/lane/$OWN_NAME" 2>/dev/null; then
+    echo "land-queue: $OWN_NAME already exists (a tree at $OWN_ROOT/$OWN_NAME or a branch of that name); refusing to use or remove it" >&2
+    exit 1
+  fi
+  LANE_CREATED=$OWN_NAME   # from here a signal removes the lane, verified, even before OWN_TREE
+  if [ -n "${LAND_QUEUE_MKTREE:-}" ]; then
+    _out=$(eval "$LAND_QUEUE_MKTREE $(printf '%q' "$OWN_NAME")" 2>&1) || { echo "land-queue: cannot make the queue's tree: $_out" >&2; exit 1; }
+  else
+    _out=$(cd "$OWN_PRIMARY" && git fetch -q origin main && lane new "$OWN_NAME" --base origin/main 2>&1) || { echo "land-queue: cannot make the queue's tree with lane: $_out" >&2; exit 1; }
+  fi
+  # The path is computed, never taken from the tool's output, and must prove to be our worktree.
+  TREE=$(own_expected) || { echo "land-queue: the lane root $OWN_ROOT does not exist (tool said: $(printf '%s' "$_out" | tail -n 1))" >&2; exit 1; }
+  verify_own_tree >&2 || { echo "land-queue: the tree the tool reported ($(printf '%s' "$_out" | tail -n 1)) is not the lane this queue asked for; nothing was reset" >&2; exit 1; }
+  OWN_TREE=1
+  say "own tree $TREE"
+fi
 LOGS=${LAND_QUEUE_LOGS:-$(mktemp -d "${TMPDIR:-/tmp}/land-queue-logs.XXXXXX")}; mkdir -p "$LOGS"
-GREEN=${LAND_QUEUE_GREEN:-bash $STAGE/land-queue --wait-green}
 say "logs in $LOGS"
 cd "$TREE" || exit 1
+Q_START=$(date -u +%Y-%m-%dT%H:%M:%SZ); Q_T0=$(date +%s)
+LANES_CSV=$(IFS=,; echo "${LANES[*]}")
 
-prev=""; prevlane=""; landed=(); failed=()
-for lane in "${LANES[@]}"; do
-  log=$LOGS/$(printf '%s' "$lane" | tr '/' '_').log
-  hook=""
-  [ -n "$prev" ] && hook="$GREEN $prev || exit 6"
-  say "$(date -u +%H:%M:%SZ) $lane: starting${prev:+ (its push waits for ${prev:0:9})}"
-  git fetch -q origin main && git checkout -q --detach origin/main || { say "cannot check out origin/main in $TREE"; exit 1; }
-  export LAND_QUEUE_LANE=$lane  # the lane that waits in the hook, for the timing log's wait line
-  LAND_HOOK_AFTER_VERIFY=$hook bash "$STAGE/land" "${LANDFLAGS[@]}" "$lane" >"$log" 2>&1
-  rc=$?
-  case $rc in
-    0) prev=$(sed -n 's/^land: main is now \([0-9a-f]*\)$/\1/p' "$log" | tail -n1)
-       [ -n "$prev" ] || { say "$lane: landed but its log names no commit; stopping"; exit 1; }
-       prevlane=$lane
-       landed+=("$lane ${prev:0:9}"); say "$(date -u +%H:%M:%SZ) $lane: on main as ${prev:0:9}" ;;
-    6) say "$lane: not pushed: the landing before it (${prev:0:9}) did not pass CI or deploy. Queue stopped."
-       say "not run: the lanes after $lane"; exit 1 ;;
-    *) failed+=("$lane"); say "$lane: did not land (exit $rc); see $log"
-       grep -E 'FAILED|CONFLICT|--- FAIL|refus' "$log" | head -5 | sed 's/^/    /' ;;
-  esac
-done
-if [ -n "$prev" ]; then
-  export LAND_QUEUE_LANE=$prevlane  # nothing waits here; the wait line names the lane that was waited on
-  $GREEN "$prev" || { say "the last landing (${prev:0:9}) did not pass CI or deploy"; exit 1; }
+# prepare_tree: the tree is clean before an attempt. The queue's own tree is reset
+# and cleaned (ignored files stay) and it says so; any other tree is never touched.
+prepare_tree() {
+  local dirty
+  dirty=$(git status --short --untracked-files=normal 2>/dev/null | head -8 | tr '\n' ';')
+  [ -n "$(git status --porcelain --untracked-files=normal 2>/dev/null)" ] || return 0
+  if [ "$OWN_TREE" = 1 ]; then
+    verify_own_tree || { say "not resetting $TREE"; return 1; }
+    say "the attempt before left $TREE dirty ($dirty); git reset --hard and git clean -fd in $TREE (the queue's own tree)"
+    verify_own_tree || { say "not cleaning $TREE"; return 1; }
+    git reset -q --hard && { verify_own_tree && git clean -qfd; } || { say "cannot clean $TREE"; return 1; }
+    return 0
+  fi
+  say "$TREE is not clean, and this queue does not own it, so it will not reset or clean it. Dirty paths: $dirty"
+  return 1
+}
+
+# ------------------------------------------------------------------ serial
+run_serial() {
+  local prev="" prevbase="" prevlane="" landed=() failed=() lane log hook rc base
+  for lane in "${LANES[@]}"; do
+    log=$LOGS/$(printf '%s' "$lane" | tr '/' '_').log
+    hook=""
+    [ -n "$prev" ] && hook="$(green_cmd "$prev" "$prevbase" 1) || exit 6"
+    say "$(date -u +%H:%M:%SZ) $lane: starting${prev:+ (its push waits for ${prev:0:9})}"
+    prepare_tree || return 1
+    git fetch -q origin main && git checkout -q --detach origin/main || { say "cannot check out origin/main in $TREE"; return 1; }
+    base=$(git rev-parse origin/main)
+    export LAND_QUEUE_LANE=$lane  # the lane that waits in the hook, for the timing log's wait line
+    LAND_HOOK_AFTER_VERIFY=$hook bash "$STAGE/land" ${LANDFLAGS[@]+"${LANDFLAGS[@]}"} "$lane" >"$log" 2>&1 &
+    LANDPID=$!; wait "$LANDPID"; rc=$?; LANDPID=""
+    case $rc in
+      0) prev=$(sed -n 's/^land: main is now \([0-9a-f]*\)$/\1/p' "$log" | tail -n1)
+         [ -n "$prev" ] || { say "$lane: landed but its log names no commit; stopping"; return 1; }
+         prevlane=$lane; prevbase=$base; SR_LAST=$prev; SR_PUSHES=$((SR_PUSHES+1)); SR_LANDED=$((SR_LANDED+1))
+         landed+=("$lane ${prev:0:9}"); say "$(date -u +%H:%M:%SZ) $lane: on main as ${prev:0:9}" ;;
+      6) FAILED_ATTEMPT=1; say "$lane: not pushed: the landing before it (${prev:0:9}) did not pass CI or deploy. Queue stopped."
+         say "not run: the lanes after $lane"; return 1 ;;
+      *) FAILED_ATTEMPT=1; failed+=("$lane"); SR_ASIDE=$((SR_ASIDE+1)); say "$lane: did not land (exit $rc); see $log"
+         grep -E 'FAILED|CONFLICT|--- FAIL|refus' "$log" | head -5 | sed 's/^/    /' ;;
+    esac
+  done
+  if [ -n "$prev" ]; then
+    export LAND_QUEUE_LANE=$prevlane  # nothing waits here; the wait line names the lane that was waited on
+    eval "$(green_cmd "$prev" "$prevbase" 1)" || { FAILED_ATTEMPT=1; say "the last landing (${prev:0:9}) did not pass CI or deploy"; return 1; }
+  fi
+  if [ "${#landed[@]}" -gt 0 ]; then say "landed: ${landed[*]}"; else say "landed: none"; fi
+  [ "${#failed[@]}" = 0 ] || { say "did not land: ${failed[*]}"; return 1; }
+  return 0
+}
+
+if [ "$MODE" = serial ]; then
+  SR_LAST=""; SR_PUSHES=0; SR_LANDED=0; SR_ASIDE=0
+  run_serial; rc=$?
+  oc=landed; [ "$rc" = 0 ] || { [ "$SR_LANDED" -gt 0 ] && oc=partial || oc=failed; }
+  lt_queue_record "$oc" "$Q_START" $(( $(date +%s) - Q_T0 )) "$SR_LAST" "$LANES_CSV" "${#LANES[@]}" "$SR_LANDED" "$SR_ASIDE" "$SR_PUSHES" "$SR_PUSHES" 0
+  exit $rc
 fi
-say "landed: ${landed[*]:-none}"
-[ "${#failed[@]}" = 0 ] || { say "did not land: ${failed[*]}"; exit 1; }
+
+# ------------------------------------------------------------------- batch
+# State. ROWS_LANDED: "lane sha" (sha empty: already on main). ROWS_ASIDE:
+# "lane|why|log". Lane names are one validated word each.
+ROWS_LANDED=(); ROWS_ASIDE=(); ATTEMPTS=0; PUSHES=0; LAST_PUSHED=""; NEWEST_CODE=""; FIRST_BASE=""
+STOP=""; STOP_KIND=""; STOP_RC=1
+N=${#LANES[@]}
+MAXDEPTH=1; _p=1; while [ "$_p" -lt "$N" ]; do _p=$((_p*2)); MAXDEPTH=$((MAXDEPTH+1)); done  # ceil(log2 n)+1
+MAXATT=${LAND_QUEUE_MAX_ATTEMPTS:-$((2*N + MAXDEPTH + 1))}                                      # 2n + ceil(log2 n) + 2
+USER_HOOK=${LAND_HOOK_AFTER_VERIFY:-}
+A_RC=0; A_RC0=0; A_KIND=""; A_ARG=""; A_LOG=""; A_SHA=""; A_SKIP=""; A_BASE=""
+
+# ci_target: what the final CI result must cover: the newest push that changed more
+# than docs-like paths, or, when every push was docs-like, the last push.
+ci_target() { printf '%s' "${NEWEST_CODE:-$LAST_PUSHED}"; }
+
+# read_result <file>: the first line says how scripts/land ended. A missing file is
+# kind none, an unrecognised or malformed first line kind malformed; neither is a
+# guess about a lane. Only the file is read, never the log.
+read_result() {
+  local f=$1 first kind arg
+  A_KIND=none; A_ARG=""; A_SHA=""; A_SKIP=""
+  [ -f "$f" ] || return 0
+  A_KIND=malformed
+  first=$(head -n 1 "$f" 2>/dev/null | tr -d '\r')
+  kind=${first%% *}; arg=${first#"$kind"}; arg=${arg# }
+  case "$kind" in
+    landed|pushing)
+      case "$arg" in sha=*|head=*)
+        arg=${arg#*=}
+        case "$arg" in *[!0-9a-f]*) return 0 ;; esac
+        [ "${#arg}" = 40 ] || return 0
+        A_KIND=$kind; A_SHA=$arg
+        A_SKIP=$(sed -n '2,$s/^skipped lane=\([A-Za-z0-9._\/-][A-Za-z0-9._\/-]*\)$/\1/p' "$f" | tr '\n' ' ') ;; esac ;;
+    conflict|bad-lane) case "$arg" in lane=?*) A_KIND=$kind; A_ARG=${arg#lane=} ;; esac ;;
+    failed) case "$arg" in step=?*) A_KIND=failed; A_ARG=$(printf '%s' "${arg#step=}" | tr -c 'A-Za-z0-9 ._:/()+-' '?' | cut -c1-80) ;; esac ;;
+    refused) case "$arg" in reason=?*) A_KIND=refused; A_ARG=$(printf '%s' "${arg#reason=}" | tr -c 'A-Za-z0-9._-' '?' | cut -c1-40) ;; esac ;;
+    empty-train|main-moved) [ -n "$arg" ] || { A_KIND=$kind; A_ARG=""; } ;;
+  esac
+  return 0
+}
+
+# run_attempt <lane>...: one scripts/land with exactly these lanes, on fresh main.
+run_attempt() {
+  local hook="" red="" base nl res target
+  nl='
+'
+  ATTEMPTS=$((ATTEMPTS+1)); A_LOG=$LOGS/attempt-$ATTEMPTS.log; res=$LOGS/attempt-$ATTEMPTS.result
+  A_RC=0; A_KIND=checkout; A_ARG=""; A_SHA=""; A_SKIP=""
+  if ! prepare_tree; then A_RC=99; A_KIND=dirty; return 0; fi
+  git fetch -q origin main && git checkout -q --detach origin/main || { say "cannot check out origin/main in $TREE"; A_RC=99; return 0; }
+  A_BASE=$(git rev-parse origin/main); base=$(git rev-parse --short origin/main)
+  say "attempt $ATTEMPTS: lanes [$*] on main $base"
+  # Before a later push, look (never wait) at the CI that covers what this queue
+  # pushed; the user's own hook sits between two such checks and keeps its status.
+  target=$(ci_target)
+  if [ -n "$target" ]; then
+    red=$(printf 'bash %q --check-red %s %q || exit 6' "$STAGE/land-queue" "$target" "$LOGS/attempt-$ATTEMPTS.red")
+    hook=$red
+    [ -z "$USER_HOOK" ] || hook="$red$nl$USER_HOOK$nl$red"
+  else hook=$USER_HOOK; fi
+  rm -f "$res" "$LOGS/attempt-$ATTEMPTS.red"
+  LAND_RESULT_FILE=$res LAND_HOOK_AFTER_VERIFY=$hook bash "$STAGE/land" ${LANDFLAGS[@]+"${LANDFLAGS[@]}"} "$@" >"$A_LOG" 2>&1 &
+  LANDPID=$!; wait "$LANDPID"; A_RC=$?; LANDPID=""; A_RC0=$A_RC
+  read_result "$res"
+  if [ "$A_KIND" = pushing ]; then
+    # land died around its push: origin/main says whether the sha arrived
+    git fetch -q origin main 2>/dev/null || true
+    if git merge-base --is-ancestor "$A_SHA" origin/main 2>/dev/null; then
+      say "scripts/land exited $A_RC after starting its push, and origin/main holds ${A_SHA:0:9}: counted as landed"
+      A_KIND=landed; A_RC=0
+    else
+      say "scripts/land exited $A_RC after starting its push of ${A_SHA:0:9}, which is not on origin/main"
+      A_KIND=pushing-lost
+    fi
+  fi
+  if [ "$A_RC" = 0 ] && [ "$A_KIND" != landed ]; then A_RC=98; fi          # exited 0 without a landed result: unknown state
+  if [ "$A_RC" != 0 ] && [ "$A_KIND" = landed ]; then A_KIND=malformed; A_SHA=""; fi
+  if [ "$A_RC" = 6 ] && [ -e "$LOGS/attempt-$ATTEMPTS.red" ]; then A_KIND=red; fi
+  [ "$A_KIND" = landed ] || FAILED_ATTEMPT=1
+  return 0
+}
+
+aside() { # lane why
+  ROWS_ASIDE+=("$1|$2|$A_LOG"); FAILED_ATTEMPT=1; say "set aside: $1 ($2); log $A_LOG"
+}
+without() { # lane lanes... : the lanes minus the first
+  local x=$1 l out=""; shift
+  for l in "$@"; do [ "$l" = "$x" ] || out="$out $l"; done
+  printf '%s' "${out# }"
+}
+has_lane() { # lane lanes...
+  local x=$1 l; shift
+  for l in "$@"; do [ "$l" = "$x" ] && return 0; done
+  return 1
+}
+
+# solve <depth> <lane>...: land these lanes, in order, on whatever main is now.
+# Every pass of the loop lands, sets a lane aside, splits into strictly smaller
+# sets, retries a moved main (at most twice in a row), or stops; ATTEMPTS is capped.
+solve() {
+  local depth=$1; shift
+  local cur="$*" retries=0 n h i first="" second="" l before why
+  while [ -n "$cur" ] && [ -z "$STOP" ]; do
+    if [ "$ATTEMPTS" -ge "$MAXATT" ]; then STOP="attempt cap ($MAXATT) reached with lanes [$cur] not landed"; return 0; fi
+    # shellcheck disable=SC2086
+    run_attempt $cur
+    case "$A_KIND" in
+      landed)
+        PUSHES=$((PUSHES+1)); LAST_PUSHED=$A_SHA
+        [ -n "$FIRST_BASE" ] || FIRST_BASE=$A_BASE
+        if docs_only_range "$A_BASE" "$A_SHA"; then say "push ${A_SHA:0:9} changed only docs-like paths"; else NEWEST_CODE=$A_SHA; fi
+        for l in $cur; do
+          # shellcheck disable=SC2086
+          if has_lane "$l" $A_SKIP; then ROWS_LANDED+=("$l "); else ROWS_LANDED+=("$l $A_SHA"); fi
+        done
+        say "pushed ${A_SHA:0:9}: $cur"
+        return 0 ;;
+      empty-train) for l in $cur; do ROWS_LANDED+=("$l "); done; say "already on main: $cur"; return 0 ;;
+      refused) STOP="scripts/land refused (reason=$A_ARG) before trying any lane ($A_LOG)"; STOP_KIND=refused; return 0 ;;
+      none|malformed)
+        if [ "$A_RC0" = 0 ]; then STOP="scripts/land exited 0 without a landed result, so what reached main is unknown ($A_LOG)"
+        else STOP="scripts/land exited $A_RC0 without a usable result (the result file is missing or malformed); stopping instead of guessing which lane failed ($A_LOG)"; fi
+        return 0 ;;
+      pushing-lost) STOP="scripts/land died after starting its push and the commit is not on origin/main ($A_LOG)"; return 0 ;;
+      dirty) STOP="$TREE is not clean, and the queue does not own it, so it stopped without resetting it"; return 0 ;;
+      checkout) STOP="the checkout failed in $TREE"; return 0 ;;
+      red) STOP="CI on ${LAST_PUSHED:0:9}, this queue's last push, is red; nothing more is pushed on top of it"; STOP_RC=4; return 0 ;;
+      conflict|bad-lane)
+        # shellcheck disable=SC2086
+        if ! has_lane "$A_ARG" $cur; then STOP="scripts/land named lane '$A_ARG' ($A_KIND), which is not in this attempt [$cur]; stopping rather than looping ($A_LOG)"; return 0; fi
+        before=""; for l in $cur; do [ "$l" = "$A_ARG" ] && break; before="$before $l"; done
+        if [ "$A_KIND" = conflict ]; then
+          why="cherry-pick conflict with main${before:+ or the lanes before it in the batch ($before )}: $(sed -n "s/^land: CONFLICT in lane '[^']*' at //p" "$A_LOG" | head -1)"
+        else why="does not resolve to a commit"; fi
+        aside "$A_ARG" "$why"; cur=$(without "$A_ARG" $cur); retries=0 ;;
+      main-moved)
+        retries=$((retries+1))
+        [ "$retries" -le 2 ] || { STOP="origin/main kept moving under the landing ($A_LOG)"; return 0; }
+        say "main moved under the landing; retrying on the new main" ;;
+      failed)
+        if [ "$A_RC" = 98 ]; then STOP="scripts/land exited 0 without a landed result"; return 0; fi
+        why="failed step: ${A_ARG:-unknown}"
+        n=0; for l in $cur; do n=$((n+1)); done
+        if [ "$n" = 1 ]; then aside "$cur" "$why"; return 0; fi
+        [ "$depth" -lt "$MAXDEPTH" ] || { STOP="split bound ($MAXDEPTH levels) reached with lanes [$cur] still failing: $why"; return 0; }
+        h=$((n/2)); i=0
+        for l in $cur; do i=$((i+1)); if [ "$i" -le "$h" ]; then first="$first $l"; else second="$second $l"; fi; done
+        say "batch of $n failed ($why); splitting into [${first# }] and [${second# }]"
+        # shellcheck disable=SC2086
+        solve $((depth+1)) $first
+        # shellcheck disable=SC2086
+        solve $((depth+1)) $second
+        return 0 ;;
+      *) STOP="unhandled result '$A_KIND' from scripts/land (exit $A_RC; $A_LOG)"; return 0 ;;
+    esac
+  done
+}
+
+solve 1 "${LANES[@]}"
+# A kept tree is left clean; the queue's own tree is the only one it ever resets.
+if [ "$OWN_TREE" = 1 ] && [ "$KEEP_TREE" = 1 ] && [ "$FAILED_ATTEMPT" = 1 ]; then prepare_tree >/dev/null || true; fi
+
+# ---- after the last push: CI (and, if asked, staging) on what it covers
+CI_RC=0; CI_NOTE="nothing was pushed"; TARGET=$(ci_target); CI_LABEL="CI on the last push"
+if [ -n "$LAST_PUSHED" ]; then
+  export LAND_QUEUE_LANE=$LANES_CSV
+  _base=""; [ -n "$NEWEST_CODE" ] || _base=$FIRST_BASE   # docs-only needs every push to be docs-like
+  [ "$TARGET" = "$LAST_PUSHED" ] && CI_LABEL="CI on the last push ${LAST_PUSHED:0:9}" || CI_LABEL="CI on the newest code push ${TARGET:0:9} (the last push ${LAST_PUSHED:0:9} is docs-only)"
+  if [ -n "${LAND_QUEUE_GREEN:-}" ]; then
+    t0=$(date +%s); eval "$(green_cmd "$TARGET" "$_base" "$WAIT_STAGING")"; CI_RC=$?; CI_SECS=$(( $(date +%s) - t0 ))
+  else
+    wait_green "$TARGET" "$WAIT_STAGING" "$_base"; CI_RC=$?
+  fi
+  if [ "$CI_RC" = 1 ]; then CI_NOTE="RED (${CI_DESC:-not success})"
+  elif [ "$CI_RC" != 0 ]; then CI_NOTE="UNKNOWN for ${TARGET:0:9} (gh failed, no run covered it, or it never finished)"
+  elif [ "$DOCS_ONLY" = 1 ] && [ -z "${LAND_QUEUE_GREEN:-}" ]; then CI_NOTE="no CI run: docs-only push"
+  elif [ "$WAIT_STAGING" = 1 ]; then CI_NOTE="green, and staging serves it"
+  else CI_NOTE="green"; fi
+fi
+
+# ---- report
+shas=""
+for r in ${ROWS_LANDED[@]+"${ROWS_LANDED[@]}"}; do s=${r#* }; [ -z "$s" ] || case " $shas " in *" $s "*) ;; *) shas="$shas $s" ;; esac; done
+say "report"
+for s in $shas; do
+  ls=""; for r in ${ROWS_LANDED[@]+"${ROWS_LANDED[@]}"}; do [ "${r#* }" = "$s" ] && ls="$ls ${r%% *}"; done
+  say "  pushed ${s:0:9}:$ls"
+done
+for r in ${ROWS_LANDED[@]+"${ROWS_LANDED[@]}"}; do [ -n "${r#* }" ] || say "  already on main: ${r%% *}"; done
+for r in ${ROWS_ASIDE[@]+"${ROWS_ASIDE[@]}"}; do
+  l=${r%%|*}; rest=${r#*|}; say "  set aside: $l: ${rest%|*} (log ${rest##*|})"
+done
+NOTRUN=""
+for l in "${LANES[@]}"; do
+  seen=0
+  for r in ${ROWS_LANDED[@]+"${ROWS_LANDED[@]}"}; do [ "${r%% *}" = "$l" ] && seen=1; done
+  for r in ${ROWS_ASIDE[@]+"${ROWS_ASIDE[@]}"}; do [ "${r%%|*}" = "$l" ] && seen=1; done
+  [ "$seen" = 1 ] || NOTRUN="$NOTRUN $l"
+done
+if [ -n "$NOTRUN" ]; then
+  if [ "$STOP_KIND" = refused ]; then say "  not attempted:$NOTRUN"; else say "  not run:$NOTRUN"; fi
+fi
+[ -z "$STOP" ] || say "  stopped: $STOP"
+NL=${#ROWS_LANDED[@]}; NA=${#ROWS_ASIDE[@]}
+if [ -z "$LAST_PUSHED" ] && [ "$NL" -gt 0 ] && [ "$NA" = 0 ] && [ -z "$STOP" ]; then
+  _head=$(git rev-parse origin/main 2>/dev/null)
+  ci_decide "$_head"
+  case "$CI_STATE" in green) _s=green ;; red) _s="RED ($CI_DESC)" ;; pending) _s="still running" ;; superseded) _s="cancelled, superseded" ;; none) _s="no run" ;; *) _s="unknown (gh failed)" ;; esac
+  CI_NOTE="nothing was pushed (every lane is already on main); CI on origin/main ${_head:0:9}: $_s (not waited for)"
+fi
+say "  $CI_LABEL: $CI_NOTE"
+say "  attempts $ATTEMPTS, pushes $PUSHES, landed $NL, set aside $NA"
+
+if [ "$CI_RC" != 0 ] || [ "$STOP_RC" = 4 ]; then oc=ci-red; code=4
+elif [ "$NL" = 0 ]; then oc=failed; code=1
+elif [ "$NA" -gt 0 ] || [ -n "$STOP" ] || [ -n "$NOTRUN" ]; then oc=partial; code=3
+else oc=landed; code=0; fi
+lt_queue_record "$oc" "$Q_START" $(( $(date +%s) - Q_T0 )) "$LAST_PUSHED" "$LANES_CSV" "$N" "$NL" "$NA" "$ATTEMPTS" "$PUSHES" "$CI_SECS"
+exit $code
