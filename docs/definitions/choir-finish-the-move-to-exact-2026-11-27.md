@@ -20,6 +20,7 @@ start:
   - 'Lanes that look unlanded and belong here (read-only on 2026-11-27, not verified by building): voice-models (21 commits, 95 files), voice-more (4 commits, 121 files: Downloads, 53 voices, a signed-out first run), unified-voice-download (183 files and 22 uncommitted paths), exact-rest (the mail seal deletion), exr-r (editor read-only and save fixes, 12 uncommitted paths), account-boundary-l1 (65 files), and what is left of move-b.'
   - 'Autoradio 1.0 was approved on 2026-11-25 and has no users yet. No Swift runs in CI; the job Autoradio Shared-Code Tests runs bun test when the classifier sets mobile. Native builds, simulators and device builds are the lead''s, one at a time through the build lock.'
   - No record exists of the locked-phone test ever being run.
+  - 'Correction, 2026-11-27T14:40Z: the line above that the owner ruled on 2026-11-24 that the mail seal goes has no source. No owner words about it are in docs/inbox.md, the problem record or the change log; the only record is the subject of an unlanded commit (2a971bbd8, "mail stored plain by shared code"), and docs/changes.md:406 says the seal stays until the mail files'' identity is redesigned, after four review rounds. Station E4 waits on decision D4.'
   worktrees:
   - path: .lane/trees/inbox-notes
     status: clean
@@ -121,8 +122,8 @@ stations:
 - id: E4
   name: the mail seal goes
   scope: MailSeal.swift deleted with what calls it, from lane exact-rest (owner, 2026-11-24)
-  class: orange
-  review: one seat
+  class: 'red: it ends encryption at rest of a person''s mail on the phone'
+  review: the owner first (D4), then two seats
   depends_on: [E3]
   carrier: none yet
   status: pending
@@ -182,6 +183,11 @@ decisions_for_the_owner:
   why: E7 reverses that ruling on the strength of the words of 2026-11-27.
   options: yes, any on-device turn works signed out; yes, but only once the on-device model is downloaded by the person's choice; no
   default: 'yes, on the 2026-11-27 words, and nothing is sent to the server signed out; E7 is not built until E6 has landed, which leaves time for the owner to say otherwise'
+- id: D4
+  question: Does the mail seal go, so that the phone keeps its copy of a person's mail unencrypted by the app (the phone's own file protection still applies)?
+  why: 'The seal is 72 lines of Swift and Android owes a Kotlin copy, so removing it serves the rule. It is also the only encryption the app adds to mail at rest. An unlanded commit removed it and I can find no words of the owner asking for that.'
+  options: the seal goes and mail is stored plain under the platform's file protection; the seal stays as the one native cipher, with its reason beside it, and Android gets its copy; mail is not kept on the phone at all
+  default: the seal stays; E4 is not built
 owner_rulings:
 - on: 2026-11-27
   decision: order
