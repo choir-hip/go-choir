@@ -54,6 +54,10 @@ The onboarding interview depends on it. With no account, a free
 listener's state (the queue, what was heard, what the interview learned)
 lives only on the phone.
 
+**Today differs from this (owner, 2026-11-27):** every free account gets
+its own VM, because there are no users yet. The rule above takes effect
+when sign-ups approach what the hosts can hold.
+
 ## What we arbitrage
 
 | Gap | What others pay | What we pay |
@@ -188,7 +192,12 @@ the phone app. The shared limit is the owner's review attention.
   what is the owner's and what is public.
 - Zero-downtime deploys: two hosts for planned moves, three votes for
   automatic failover.
-- The desktop as a host: VMs, large local models, computer use.
+- The desktop apps return when computer use is the most asked-for feature
+  (owner). Computer use needs no VM work. The desktop as a host (VMs,
+  large local models) rides on the second-host work.
+- Credits for running a computer on one's own desktop, and one unit of
+  account for usage limits.
+- People adding their own sources to the paper, as the thing they pay for.
 - Autoradio as a desktop app.
 
 ## Where this sits in the roadmap

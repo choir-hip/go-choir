@@ -273,3 +273,19 @@ usage data and analytics and performance metrics. Ofc gotta think of threat
 model here...I don't see competitive threat from showing our true usage
 metrics but maybe some analytics data is sensitive and I don't even
 understand why."
+
+**When the desktop apps return.** "one key question for me is when do the
+Mac/windows/linux apps come back into focus. When computer use is the most
+demanded feature. But it is related to the vm work here, as it enables
+running VMs on desktop, and basically we can give users credits for that.
+Not a discount on their subscription, but credits they can apply. We do
+have to have some token system for rate limits. Though I'm uncertain of
+what exactly that is."
+
+**Free accounts today.** "Currently all free accounts get their own vm.
+Because I don't even have my first users yet. Product isn't yet
+exceptionally impeccable, just impressive. The learning system will get
+much better, and that becomes incredible as you add more sources, and
+attracts users to add their own sources; for that they'll gladly pay. Soon
+I'll hit caps of what I can serve but I'll have more resources at that
+point."
