@@ -133,8 +133,8 @@ stations:
   class: orange
   review: one seat
   depends_on: [E1, E3]
-  carrier: none yet
-  status: pending
+  carrier: '7abe41baf (SegmentTracker removed: 33 files, 3,206 lines; CI run 46014262890 green, staging serves it; seat 1 accepted at the second round); the rest in lanes'
+  status: working
 - id: E6
   name: sign-out and the server client
   scope: ChoirApp, ChoirClient, ChoirSignIn and AccountWipe moved to shared code or deleted; the voice turn reaches the server through the shared client
@@ -210,8 +210,8 @@ owner_rulings:
 now:
   status: working
   slice: E1 prepared and waiting on the build tree; E5 on the present pin
-  source_ref: origin/main 5844447d4
-  deploy_identity: staging on 323df6f3b
+  source_ref: origin/main 7abe41baf
+  deploy_identity: staging on 7abe41baf
   candidate:
     id: none
     state: none
