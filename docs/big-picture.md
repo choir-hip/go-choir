@@ -93,7 +93,10 @@ Each is the owner's, with the words in [inbox.md](inbox.md).
 10. An account is for the Choir computer. A free listener has no account,
     and everything that runs on the device works signed out.
 11. Plan for where the product is in a year, not only next week.
-12. Problem records are kept and improved, not scrapped. The docs to
+12. The Choir name is not dropped. The App Store strategy is to appear
+    niche: an automated news app is approvable; an app that is an operating
+    system, a store or an app generator is not.
+13. Problem records are kept and improved, not scrapped. The docs to
    consolidate are theory, architecture and planning.
 
 ## The plan
@@ -107,9 +110,20 @@ Each is the owner's, with the words in [inbox.md](inbox.md).
    failing checks in place of `doccheck`.
 2. **Android parity** continues in its own lanes.
 
+### The unit of planning
+
+The unit is the next App Store submission, about one a week. Each
+submission is a real feature step, not a bug-fix release (owner,
+2026-11-27).
+
+**Autoradio 1, version 1.1:** the app made nice with the features it has,
+deeper use of on-device models, and the onboarding voice interview. The
+move to Exact finishes first, on the latest Exact.
+
 ### Next, in order
 
-1. **Finish the move to Exact.** Design the on-phone turn and the
+1. **Finish the move to Exact.** About a day of agent work (owner). Update
+   the Exact pin to the latest first. Design the on-phone turn and the
    onboarding flow into the voice turn code as it moves.
 2. **Takes: recording and distributing them.** The owner's focus for the
    month, and the paid step: publishing a voice take is for paid accounts

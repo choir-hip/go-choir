@@ -224,3 +224,21 @@ Hence why it's docs transform then resume exact cutover. But the fact that
 such cutovers can get needlessly drawn out, as this one already has, is
 actually strong signal for the need for docspace refactoring, and realizing
 the magnitude of the simplification process"
+
+**Update Exact first.** "we should plan to update to upstream before the
+cutover finishes."
+
+**Submissions.** "With the App Store, I want to be not wasting their time
+with bug fix updates. Rather, ship significant feature upgrades each
+update. That's a sign of vitality. We can think in units of our next app
+submission. That's the weekly cadence."
+
+**Version 1.1.** "Making the app nice with its current feature set and
+going deep on local models and honing the onboarding voice interview.
+That's... autoradio 1 1.1"
+
+**Branding.** "I haven't dropped the choir branding, not at all, it's just
+that the app strategy is to seemingly niche down. Like, Apple approved it!
+They wouldn't have approved an autoputer app, since no OS or App Store or
+app generator is allowed technically in the App Store. An automated news
+app is"
