@@ -1,5 +1,7 @@
 # Standing triage of 281 documents
 
+Standing: governing | kind: happened | settled-by: the triage of 2026-11-27, station T6 of docs/definitions/choir-docs-transform-2026-11-27.md; a file's own first line wins over this list
+
 Produced 2026-11-27 by a builder lane (station T6 of
 [the docs transform](definitions/choir-docs-transform-2026-11-27.md)). **This list is the triage
 record, not the source of truth: where a file carries a `Standing:` line, that line wins over
@@ -22,6 +24,31 @@ them) or an outcome the author cannot write (a CI gate that reads the file, an e
 `docs/current-architecture.md`); `nothing` for undecided. `scope: in part` marks a document
 superseded only where the named successor conflicts. No `built` was written: that needs an
 outcome recorded in `docs/current-architecture.md`, which this station did not check per file.
+
+## Finding a document
+
+Run `scripts/docs <words>` (or `scripts/docs --help`). It reads the first lines of the files, so it is
+as current as they are. Groups run governing, built, undecided, unmarked (no Standing line, matched
+by path or title only), superseded (with its replacement); the newest date in the name comes first.
+
+    $ scripts/docs vault
+    undecided  docs/design/mac-device-key-release-2026-11-01.md  Releasing a computer's key to the owner's Mac (st…  | nothing; accepted by a review seat (Devin ro…
+    undecided  docs/design/secrets-vault-design-2026-10-28.md  Secrets vault design (draft, 2026-10-28; revision…  | nothing; this file's status (line 5): draft fo…
+    undecided  docs/provider-vault-and-model-policy-design-2026-10-22.md  Provider key vault, host model policy and agentic…  | nothing; this file's status (line 5…
+
+    $ scripts/docs restore bases
+    unmarked   docs/problems/restore-bases-design-three-review-rounds-structural-assessment-2026-11-15.md  Restore bases design: three review rounds without…  (no S
+    superseded docs/design/restore-bases-store-once-2026-11-15.md  Restore bases that cost the change (2026-11-15)  -> replaced-by: none
+
+    $ scripts/docs --show docs/design/one-tape-durability-2026-10-31.md
+    path:       docs/design/one-tape-durability-2026-10-31.md
+    title:      One tape: telemetry, recovery, backup and sync on one mechanism (2026-10-31)
+    standing:   governing
+    kind:       decided
+    settled-by: owner 2026-10-31 (line 8): 'one append-only tape'
+    note:       partly built (tape group commit)
+
+A new file in `docs/design` or `docs/definitions` needs a Standing line (`scripts/check-doc-standing`).
 
 ## Counts
 

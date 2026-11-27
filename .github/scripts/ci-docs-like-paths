@@ -60,7 +60,7 @@ ci_deploy_script_path() {
     *.go|scripts/testdata/*|scripts/kernelgate/*|scripts/lib/*|scripts/fixtures/*|scripts/*-allowlist.json) return 0 ;;
     scripts/check-*|scripts/selftest-*|scripts/test-*|scripts/test_*|scripts/go-test-*) return 0 ;;
     scripts/ci-*|scripts/deploy-*|scripts/build-sboms-*|scripts/sbom-*|scripts/verify-sbom-*) return 0 ;;
-    scripts/doccheck|scripts/guest-*|scripts/node-b-*|scripts/node_b_*|scripts/off-host-*) return 0 ;;
+    scripts/doccheck|scripts/docs|scripts/guest-*|scripts/node-b-*|scripts/node_b_*|scripts/off-host-*) return 0 ;;
     scripts/chaos/*.md) return 1 ;; # the README stays docs, whatever else the line below says
     scripts/chaos/*) return 0 ;;    # the drill scripts (already the Go lane through ci_go_script_path)
     scripts/snapshot-vault*|scripts/choir-shot*|scripts/mail-resend-setup) return 0 ;;

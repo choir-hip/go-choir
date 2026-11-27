@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""Every Standing line under docs/ parses; with --base, a new design or definition carries one.
+Run: python3 -I scripts/check-doc-standing [--base REF] [--root DIR]
+
+Rules: known standing and kind; non-empty settled-by; superseded has replaced-by (none or an existing
+path); governing and built may not be settled-by nothing; one Standing line per file. With --base,
+a Markdown file ADDED under docs/design or docs/definitions since REF carries a Standing line
+(a ratchet on new documents; .ledger.md companions are exempt). A date never fails this check.
+Exit 0 pass, 1 findings, 2 usage or git error.
+"""
+import argparse, importlib.machinery, importlib.util, os, subprocess, sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+_l = importlib.machinery.SourceFileLoader("docs_tool", os.path.join(HERE, "docs"))
+_s = importlib.util.spec_from_loader("docs_tool", _l)
+D = importlib.util.module_from_spec(_s)
+_l.exec_module(D)
+
+
+def resolve_replaced_by(root, rel, rb):
+    """None when rb is fine, else the reason it is not."""
+    path = rb.split("#")[0].strip()
+    if not path:
+        return "replaced-by has an empty path"
+    if os.path.isabs(path):
+        return "replaced-by %s is an absolute path" % rb
+    base = root if path.startswith("docs/") else os.path.join(root, os.path.dirname(rel))
+    full = os.path.normpath(os.path.join(base, path))
+    rootn = os.path.normpath(root)
+    if full != rootn and not full.startswith(rootn + os.sep):
+        return "replaced-by %s escapes the repository" % rb
+    if os.path.isdir(full):
+        return "replaced-by %s is a directory, not a file" % rb
+    if not os.path.isfile(full):
+        return "replaced-by %s does not exist" % rb
+    return None
+
+
+def check_head(root, rel, stands, errs):
+    if not stands:
+        return False
+    if len(stands) > 1:
+        errs.append("%s: two Standing lines" % rel)
+    d = D.parse_standing(stands[0])
+    st = d["standing"]
+    if st not in D.STANDINGS:
+        errs.append("%s: unknown standing %r (want %s)" % (rel, st, "|".join(D.STANDINGS)))
+    if d.get("kind") not in D.KINDS:
+        errs.append("%s: kind %r is missing or unknown (want %s)" % (rel, d.get("kind"), "|".join(D.KINDS)))
+    sb = d.get("settled-by", "").strip()
+    if not sb:
+        errs.append("%s: settled-by is missing or empty" % rel)
+    elif st in ("governing", "built") and sb.lower() == "nothing":
+        errs.append("%s: %s cannot be settled-by nothing" % (rel, st))
+    if d.get("junk"):
+        errs.append("%s: unrecognised field %r" % (rel, d["junk"][0]))
+    if st == "superseded":
+        rb = d.get("replaced-by", "").strip()
+        if not rb:
+            errs.append("%s: superseded needs replaced-by (a path or none)" % rel)
+        elif rb != "none":
+            why = resolve_replaced_by(root, rel, rb)
+            if why:
+                errs.append("%s: %s" % (rel, why))
+    return True
+
+
+def added(root, base):
+    """Paths ADDED (a rename counts) under docs/design and docs/definitions between base and HEAD."""
+    r = subprocess.run(["git", "-C", root, "diff", "-z", "--no-renames", "--name-only", "--diff-filter=A",
+                        base + "...HEAD", "--", "docs/design", "docs/definitions"], capture_output=True)
+    if r.returncode != 0:
+        print("check-doc-standing: git diff against %s failed: %s" % (base, r.stderr.decode(errors="replace").strip()), file=sys.stderr)
+        sys.exit(2)
+    return [p.decode("utf-8", "surrogateescape") for p in r.stdout.split(b"\0") if p]
+
+
+def head_text(root, path):
+    r = subprocess.run(["git", "-C", root, "show", "HEAD:" + path], capture_output=True)
+    if r.returncode != 0:
+        return None
+    return r.stdout.decode("utf-8", "replace").split("\n")[:D.MAX_FRONT + D.HEAD_LINES]
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=__import__("argparse").RawDescriptionHelpFormatter)
+    ap.add_argument("--base")
+    ap.add_argument("--root", default=os.path.dirname(HERE))
+    a = ap.parse_args()
+    errs, n = [], 0
+    for d in D.scan(a.root, archive=True, errors=errs):
+        try:
+            _, stands = D.read_head(os.path.join(a.root, d["path"]))
+        except OSError as e:
+            errs.append("%s: cannot read (%s)" % (d["path"], e.strerror or e))
+            continue
+        if check_head(a.root, d["path"], stands, errs):
+            n += 1
+    if a.base:
+        for p in added(a.root, a.base):
+            if not p.endswith(".md") or p.endswith(".ledger.md"):
+                continue
+            lines = head_text(a.root, p)
+            if lines is None:
+                errs.append("%s: cannot read from HEAD" % p)
+            elif not D.parse_head(lines)[1]:
+                errs.append("%s: a new design or definition needs a Standing line (see docs/standing.md; scripts/docs --help)" % p)
+    for e in errs:
+        print(e)
+    if errs:
+        print("check-doc-standing: %d finding(s)" % len(errs))
+        return 1
+    print("check-doc-standing: %d Standing lines ok" % n)
+    return 0
+
+
+sys.exit(main())

@@ -27,8 +27,8 @@ run scripts/selftest-jev-entry
 # with its reason (a gate CI has and this script lacks refused three landings)
 run scripts/selftest-gates-cover-ci
 run scripts/check-gates-cover-ci
-# CI's Docs Truth Check (about 26 s)
-run scripts/doccheck
+# the first-line standing of documents (docs/standing.md); scripts/doccheck no longer runs here
+run python3 -I scripts/selftest-check-doc-standing
 # CI's Heresy Detector (about 5 s); the report goes to a temp file, not the tree
 run scripts/check-heresies.sh --fail-on-regression --report "$hr_report"
 # CI's Base Packages Are Listed: every package directory is in base-packages.json
@@ -85,6 +85,7 @@ run bash scripts/updater-prune-unit-nix-test.sh
 # against the base, is refused (owner, 2026-11-15).
 if git rev-parse --verify -q "$base^{commit}" >/dev/null 2>&1; then
   run scripts/check-jev-entry --base "$base"
+  run python3 -I scripts/check-doc-standing --base "$base"
   # a commit that lowers storeschema.Version needs a Store-Floor-Override trailer
   # (docs/problems/store-schema-floor-guard-is-not-run-2026-11-15.md); and a
   # package export commit carries the release tree verbatim
@@ -92,6 +93,7 @@ if git rev-parse --verify -q "$base^{commit}" >/dev/null 2>&1; then
   run scripts/check-package-export "$base..HEAD"
 else
   run scripts/check-jev-entry
+  run python3 -I scripts/check-doc-standing
   run scripts/check-store-schema-floor.sh
   run scripts/check-package-export
 fi
