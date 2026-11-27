@@ -114,6 +114,24 @@ describe('reading the stretch (F01 to F07)', () => {
     expect(count('3')).toBe(3); expect(count('3.0')).toBe(3);
     for (const bad of ['true', 'false', '2.5', '"3"']) expect(count(bad)).toBeUndefined();
   });
+  test('C3: a podcast_clip line decodes with its clip; one with no clip is dropped by the decoder', () => {
+    const d = new StretchDecoder();
+    const ok = line({ kind: 'podcast_clip', title: 'T', text: 'Lead.', clip: { clip_id: 'clip-000000000001', story_ref: 'pub:a@v2', seconds: 56.5 } });
+    const bad = line({ kind: 'podcast_clip', title: 'T', text: 'Lead.' });
+    const got = segs(d.feed(ok + '\n' + bad + '\n'));
+    expect(got.length).toBe(1);
+    expect(got[0].clip).toEqual({ clip_id: 'clip-000000000001', story_ref: 'pub:a@v2', seconds: 56.5 });
+    expect(d.droppedCount).toBe(1);
+  });
+  test('F1: a forecast carrying only the claim id keeps no probability and no cause; a full one keeps all three', () => {
+    const d = new StretchDecoder();
+    const only = segs(d.feed(line({ kind: 'story', title: 'T', text: 'Words.', claim_id: 'c9' }) + '\n'))[0];
+    expect(only.claim_id).toBe('c9'); expect(only.forecast).toBeUndefined();
+    const full = segs(d.feed(line({ kind: 'story', title: 'T', text: 'Words.', forecast: { p_heard: 0.62, caused_by: 'the listener skipped long pieces', claim_id: 'c3' } }) + '\n'))[0];
+    expect(full.forecast).toEqual({ p_heard: 0.62, caused_by: 'the listener skipped long pieces', claim_id: 'c3' }); expect(full.claim_id).toBe('c3');
+    const none = segs(d.feed(line({ kind: 'story', title: 'T', text: 'Words.' }) + '\n'))[0];
+    expect(none.claim_id).toBeUndefined(); expect(none.forecast).toBeUndefined();
+  });
   test('the settle fixture: entry_id and claim_id ride on the event and the entry is the server\'s', () => {
     const d = new StretchDecoder();
     const ev = [...d.feed(fx('segment-settle.sse')), ...d.finish()];

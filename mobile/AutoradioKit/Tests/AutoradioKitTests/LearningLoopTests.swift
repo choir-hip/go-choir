@@ -3,7 +3,7 @@ import XCTest
 
 // Station L6, the phone's side of the learning loop (docs/design/autoradio-learned-document-2026-11-17.md sections 5 to 8). The failure list, written
 // before the code; each is a test below:
-//  F1  the `segment` event's entry_id and claim_id are kept: the entry has the server's id and a claim (no probability the phone does not hold); an
+//  F1 (shared code now: programme.test.ts) the `segment` event's entry_id and claim_id are kept: the entry has the server's id and a claim (no probability the phone does not hold); an
 //      older server's event (neither) makes the entry it always made
 //  F2  a relaunch that finds an entry on air closes it `failed` (an app failure), never `left` (sign-out) and never a listener's skip; sign-out stays `left`
 //  F3  the programme request carries `edition_text`: the notebook text when held, else the topics as text, else nothing; inside the server's 32 KB
@@ -20,22 +20,6 @@ final class LearningLoopTests: XCTestCase {
     static let mobile = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     func fixture(_ n: String) throws -> Data { try Data(contentsOf: Self.mobile.appendingPathComponent("fixtures/learning/\(n)")) }
     func text(_ n: String) throws -> String { String(decoding: try fixture(n), as: UTF8.self) }
-
-    func segments(_ sse: String) -> [IncomingSegment] {
-        var d = StretchDecoder()
-        return (d.feed(sse) + d.finish()).compactMap { if case .segment(let s) = $0 { return s } else { return nil } }
-    }
-
-    // F1
-    /// The forecast the server sends on a `segment` event carries the claim id and never its probability or cause (they are written to the tape): it decodes, with nothing invented. A full one decodes too.
-    func testF1ForecastDecodesWhatTheServerSends() throws {
-        let onlyClaim = try JSONDecoder().decode(RunSheetForecast.self, from: Data(#"{"claim_id":"c9"}"#.utf8))
-        XCTAssertEqual(onlyClaim.claimId, "c9"); XCTAssertNil(onlyClaim.pHeard); XCTAssertEqual(onlyClaim.causedBy, "")
-        let full = try JSONDecoder().decode(RunSheetForecast.self, from: Data(#"{"p_heard":0.62,"caused_by":"the listener skipped long pieces","claim_id":"c3"}"#.utf8))
-        XCTAssertEqual(full.pHeard, 0.62); XCTAssertEqual(full.causedBy, "the listener skipped long pieces"); XCTAssertEqual(full.claimId, "c3")
-        let none = try JSONDecoder().decode(RunSheetForecast.self, from: Data("{}".utf8))
-        XCTAssertEqual(none.claimId, ""); XCTAssertNil(none.pHeard)
-    }
 
     // F2
 

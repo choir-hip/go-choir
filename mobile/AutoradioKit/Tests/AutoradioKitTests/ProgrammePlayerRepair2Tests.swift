@@ -72,7 +72,6 @@ final class Repair2StageTests: XCTestCase {
         env.log = EventLog(clock: LabClock())
     }
     let article = { @Sendable () async throws -> ProgrammeDocument in ProgrammeDocument(id: "choir:a", title: "A", blocks: [.speech(text: "Article.")]) }
-    func seg(_ n: Int) -> StretchEvent { .segment(IncomingSegment(stretchID: "m", segmentID: "m/\(n)", kind: "story", title: "S\(n)", text: "Words \(n).", cites: [], blockCount: nil)) }
     func player(_ doc: ProgrammeDocument) -> ProgrammePlayer {
         let r = StageRegistry.builtIn(); var cfg = StageRegistry.defaultConfiguration(); cfg.set(.voice, .init(id: "stub-voice"))
         r.register(.voice, StubVoice.self) { StubVoice($0) }

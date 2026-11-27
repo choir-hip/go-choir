@@ -5,8 +5,8 @@ import Foundation
 // docs/design/autoradio-learning-engine-2026-11-14.md 12.3. The failure list is in mobile/README.md ("Programme player (station P1)");
 // the tests are ProgrammePlayerTests.swift and carry its numbers.
 //
-// What the phone does with a stretch: its lines are read by shared code (programme-model.ts StretchDecoder; the Swift decoder is a test helper now), make each segment into playback blocks (SegmentPrep), append
-// them to the document the player is playing (ProgrammeDocument.append, ProgrammePlayer.appendSegment). The server validates; the phone drops only what it cannot speak.
+// What stays native: the voice's own speech blocks for one spoken entry (`ChoirApp.speakSegment`: text to blocks the deck's programme player speaks, at the
+// speech size the voice engine needs). The stretch's lines, the run sheet's entries, clips, takes and forecasts are shared code's (AutoradioLab/programme-model.ts); native decodes none.
 
 // MARK: Segments
 
@@ -16,14 +16,6 @@ public struct ProgrammeCite: Codable, Sendable, Equatable {
     public var role: String
     public var label: String
     public init(ref: String, role: String = "", label: String = "") { self.ref = ref; self.role = role; self.label = label }
-}
-
-/// The clip a `podcast_clip` segment plays (the stream's `clip`): the id is looked up in the set the phone fetched.
-public struct ProgrammeClipRef: Codable, Sendable, Equatable {
-    public var clipID: String
-    public var storyRef: String
-    public var seconds: Double
-    public init(clipID: String, storyRef: String = "", seconds: Double = 0) { self.clipID = clipID; self.storyRef = storyRef; self.seconds = seconds }
 }
 
 /// A range of a ProgrammeDocument's blocks that the DJ wrote as one segment.
@@ -38,18 +30,13 @@ public struct ProgrammeSegment: Codable, Sendable, Equatable {
     public var blockCount: Int
     /// The server's count of the segment's blocks (`block_count`, or the phone's own split when none was sent): the count that is reported.
     public var serverBlockCount: Int
-    /// The server sent a count that the phone's split of the text does not match.
-    public var blockCountMismatch: Bool
     /// For each playback block, the index of the server block it was made from (the `last_block` to report), inside `serverBlockCount`.
     public var unitServerBlocks: [Int]
-    /// A `podcast_clip` segment: the lead-in blocks, then one clip block.
-    public var clip: ProgrammeClipRef?
 
     public init(id: String, stretchID: String, kind: String, title: String, cites: [ProgrammeCite], firstBlock: Int, blockCount: Int,
-                serverBlockCount: Int, blockCountMismatch: Bool, unitServerBlocks: [Int], clip: ProgrammeClipRef? = nil) {
-        self.clip = clip
+                serverBlockCount: Int, unitServerBlocks: [Int]) {
         self.id = id; self.stretchID = stretchID; self.kind = kind; self.title = title; self.cites = cites; self.firstBlock = firstBlock
-        self.blockCount = blockCount; self.serverBlockCount = serverBlockCount; self.blockCountMismatch = blockCountMismatch
+        self.blockCount = blockCount; self.serverBlockCount = serverBlockCount
         self.unitServerBlocks = unitServerBlocks
     }
 
@@ -68,13 +55,7 @@ public enum SegmentKinds {
         "answer": "Answer", "result": "Result", "bridge": "Bridge", "ident": "Station break", "podcast_clip": "Podcast clip",
         "opening": "Opening", "transition": "Transition", "take": "Take",
     ]
-    public static func isKnown(_ kind: String) -> Bool { labels[kind] != nil }
     public static func label(_ kind: String) -> String { labels[kind] ?? "" }
-}
-
-public struct IncomingBetween: Sendable, Equatable {
-    public var after: String, before: String
-    public init(after: String, before: String) { self.after = after; self.before = before }
 }
 
 /// A segment as it arrived: text not yet made into blocks.
@@ -87,21 +68,7 @@ public struct IncomingSegment: Sendable, Equatable {
     public var cites: [ProgrammeCite]
     /// The server's `block_count`, when sent.
     public var blockCount: Int?
-    /// A `podcast_clip` segment's clip.
-    public var clip: ProgrammeClipRef?
-    /// A `transition`: the `segment_id`s of the two segments it joins.
-    public var between: IncomingBetween?
-    /// A `take` segment's take id, and the forecast the line carried (a take line without one is dropped by the server).
-    public var takeID: String?
-    public var forecast: RunSheetForecast?
-    /// The server's entry id for this segment (`d-<segment_id>`) and its forecast's claim id, from the `segment` event (settlement slice, not
-    /// deployed on every server: nil from an older one). The claim id is the key the server settles by.
-    public var entryID: String?
-    public var claimID: String?
-    public init(stretchID: String, segmentID: String, kind: String, title: String, text: String, cites: [ProgrammeCite], blockCount: Int?, clip: ProgrammeClipRef? = nil,
-                between: IncomingBetween? = nil, takeID: String? = nil, forecast: RunSheetForecast? = nil, entryID: String? = nil, claimID: String? = nil) {
-        self.entryID = entryID; self.claimID = claimID
-        self.clip = clip; self.between = between; self.takeID = takeID; self.forecast = forecast
+    public init(stretchID: String, segmentID: String, kind: String, title: String, text: String, cites: [ProgrammeCite], blockCount: Int?) {
         self.stretchID = stretchID; self.segmentID = segmentID; self.kind = kind; self.title = title; self.text = text
         self.cites = cites; self.blockCount = blockCount
     }
@@ -225,10 +192,6 @@ public enum SegmentPrep {
             }
         }
         guard !units.isEmpty else { return nil }
-        if s.kind == "podcast_clip" {
-            guard let c = s.clip, !c.clipID.isEmpty else { return nil }          // a clip line with no clip is not a segment
-            units.append(.podcastClip(clipID: c.clipID)); map.append(max(0, reported - 1))
-        }
         var cites: [ProgrammeCite] = []
         for c in s.cites {
             let l = label(c.label)
@@ -236,8 +199,7 @@ public enum SegmentPrep {
             cites.append(ProgrammeCite(ref: c.ref, role: c.role, label: l))
         }
         let seg = ProgrammeSegment(id: s.segmentID, stretchID: s.stretchID, kind: s.kind, title: title(s.title, kind: s.kind), cites: cites,
-                                   firstBlock: 0, blockCount: units.count, serverBlockCount: reported,
-                                   blockCountMismatch: (s.blockCount ?? 0) > 0 && s.blockCount! != server.count, unitServerBlocks: map, clip: s.clip)
+                                   firstBlock: 0, blockCount: units.count, serverBlockCount: reported, unitServerBlocks: map)
         return PreparedSegment(segment: seg, blocks: units)
     }
 }

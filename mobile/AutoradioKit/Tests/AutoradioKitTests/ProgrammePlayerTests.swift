@@ -30,123 +30,40 @@ func segmentedDocument(_ texts: [String], id: String = "radio:t", kinds: [String
     return d
 }
 
-// MARK: F01-F07 reading the stretch
+// MARK: F04-F06 what the phone makes of a segment it speaks
+// (Reading the stretch's lines, F01 to F03 and F07, is shared code's: AutoradioLab/programme.test.ts. These pin what stays native, SegmentPrep.)
 
-final class StretchDecoderTests: XCTestCase {
-    func segs(_ e: [StretchEvent]) -> [IncomingSegment] { e.compactMap { if case .segment(let s) = $0 { return s } else { return nil } } }
-
-    func testF01_ChunkEndingInsideALineWaits() {
-        var d = StretchDecoder()
-        let line = segmentLine(["kind": "story", "title": "T", "text": "Hello there."])
-        XCTAssertTrue(d.feed(String(line.prefix(10))).isEmpty, "half a line is not a line")
-        XCTAssertTrue(d.feed(String(line.dropFirst(10).prefix(15))).isEmpty)
-        let got = segs(d.feed(String(line.dropFirst(25)) + "\n"))
-        XCTAssertEqual(got.map(\.text), ["Hello there."])
-        XCTAssertTrue(d.finish().isEmpty)
-    }
-
-    func testF01_LineEndingsLFCRLFAndLoneCR() {
-        var d = StretchDecoder()
-        let a = segmentLine(["kind": "story", "title": "A", "text": "One."]), b = segmentLine(["kind": "story", "title": "B", "text": "Two."])
-        let c = segmentLine(["kind": "story", "title": "C", "text": "Three."])
-        XCTAssertEqual(segs(d.feed(a + "\r\n" + b + "\r" + c + "\n")).map(\.title), ["A", "B", "C"])
-        // a CR at the end of a chunk may be the first half of a CRLF: the next chunk's LF must not make an empty line count
-        var e = StretchDecoder()
-        XCTAssertEqual(segs(e.feed(a + "\r")).map(\.title), ["A"])
-        XCTAssertEqual(segs(e.feed("\n" + b + "\n")).map(\.title), ["B"])
-        XCTAssertEqual(e.ignoredCount, 0)
-    }
-
-    func testF01_TheLastLineWithoutALineEndingIsReadAtFinish() {
-        var d = StretchDecoder()
-        XCTAssertTrue(d.feed(segmentLine(["kind": "story", "title": "T", "text": "No newline."])).isEmpty)
-        XCTAssertEqual(segs(d.finish()).map(\.text), ["No newline."])
-    }
-
-    func testF02_NoiseIsIgnoredAndCounted() {
-        var d = StretchDecoder()
-        let noise = ": autoradio\n\n\nevent: handoff\ndata: {\"x\":1}\n\nnot json at all\n[1,2,3]\n\"a string\"\n{\"kind\":\"story\"\n"
-        XCTAssertTrue(d.feed(noise).isEmpty)
-        XCTAssertGreaterThan(d.ignoredCount, 0)
-        let ok = segs(d.feed(segmentLine(["kind": "story", "title": "T", "text": "Still works."]) + "\n"))
-        XCTAssertEqual(ok.map(\.text), ["Still works."], "the stream goes on after noise")
-    }
-
-    func testF03_TheFixtureStretch_PhoneDropsOnlyWhatItCannotSpeak() throws {
-        let f = try LearningFixtures.json("stretch_lines.json")
-        let lines = try XCTUnwrap(f["segment_lines"] as? [[String: Any]])
-        XCTAssertEqual(lines.count, 32, "the fixture changed: recount")
-        var d = StretchDecoder()
-        var got: [IncomingSegment] = []
-        for l in lines { got += segs(d.feed(segmentLine(try XCTUnwrap(l["line"] as? [String: Any])) + "\n")) }
-        got += segs(d.finish())
-        XCTAssertEqual(d.droppedCount, 2, "an unknown kind (weather) and an empty text; the server validates the rest")
-        XCTAssertEqual(got.count, 30)
-        XCTAssertFalse(got.contains { $0.kind == "weather" })
-        // a padded title is trimmed; an empty one (the server drops it) is spoken here under the kind's plain label
-        let titles = got.compactMap { SegmentPrep.prepare($0)?.segment.title }
-        XCTAssertFalse(titles.contains { $0 != $0.trimmingCharacters(in: .whitespaces) || $0.isEmpty })
-        XCTAssertTrue(titles.contains("A quiet harbour")); XCTAssertTrue(titles.contains("Story"))
-        XCTAssertTrue(got.allSatisfy { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
-        // every kept fixture line becomes a segment with one block ("The harbour reopened today." and the like)
-        XCTAssertTrue(got.allSatisfy { SegmentPrep.prepare($0)?.blocks.count == 1 })
+final class SegmentPrepTests: XCTestCase {
+    func prepared(_ title: String?, kind: String = "story") -> String {
+        SegmentPrep.prepare(IncomingSegment(stretchID: "s", segmentID: "s/0", kind: kind, title: title ?? "", text: "Words.", cites: [], blockCount: nil))?.segment.title ?? "<none>"
     }
 
     func testF04_Titles() {
-        var d = StretchDecoder()
-        func title(_ t: Any?, kind: String = "story") -> String {
-            var o: [String: Any] = ["kind": kind, "text": "Words."]; if let t { o["title"] = t }
-            return segs(d.feed(segmentLine(o) + "\n")).first.flatMap { SegmentPrep.prepare($0)?.segment.title } ?? "<none>"
-        }
-        XCTAssertEqual(title("a\nb"), "a b")
-        XCTAssertEqual(title("a\u{07}b"), "a b")
-        XCTAssertEqual(title("   Padded   title  "), "Padded title")
-        XCTAssertLessThanOrEqual(title(String(repeating: "é", count: 150)).utf8.count, 200, "capped in bytes, never half a character")
-        XCTAssertFalse(title(String(repeating: "é", count: 150)).contains("\u{FFFD}"))
-        XCTAssertEqual(title(nil, kind: "ident"), "Station break")
-        XCTAssertEqual(title("", kind: "story"), "Story")
-        XCTAssertEqual(title("pub:harbour-1"), "Story", "a raw ref is never a title")
+        XCTAssertEqual(prepared("a\nb"), "a b")
+        XCTAssertEqual(prepared("a\u{07}b"), "a b")
+        XCTAssertEqual(prepared("   Padded   title  "), "Padded title")
+        XCTAssertLessThanOrEqual(prepared(String(repeating: "é", count: 150)).utf8.count, 200, "capped in bytes, never half a character")
+        XCTAssertFalse(prepared(String(repeating: "é", count: 150)).contains("\u{FFFD}"))
+        XCTAssertEqual(prepared(nil, kind: "ident"), "Station break")
+        XCTAssertEqual(prepared("", kind: "story"), "Story")
+        XCTAssertEqual(prepared("pub:harbour-1"), "Story", "a raw ref is never a title")
     }
 
     func testF05_Cites() {
-        var d = StretchDecoder()
-        let line = segmentLine(["kind": "story", "title": "T", "text": "Words.",
-                                "cites": ["pub:a", ["ref": "pub:b", "role": "subject", "label": "The harbour story"], ["ref": "pub:b", "role": "quoted", "label": "The harbour story"], ["ref": "mail:1", "role": "mentioned"]]])
-        let s = segs(d.feed(line + "\n")).first
-        let prepared = s.flatMap { SegmentPrep.prepare($0) }
+        let s = IncomingSegment(stretchID: "s", segmentID: "s/0", kind: "story", title: "T", text: "Words.", cites: [
+            ProgrammeCite(ref: "pub:a"), ProgrammeCite(ref: "pub:b", role: "subject", label: "The harbour story"),
+            ProgrammeCite(ref: "pub:b", role: "quoted", label: "The harbour story"), ProgrammeCite(ref: "mail:1", role: "mentioned")], blockCount: nil)
+        let prepared = SegmentPrep.prepare(s)
         XCTAssertEqual(prepared?.segment.cites.map(\.ref), ["pub:a", "pub:b", "mail:1"], "one ref once")
         XCTAssertEqual(prepared?.segment.sources, ["The harbour story"], "a chip only for a cite with a label; never a raw ref")
     }
 
-    func testF06_IdsLocalAndRepeated() {
-        var d = StretchDecoder()
-        let a = segs(d.feed(segmentLine(["kind": "story", "title": "A", "text": "One."]) + "\n" + segmentLine(["kind": "story", "title": "B", "text": "Two."]) + "\n"))
-        XCTAssertEqual(a.map(\.segmentID), ["local/0", "local/1"])
-        XCTAssertEqual(Set(a.map(\.stretchID)), ["local"])
-        // a header names the stretch; the server's ids are kept
-        var e = StretchDecoder()
-        _ = e.feed("event: stretch\ndata: {\"stretch_id\":\"st-9\"}\n\n")
-        let b = segs(e.feed("event: segment\ndata: " + segmentLine(["kind": "story", "title": "A", "text": "One."]) + "\n\n"))
-        XCTAssertEqual(b.first?.stretchID, "st-9"); XCTAssertEqual(b.first?.segmentID, "st-9/0")
-        let c = segs(e.feed("event: segment\ndata: " + segmentLine(["stretch_id": "st-9", "segment_id": "st-9/5", "kind": "headlines", "text": "Words.", "block_count": 3]) + "\n\n"))
-        XCTAssertEqual(c.first?.segmentID, "st-9/5"); XCTAssertEqual(c.first?.blockCount, 3)
-        // appended once
+    func testF06_AppendedOnce() {
+        let c = IncomingSegment(stretchID: "st-9", segmentID: "st-9/5", kind: "headlines", title: "", text: "Words.", cites: [], blockCount: 3)
         var doc = ProgrammeDocument(id: "radio:st-9", title: "Autoradio", blocks: [])
-        XCTAssertTrue(doc.append(SegmentPrep.prepare(c[0])!))
-        XCTAssertFalse(doc.append(SegmentPrep.prepare(c[0])!), "the same segment id twice")
+        XCTAssertTrue(doc.append(SegmentPrep.prepare(c)!))
+        XCTAssertFalse(doc.append(SegmentPrep.prepare(c)!), "the same segment id twice")
         XCTAssertEqual(doc.segments.count, 1)
-    }
-
-    func testF07_DoneErrorAndAStreamWithNoDone() {
-        var d = StretchDecoder()
-        let ev = d.feed("event: segment\ndata: " + segmentLine(["kind": "story", "title": "A", "text": "One."]) + "\n\nevent: error\ndata: {\"spoken\":\"Trouble.\",\"reason\":\"upstream\"}\n\nevent: done\ndata: {\"stretch_id\":\"x\"}\n\n")
-        XCTAssertEqual(ev.count, 3)
-        if case .error(let m) = ev[1] { XCTAssertTrue(m.contains("upstream")) } else { XCTFail("error first") }
-        XCTAssertEqual(ev[2], .done)
-        var e = StretchDecoder()
-        let got = e.feed(segmentLine(["kind": "story", "title": "A", "text": "One."]) + "\n") + e.finish()
-        XCTAssertEqual(segs(got).count, 1, "no done: what arrived is kept")
-        XCTAssertFalse(got.contains(.done))
     }
 }
 
@@ -172,12 +89,9 @@ final class SplitBlocksTests: XCTestCase {
         let two = "A first.\n\nA second."
         var s = IncomingSegment(stretchID: "s", segmentID: "s/0", kind: "story", title: "T", text: two, cites: [], blockCount: nil)
         XCTAssertEqual(SegmentPrep.prepare(s)?.segment.serverBlockCount, 2, "no count sent: computed, for fixtures")
-        s.blockCount = 2
-        XCTAssertEqual(SegmentPrep.prepare(s)?.segment.blockCountMismatch, false)
         s.blockCount = 5
         let p = SegmentPrep.prepare(s)
         XCTAssertEqual(p?.segment.serverBlockCount, 5, "the phone never overrules the server")
-        XCTAssertEqual(p?.segment.blockCountMismatch, true)
         XCTAssertEqual(p?.segment.unitServerBlocks, [0, 1])
         s.blockCount = 1
         let q = SegmentPrep.prepare(s)

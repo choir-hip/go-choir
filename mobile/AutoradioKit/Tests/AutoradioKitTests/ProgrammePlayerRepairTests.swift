@@ -62,21 +62,6 @@ final class RepairPlayerTests: XCTestCase {
 }
 
 final class RepairStretchTests: XCTestCase {
-    func segs(_ e: [StretchEvent]) -> [IncomingSegment] { e.compactMap { if case .segment(let s) = $0 { return s } else { return nil } } }
-
-    // S3: a bare `event: done` and `event: error` with no data line.
-    func testBareEventLinesAreDispatched() {
-        var d = StretchDecoder()
-        XCTAssertEqual(d.feed("event: done\n"), [], "not yet: a data line may follow")
-        XCTAssertEqual(d.feed("\n"), [.done], "a blank line ends it")
-        var e = StretchDecoder()
-        XCTAssertEqual(e.feed("event: error\nevent: done\n"), [.error("the stretch failed")], "the next event line ends the error")
-        XCTAssertEqual(e.finish(), [.done], "the end of the stream ends the last")
-        var f = StretchDecoder()
-        XCTAssertEqual(f.feed("event: error\ndata: {\"reason\":\"x\"}\n"), [.error("x")], "with data: as before")
-        XCTAssertEqual(f.finish(), [])
-    }
-
     // S4: zero-width and bidi format characters never reach a title.
     func testFormatCharactersAreStrippedFromTitles() {
         let t = SegmentPrep.title("Ha\u{200B}rbour \u{202E}news\u{2066}", kind: "story")
@@ -94,15 +79,5 @@ final class RepairStretchTests: XCTestCase {
             let name = c["name"] as? String ?? "?"
             XCTAssertEqual(SplitBlocks.split(c["text"] as? String ?? ""), c["blocks"] as? [String], name)
         }
-    }
-
-    // nit: block_count is an integer, not a bool and not a fraction.
-    func testBlockCountIsOnlyAnInteger() {
-        func count(_ raw: String) -> Int? {
-            var d = StretchDecoder()
-            return segs(d.feed("{\"kind\":\"story\",\"title\":\"T\",\"text\":\"Words.\",\"block_count\":\(raw)}\n")).first?.blockCount
-        }
-        XCTAssertEqual(count("3"), 3); XCTAssertEqual(count("3.0"), 3)
-        XCTAssertNil(count("true")); XCTAssertNil(count("false")); XCTAssertNil(count("2.5")); XCTAssertNil(count("\"3\""))
     }
 }
