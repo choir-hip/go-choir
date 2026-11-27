@@ -11,7 +11,7 @@ start:
   captured_at: 2026-11-27T08:56Z
   source:
     canonical_ref: origin/main 0a213add2
-    deploy_identity: staging on c29dca2d2
+    deploy_identity: staging on 323df6f3b
   what_is_true_now:
   - 'Docs (measured 2026-11-26): 1,641 Markdown files and 4.4 million words. In docs/design, docs/definitions and the top level, a skim on 2026-11-27 sorted 281 files: 51 governing, 126 built, 30 superseded, 27 undecided, 47 unsorted. Twelve designs that carry an owner ruling are linked from none of CLAUDE.md, the system map, current-architecture.md, the roadmap or ACTIVE.md. The per-file list is not in the repository.'
   - 'Landing (measured 2026-11-27 over 21 runs that deployed): push to the CI gate 6.0 minutes at the median, the deploy 6.8, push to staging serving 12.9 (8.1 to 24.9). scripts/land records no timings; three failed runs show 10 to 22 minutes before the push. scripts/land-queue makes lane N+1 wait until lane N is green and served, which the deploy does not need: its job lets a newer commit supersede a queued one.'
@@ -122,16 +122,16 @@ stations:
   class: yellow
   review: one seat
   depends_on: [T1]
-  carrier: cc3fe4db4; not yet run on a real batch (C257)
-  status: landed
+  carrier: cc3fe4db4; first real batch 323df6f3b (two lanes, one push, CI green, staging served it)
+  status: proved
 - id: T5
   name: heavy suites run once
   scope: from T1's timings, decide whether the build machine or CI is the gate for the race and scale suites, and remove the other run
   class: yellow
   review: one seat
   depends_on: [T1, T4]
-  carrier: 3eb64a326 (CI run tests green; its deploy step refused on the Node B disk)
-  status: landed
+  carrier: 3eb64a326; a real landing with gates at 72 s (c29dca2d2)
+  status: proved
 - id: T6
   name: the first line
   scope: 'a one-line header on each document in docs/design, docs/definitions and the top level that the triage sorted as governing or superseded: its kind, its standing, and the ruling or outcome that settled it, with the date. The triage list is checked in. Nothing is moved.'
@@ -227,8 +227,8 @@ owner_rulings:
   read_as: lanes stay the unit of work; GitHub Actions is used as compute, with our own machine as the exercised backup.
 now:
   status: working
-  slice: waiting on the owner for the Node B disk; T12 (the closing pass) in documents meanwhile
-  source_ref: origin/main c29dca2d2
+  slice: T12, the closing pass, in documents; T8 to T11 not started
+  source_ref: origin/main 323df6f3b
   deploy_identity: staging on 774e87d2f
   candidate:
     id: none
@@ -254,11 +254,11 @@ now:
     evidence_ref: the owner's words of 2026-11-27 in docs/inbox.md
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: 'T0 to T7 are on main and deployed (staging serves c29dca2d2). A scripts-only landing takes 90 s before its push (gates 72 s); the first measured one took 308 s. Node B refused three deploys at 42 GiB free and then accepted one at 104 GiB free, with nothing deleted by this session: vm-state fell from 155 to 97 GiB on its own.'
-    main_uncertainty: whether the batched queue behaves on the real gh and build machine as it does against its fakes
-    next_observation: the first successful deploy after the disk is freed, then the first real batch of two lanes (C257)
+    believed_state: 'T0 to T7 are on main, deployed and proved. Two lanes went from the queue starting to staging serving them in 655 s as one push (85 s to the push, 569 s of CI and deploy); one at a time they would have taken two such waits. The first real batch landed nothing, on a defect no test saw.'
+    main_uncertainty: how the queue behaves with a lane that really fails among good ones, and with a train that needs the build machine's suites; neither has happened for real
+    next_observation: the first batch with a Go package change in it
   blocker_or_risk: 'Node B free space swings by tens of GiB within hours and crosses the 60 GiB deploy floor; the cause of the swing is not known and the owner has not ruled on it. Lesson of the night, three times over (the docs-only gate shortcut, automatic lane removal, the queue resetting a borrowed tree): a convenience that skips a check or destroys something on an inference did not survive review, and the plain version did. Follow-ups: the doccheck CI job; three readers of the old ledger.'
-  next_action: one batch of two lanes through scripts/land-queue to settle C257; then the closing pass from docs/evidence/mission-closing-verdicts-2026-11-27.md, in documents only until the owner rules on the verdicts
+  next_action: the closing pass from docs/evidence/mission-closing-verdicts-2026-11-27.md once the owner has read it; T11 (one file per gate check) and T10; then author the goal file for finishing the move to Exact
 receipts:
 - id: T0
   boundary: define
