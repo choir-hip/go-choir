@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""scripts/land-timings [N]: where a landing's time goes.
+
+Run as python3 -I scripts/land-timings [N]. Reads the log scripts/land and scripts/land-queue append to
+(${LAND_TIMING_LOG:-$HOME/.cache/go-choir/land-timings.tsv}; columns in
+scripts/land-timing.sh) and prints, over the last N landings (default 20), the
+count of landed and failed runs and the count, median and max seconds of every
+step; then the same for the waits the queue records (CI, then staging).
+"""
+import os
+import statistics
+import sys
+
+
+def main():
+    n = 20
+    if len(sys.argv) > 1:
+        try:
+            n = int(sys.argv[1])
+        except ValueError:
+            print("usage: scripts/land-timings [N]", file=sys.stderr)
+            return 2
+    log = os.environ.get("LAND_TIMING_LOG") or os.path.join(
+        os.path.expanduser("~"), ".cache", "go-choir", "land-timings.tsv")
+    rows = []
+    try:
+        with open(log, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                c = line.rstrip("\n").split("\t")
+                if len(c) >= 8 and c[0] in ("land", "wait"):
+                    rows.append(c)
+    except OSError:
+        pass
+    if not rows:
+        print("land-timings: no timings in %s" % log)
+        return 0
+    lands = [r for r in rows if r[0] == "land"][-n:]
+    waits = [r for r in rows if r[0] == "wait"][-n:]
+    print("land-timings: %s" % log)
+    landed = sum(1 for r in lands if r[2] == "landed")
+    failed = sum(1 for r in lands if r[2] == "failed")
+    other = len(lands) - landed - failed
+    print("last %d landing(s): landed %d, failed %d%s" % (
+        len(lands), landed, failed, ", other %d (no-push)" % other if other else ""))
+    table("landing steps", lands)
+    if waits:
+        print()
+        table("waiting (the queue, between lanes)", waits)
+    return 0
+
+
+def table(title, rows):
+    order, vals = [], {}
+    totals = []
+    for r in rows:
+        try:
+            totals.append(int(r[4]))
+        except ValueError:
+            pass
+        for part in r[7].split("|"):
+            name, sep, secs = part.rpartition(":")
+            if not sep or not name:
+                continue
+            try:
+                s = int(secs)
+            except ValueError:
+                continue
+            if name not in vals:
+                order.append(name)
+                vals[name] = []
+            vals[name].append(s)
+    print("%s  (seconds)" % title)
+    print("%-58s %4s %7s %7s" % ("step", "n", "median", "max"))
+    for name in order:
+        v = vals[name]
+        print("%-58s %4d %7d %7d" % (name, len(v), round(statistics.median(v)), max(v)))
+    if totals:
+        print("%-58s %4d %7d %7d" % ("total", len(totals), round(statistics.median(totals)), max(totals)))
+
+
+sys.exit(main())

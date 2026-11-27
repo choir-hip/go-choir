@@ -43,11 +43,23 @@ if [ -z "${LAND_STAGE_DIR:-}" ]; then
   stage=$(mktemp -d "${TMPDIR:-/tmp}/land-stage.XXXXXX") || exit 1
   src=$(cd "$(dirname "$0")" && pwd -P)
   cp "$src/land" "$stage/land" && { cp "$src/gates" "$stage/gates" 2>/dev/null || true; }
+  cp "$src/land-timing.sh" "$stage/land-timing.sh" 2>/dev/null || true
   LAND_STAGE_DIR=$stage exec bash "$stage/land" "$@"
 fi
 SELF_DIR=$LAND_STAGE_DIR
 LAND_LOCK=""  # set once this run holds the tree's lock (guards, below)
-trap 'rm -rf "$LAND_STAGE_DIR"; [ -z "$LAND_LOCK" ] || rm -rf "$LAND_LOCK"' EXIT
+# Step timings (scripts/land-timing.sh, staged beside this file). They only observe:
+# without the helper file they are no-ops, and nothing they do can fail a landing.
+if [ -f "$SELF_DIR/land-timing.sh" ]; then . "$SELF_DIR/land-timing.sh"; else
+  lt_init() { :; }; lt_step() { :; }; lt_set_head() { :; }; lt_set_lanes() { :; }; lt_off() { :; }; lt_finish() { :; }
+  lt_suite_name() { printf 'suite'; }
+fi
+land_exit() {
+  local rc=$?
+  lt_finish "$rc" || true
+  rm -rf "$LAND_STAGE_DIR"; [ -z "$LAND_LOCK" ] || rm -rf "$LAND_LOCK"
+}
+trap land_exit EXIT
 VM=${LAND_VM:-choir-agents}
 PRIMARY=${LAND_PRIMARY:-/Users/wiz/Dev/go-choir}
 POLL=${LAND_POLL:-20}
@@ -143,6 +155,7 @@ for a in "$@"; do
 done
 [ "${#LANES[@]}" -gt 0 ] || die "usage: scripts/land [--dry-run] [--no-push] [--local] <branch-or-sha>..."
 
+lt_init land "$(IFS=,; echo "${LANES[*]}")"; lt_step guards
 # ------------------------------------------------------------ 1. guards
 top=$(git rev-parse --show-toplevel 2>/dev/null) || die "not in a git checkout"
 cd "$top" || exit 1
@@ -174,6 +187,7 @@ fail_step() { # name file
   exit 1
 }
 
+lt_step fetch
 say "fetching origin"
 git fetch -q origin main "+refs/heads/lane/*:refs/remotes/origin/lane/*" 2>/dev/null || git fetch -q origin main || die "git fetch origin failed (stale origin would mislead the plan)"
 BASE=$(git rev-parse origin/main) || die "no origin/main"
@@ -198,6 +212,7 @@ union_docs() {
   GIT_EDITOR=true git -c core.editor=true cherry-pick --continue >/dev/null 2>&1 || return 1
   say "lane $lane: kept both sides of a conflict in $(printf '%s ' $u)"
 }
+lt_step train
 git checkout -q --detach "$BASE" || die "cannot check out origin/main"
 TRAIN_LANES=(); skipped=0
 for lane in "${LANES[@]}"; do
@@ -217,6 +232,8 @@ for lane in "${LANES[@]}"; do
 done
 [ "$(git rev-list --count "$BASE..HEAD")" -gt 0 ] || { restore; die "empty train: no lane has commits that are not already on origin/main"; }
 
+lt_set_lanes "$(IFS=,; echo "${TRAIN_LANES[*]}")"; lt_set_head "$(git rev-parse HEAD 2>/dev/null)"
+lt_step plan
 # ------------------------------------------------------------ 3. the plan
 PKGS_CHANGED=""; PKGS_ALL=""; SEL=""; NOTES=""
 make_plan() { # $1 = base
@@ -248,7 +265,7 @@ print_plan() {
 }
 make_plan "$BASE"
 print_plan
-if [ "$DRY" = 1 ]; then restore; echo "land: --dry-run: nothing run, nothing pushed, back on $ORIG"; exit 0; fi
+if [ "$DRY" = 1 ]; then lt_off; restore; echo "land: --dry-run: nothing run, nothing pushed, back on $ORIG"; exit 0; fi
 
 # --------------------------------------------------- runner for step 5
 is_heavy() { case " $HEAVY " in *" ${1#./} "*) return 0;; esac; return 1; }
@@ -324,14 +341,16 @@ EOF
   echo "exit 0" >>"$1"
 }
 have_work() { [ -n "$PKGS_ALL" ] || [ "$GH" = 1 ] || [ "$FE" = 1 ]; }
-if [ "$PRINT_RUNNER" = 1 ]; then LOCAL=0; write_runner /dev/stdout; restore; exit 0; fi
+if [ "$PRINT_RUNNER" = 1 ]; then lt_off; LOCAL=0; write_runner /dev/stdout; restore; exit 0; fi
 
 run_suites_remote() {
   local short sha runner R W out last prog fails=0 code
+  lt_step "suites: vm preflight"
   sha=$(git rev-parse HEAD); short=$(git rev-parse --short=10 HEAD)
   R="\$HOME/mirror/land-$short.result"; W="\$HOME/mirror/land-$short"
   ssh -o ConnectTimeout=10 -o BatchMode=yes "$VM" true 2>/dev/null || {
     echo "land: build VM '$VM' unreachable. Fix ssh, or rerun with --local to run the suites on this machine (slower, no sharding)." >&2; exit 4; }
+  lt_step "suites: ship to vm"
   runner=$(mktemp "${TMPDIR:-/tmp}/land-runner.XXXXXX"); write_runner "$runner"
   say "pushing lane ref lane/land-$short and starting the run on $VM"
   git push -q -f origin "HEAD:refs/heads/lane/land-$short" || die "push of the lane ref failed"
@@ -346,6 +365,7 @@ run_suites_remote() {
   pid=$out
   say "run started on $VM (pid $out); result file ~/mirror/land-$short.result"
   last=""
+  lt_step "suites: vm start"
   while :; do
     if out=$(ssh -o ConnectTimeout=15 -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "$VM" "echo C:\$(tail -n1 $R 2>/dev/null | sed -E 's/.*(EXIT [0-9]+)\$/\\1/'); echo A:\$(kill -0 $pid 2>/dev/null && echo 1 || echo 0); echo P:\$(grep '^## ' $R 2>/dev/null | tail -n1)") ; then
       fails=0
@@ -357,7 +377,8 @@ run_suites_remote() {
         if ssh -o ConnectTimeout=15 -o BatchMode=yes "$VM" "tail -n1 $R" 2>/dev/null | grep -q 'EXIT [0-9]'; then continue; fi
         echo "land: the run on $VM died without an EXIT line:" >&2; ssh -o BatchMode=yes "$VM" "tail -n 40 $R" >&2; exit 1
       fi
-      [ "$prog" != "$last" ] && { say "$(date +%H:%M:%S) running: $prog"; last=$prog; }
+      # the suite is named when a poll first sees it, so a step's seconds are good to one poll (LAND_POLL)
+      [ "$prog" != "$last" ] && { lt_step "$(lt_suite_name "$prog")"; say "$(date +%H:%M:%S) running: $prog"; last=$prog; }
     else
       fails=$((fails+1)); say "$(date +%H:%M:%S) ssh poll failed ($fails/$POLL_FAILS); the run on the VM is unaffected, retrying"
       if [ "$fails" -ge "$POLL_FAILS" ]; then
@@ -365,6 +386,7 @@ run_suites_remote() {
     fi
     sleep "$POLL"
   done
+  lt_step "suites: fetch result"
   RESULT_TMP=$(mktemp "${TMPDIR:-/tmp}/land-result.XXXXXX")
   until ssh -o ConnectTimeout=15 -o BatchMode=yes "$VM" "cat $R" >"$RESULT_TMP" 2>/dev/null; do sleep "$POLL"; done
   return "$code"
@@ -383,16 +405,17 @@ verify() { # $1 = run suites (1/0)
   local t out=/tmp/none
   out=$(mktemp "${TMPDIR:-/tmp}/land-step.XXXXXX")
   if [ "$DOCS" = 0 ]; then
-    say "go build ./..."; go build ./... >"$out" 2>&1 || fail_step "go build ./..." "$out"
+    lt_step build; say "go build ./..."; go build ./... >"$out" 2>&1 || fail_step "go build ./..." "$out"
     if [ -n "$PKGS_CHANGED" ]; then
-      say "go vet (changed packages)"; go vet $PKGS_CHANGED >"$out" 2>&1 || fail_step "go vet" "$out"
+      lt_step vet; say "go vet (changed packages)"; go vet $PKGS_CHANGED >"$out" 2>&1 || fail_step "go vet" "$out"
     fi
   fi
-  say "gates ($GATES)"
+  lt_step gates; say "gates ($GATES)"
   $GATES >"$out" 2>&1 || fail_step "gates (a missing reviewer trailer is reported by check-guest-security-epoch; land never adds one)" "$out"
   tail -n1 "$out"
   if [ "$NIX" = 1 ]; then
     if command -v nix >/dev/null 2>&1; then
+      lt_step "nix eval"
       say "nix eval go-choir-autoputer-vm toplevel"
       nix eval --raw '.#nixosConfigurations.go-choir-autoputer-vm.config.system.build.toplevel.drvPath' >"$out" 2>&1 || fail_step "nix eval go-choir-autoputer-vm" "$out"
       say "nix eval go-choir-b gateway environment"
@@ -403,7 +426,7 @@ verify() { # $1 = run suites (1/0)
   [ "$1" = 1 ] || return 0
   have_work || { say "no suites to run"; return 0; }
   RESULT_TMP=""
-  if [ "$LOCAL" = 1 ]; then run_suites_local; else run_suites_remote; fi
+  if [ "$LOCAL" = 1 ]; then lt_step "suites (local)"; run_suites_local; else run_suites_remote; fi
   t=$?
   if [ "$t" -ne 0 ]; then
     echo; echo "land: suites FAILED (exit $t); nothing pushed to main."
@@ -417,27 +440,30 @@ verify() { # $1 = run suites (1/0)
 # ------------------------------------------------ 7. push (with one rebase)
 moves=0
 verify 1
-if [ "$NOPUSH" = 1 ]; then echo "land: --no-push: verified train at $(git rev-parse HEAD); HEAD is the train on a detached head (was $ORIG)"; exit 0; fi
-TRAIN_HEAD=$(git rev-parse HEAD)
+if [ "$NOPUSH" = 1 ]; then LT_OK=no-push; echo "land: --no-push: verified train at $(git rev-parse HEAD); HEAD is the train on a detached head (was $ORIG)"; exit 0; fi
+TRAIN_HEAD=$(git rev-parse HEAD); lt_set_head "$TRAIN_HEAD"
 same_train() { [ "$(git rev-parse HEAD)" = "$TRAIN_HEAD" ] || die "this tree's HEAD is $(git rev-parse --short HEAD), not the train this run verified ($(git rev-parse --short "$TRAIN_HEAD")): something else moved the tree. Nothing pushed."; }
 while :; do
   if [ -n "${LAND_HOOK_AFTER_VERIFY:-}" ]; then
+    lt_step "after-verify hook"
     say "running LAND_HOOK_AFTER_VERIFY (pid $$; the push waits for it)"
     eval "$LAND_HOOK_AFTER_VERIFY"
     say "LAND_HOOK_AFTER_VERIFY returned"
   fi
   same_train
+  lt_step "final fetch"
   git fetch -q origin main || die "git fetch origin main failed before push"
   NEW=$(git rev-parse origin/main)
   [ "$NEW" != "$BASE" ] || break
   moves=$((moves+1))
   [ "$moves" -le 1 ] || die "origin/main moved again after one rebase and rerun; giving up. Nothing pushed. Run scripts/land again."
+  lt_step rebase
   say "origin/main moved $(git rev-parse --short "$BASE") -> $(git rev-parse --short "$NEW"); rebasing the train"
   if ! git rebase -q "$NEW" >/dev/null 2>&1; then
     files=$(git diff --name-only --diff-filter=U | tr '\n' ' '); git rebase --abort >/dev/null 2>&1
     die "rebase onto moved origin/main conflicted in: $files(nothing pushed)"
   fi
-  OLD=$BASE; BASE=$NEW; TRAIN_HEAD=$(git rev-parse HEAD)
+  OLD=$BASE; BASE=$NEW; TRAIN_HEAD=$(git rev-parse HEAD); lt_set_head "$TRAIN_HEAD"
   prev_all=$PKGS_ALL
   # What the moved commits (OLD..NEW) affect, seen through the rebased tree's graph.
   hit=""
@@ -456,9 +482,11 @@ done
 
 # ------------------------------------------------------------- push + report
 same_train
+lt_step push
 git push origin HEAD:main || die "push to main was rejected (main moved at the last instant?). Nothing landed; run scripts/land again."
 short=$(git rev-parse --short=10 HEAD)
 git push -q origin ":refs/heads/lane/land-$short" 2>/dev/null || true
+lt_step report
 echo "=== pushed to origin/main ==="
 echo "land: main is now $(git rev-parse HEAD)"
 re=""

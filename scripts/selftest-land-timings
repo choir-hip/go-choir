@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# Selftest for land-timing.sh (the timing helpers land and
+# land-queue source) and land-timings (the reader). It runs no
+# landing. The failure list it was written from:
+#   1. the reader prints median and max per step over the last N landings, and the
+#      count of landed and failed; wait lines are told apart from land lines
+#   2. a failed run writes a line at exit (the trap path), naming the failed step
+#   3. a log that cannot be written never changes the exit code
+#   4. a step name with spaces (and a colon) survives the round trip
+#   5. a step run twice is summed; LAND_TIMING_LOG overrides the path, and the
+#      directory is created
+#   6. land and land-queue source the helpers and stage them
+set -uo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+T=$(mktemp -d "${TMPDIR:-/tmp}/selftest-land-timings.XXXXXX")
+trap 'chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T"' EXIT
+fails=0
+ok() { echo "ok   $1"; }
+bad() { echo "FAIL $1"; shift; [ $# -gt 0 ] && printf '     %s\n' "$@"; fails=$((fails+1)); }
+expect_eq() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "want: $2" "got:  $3"; fi; }
+expect_has() { case "$3" in *"$2"*) ok "$1" ;; *) bad "$1" "want to contain: $2" "got: $3" ;; esac; }
+
+# ---- the reader, on a fixture
+P=$(printf '\t')
+LOG=$T/fixture.tsv
+{
+  printf 'land\t2026-11-27T01:00:00Z\tfailed\tgates\t100\tabc\tlaneA\tguards:1|build:30|gates:80\n'
+  printf 'land\t2026-11-27T02:00:00Z\tlanded\t\t200\tdef\tlaneA,laneB\tguards:1|build:40|gates:60|suite: go test -race [3 pkgs]:99\n'
+  printf 'wait\t2026-11-27T02:30:00Z\tok\t\t500\tdef\tlaneA\tci:400|staging:100\n'
+  printf 'land\t2026-11-27T03:00:00Z\tlanded\t\t300\tghi\tlaneC\tguards:3|build:50|gates:80|suite: go test -race [3 pkgs]:150\n'
+  printf 'land\t2026-11-27T04:00:00Z\tlanded\t\t400\tjkl\tlaneD\tguards:5|build:60|gates:100\n'
+  printf 'wait\t2026-11-27T04:30:00Z\tok\t\t300\tjkl\tlaneC\tci:100|staging:200\n'
+  printf 'garbage line with no tabs\n'
+} >"$LOG"
+out=$(LAND_TIMING_LOG=$LOG "$here/land-timings" 2>&1); rc=$?
+expect_eq "reader exits 0" 0 "$rc"
+expect_has "reader counts landed and failed" "landed 3, failed 1" "$out"
+# build over four landings: 30 40 50 60 -> median 45, max 60
+expect_has "reader median/max for build" "build" "$out"
+echo "$out" | awk '$1=="build"{print $0}' | grep -Eq '(^| )4 +45 +60$' && ok "build n=4 median=45 max=60" || bad "build n=4 median=45 max=60" "$out"
+echo "$out" | awk '$1=="gates"{print $0}' | grep -Eq '(^| )4 +80 +100$' && ok "gates n=4 median=80 max=100" || bad "gates n=4 median=80 max=100" "$out"
+expect_has "reader keeps a step name with spaces" "suite: go test -race [3 pkgs]" "$out"
+expect_has "reader lists waiting apart" "waiting" "$out"
+echo "$out" | awk '$1=="ci"{print $0}' | grep -Eq '(^| )2 +250 +400$' && ok "ci wait n=2 median=250 max=400" || bad "ci wait n=2 median=250 max=400" "$out"
+out2=$(LAND_TIMING_LOG=$LOG "$here/land-timings" 2 2>&1)
+expect_has "N=2 keeps the last two landings" "landed 2, failed 0" "$out2"
+out3=$(LAND_TIMING_LOG=$T/none.tsv "$here/land-timings" 2>&1); rc=$?
+expect_eq "missing log: exit 0" 0 "$rc"
+expect_has "missing log: says so" "no timings" "$out3"
+
+# ---- the helpers, in isolation
+run_lib() { # body... : runs it in a fresh bash that sources the helpers with a fake clock
+  bash -c '
+    set -uo pipefail
+    . "$1"; shift
+    CLOCK=1000; lt_now() { echo "$CLOCK"; }
+    eval "$*"
+  ' _ "$here/land-timing.sh" "$@"
+}
+L1=$T/sub/dir/l1.tsv
+out=$(LAND_TIMING_LOG=$L1 run_lib 'lt_init land laneA,laneB; lt_set_head deadbeef; lt_step "guards"; CLOCK=1002; lt_step "suite: go test ./x [2 pkgs]"; CLOCK=1010; lt_step guards; CLOCK=1013; lt_finish 0'); rc=$?
+expect_eq "success path exits 0" 0 "$rc"
+[ -f "$L1" ] && ok "log dir created from LAND_TIMING_LOG" || bad "log dir created from LAND_TIMING_LOG"
+line=$(cat "$L1" 2>/dev/null)
+expect_eq "success line" "land${P}$(printf '%s' "$line" | cut -f2)${P}landed${P}${P}13${P}deadbeef${P}laneA,laneB${P}guards:5|suite: go test ./x [2 pkgs]:8" "$line"
+expect_has "table printed" "total" "$out"
+expect_eq "start time is UTC ISO" 1 "$(printf '%s' "$line" | cut -f2 | grep -Ec '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$')"
+
+# the trap path: a script that dies mid-step still writes a failed line, and keeps its exit code
+L2=$T/l2.tsv
+LAND_TIMING_LOG=$L2 bash -c '
+  set -uo pipefail
+  . "$1"; CLOCK=50; lt_now() { echo "$CLOCK"; }
+  trap '"'"'rc=$?; lt_finish "$rc"; exit $rc'"'"' EXIT
+  lt_init land laneZ; lt_step build; CLOCK=60; lt_step "go vet (changed packages)"; CLOCK=67
+  exit 7
+' _ "$here/land-timing.sh" >/dev/null 2>&1; rc=$?
+expect_eq "trap path keeps exit 7" 7 "$rc"
+line=$(cat "$L2" 2>/dev/null)
+expect_eq "failure line names the failed step and outcome" "failed|go vet (changed packages)|17" "$(printf '%s' "$line" | awk -F'\t' '{print $3"|"$4"|"$5}')"
+expect_eq "failure line steps" "build:10|go vet (changed packages):7" "$(printf '%s' "$line" | cut -f8)"
+
+# an unwritable log must not fail anything, nor print an error
+mkdir -p "$T/ro"; chmod 500 "$T/ro"
+out=$(LAND_TIMING_LOG=$T/ro/sub/x.tsv run_lib 'lt_init land l; lt_step a; lt_finish 0; echo rc=$?' 2>&1)
+expect_has "unwritable log: finish returns 0" "rc=0" "$out"
+case "$out" in *ermission*|*denied*|*"Read-only"*) bad "unwritable log: no error text" "$out" ;; *) ok "unwritable log: no error text" ;; esac
+out=$(LAND_TIMING_LOG=/dev/null/x/y.tsv run_lib 'lt_init land l; lt_step a; lt_finish 3; echo rc=$?' 2>&1)
+expect_has "log path under a file: finish returns 0" "rc=0" "$out"
+
+# lt_off writes nothing; lt_finish twice writes once; helpers inert before lt_init
+L3=$T/l3.tsv
+LAND_TIMING_LOG=$L3 run_lib 'lt_step early; lt_finish 0; lt_init land l; lt_off; lt_finish 0' >/dev/null 2>&1
+[ ! -s "$L3" ] && ok "off and uninitialised write nothing" || bad "off and uninitialised write nothing" "$(cat "$L3")"
+LAND_TIMING_LOG=$L3 run_lib 'lt_init land l; lt_step a; lt_finish 0; lt_finish 0' >/dev/null 2>&1
+expect_eq "finish twice writes once" 1 "$(wc -l <"$L3" | tr -d ' ')"
+# tabs, newlines and "|" in names cannot break the columns
+L4=$T/l4.tsv
+LAND_TIMING_LOG=$L4 run_lib 'lt_init land "a	b"; lt_step "x	y|z
+w"; lt_finish 0' >/dev/null 2>&1
+expect_eq "hostile names stay on one line with 8 columns" "1 8" "$(wc -l <"$L4" | tr -d ' ') $(awk -F'\t' '{print NF}' "$L4")"
+# wait kind
+L5=$T/l5.tsv
+LAND_TIMING_LOG=$L5 run_lib 'lt_init wait laneA; lt_set_head abc; lt_step ci; CLOCK=1030; lt_step staging; CLOCK=1045; lt_finish 0' >/dev/null 2>&1
+expect_eq "wait line" "wait|ok|45|laneA|ci:30|staging:15" "$(awk -F'\t' '{print $1"|"$3"|"$5"|"$7"|"$8}' "$L5")"
+# suite names are stable across package lists
+expect_eq "suite name counts packages" "suite: go test -race -count=1 [3 pkgs]" "$(run_lib 'lt_suite_name "## go test -race -count=1 ./a ./b ./c"')"
+expect_eq "suite name without packages" "suite: bash x.sh" "$(run_lib 'lt_suite_name "## bash x.sh"')"
+
+# the queue's wait path, with a fake gh: no CI run appears, so the wait is a docs-only push
+mkdir -p "$T/bin"; printf '#!/bin/sh\nexit 0\n' >"$T/bin/gh"; chmod +x "$T/bin/gh"
+L6=$T/l6.tsv
+PATH="$T/bin:$PATH" LAND_TIMING_LOG=$L6 LAND_QUEUE_CI_APPEAR=0 LAND_QUEUE_LANE=laneW "$here/land-queue" --wait-green 0123456789abcdef >/dev/null 2>&1; rc=$?
+expect_eq "queue wait path exits 0" 0 "$rc"
+expect_eq "queue wait line: kind, outcome, lane, head, step" "wait|ok|laneW|0123456789abcdef|ci" "$(awk -F'\t' '{split($8,a,":"); print $1"|"$3"|"$7"|"$6"|"a[1]}' "$L6")"
+
+# ---- wiring: the scripts source and stage the helpers
+grep -q 'land-timing.sh' "$here/land" && ok "land sources the helpers" || bad "land sources the helpers"
+grep -q 'land-timing.sh' "$here/land-queue" && ok "land-queue stages the helpers" || bad "land-queue stages the helpers"
+for s in land land-queue land-timing.sh; do bash -n "$here/$s" 2>/dev/null && ok "bash -n $s" || bad "bash -n $s"; done
+
+[ "$fails" = 0 ] && { echo "selftest-land-timings: all passed"; exit 0; }
+echo "selftest-land-timings: $fails failed"; exit 1

@@ -33,13 +33,30 @@ if [ -z "${LAND_QUEUE_STAGE:-}" ]; then
   src=$(cd "$(dirname "$0")" && pwd -P)
   cp "$0" "$stage/land-queue" && cp "$src/land" "$stage/land" || exit 1
   cp "$src/gates" "$stage/gates" 2>/dev/null || true
+  cp "$src/land-timing.sh" "$stage/land-timing.sh" 2>/dev/null || true
   LAND_QUEUE_STAGE=$stage exec bash "$stage/land-queue" "$@"
 fi
 STAGE=$LAND_QUEUE_STAGE
 [ "${1:-}" = "--wait-green" ] || trap 'rm -rf "$STAGE"' EXIT
 say() { echo "land-queue: $*"; }
 
-wait_green() { # sha
+# Timings (scripts/land-timing.sh): each wait for a landing's CI and for staging to
+# serve it is one "wait" line in the same log scripts/land writes, so waiting and
+# working can be told apart. They only observe; without the helper they are no-ops.
+if [ -f "$STAGE/land-timing.sh" ]; then . "$STAGE/land-timing.sh"; else
+  lt_init() { :; }; lt_step() { :; }; lt_set_head() { :; }; lt_finish() { :; }
+fi
+
+# wait_green <sha>: records "ci" (until CI passed, or until no CI run was expected)
+# and "staging" (until staging served the sha) as steps of one wait line.
+wait_green() {
+  local rc
+  lt_init wait "${LAND_QUEUE_LANE:-}"; lt_set_head "$1"; lt_step ci
+  wait_green_run "$1"; rc=$?
+  lt_finish "$rc" || true
+  return "$rc"
+}
+wait_green_run() { # sha
   local sha=$1 t0 r c appear=${LAND_QUEUE_CI_APPEAR:-300} limit=${LAND_QUEUE_TIMEOUT:-3600}
   t0=$(date +%s); r=""
   while :; do
@@ -55,6 +72,7 @@ wait_green() { # sha
     sleep 30
   done
   say "CI for ${sha:0:9} passed; waiting for staging to serve it"
+  lt_step staging
   t0=$(date +%s)
   while :; do
     c=$(curl -s -m 20 -D- -o /dev/null "${STAGING_URL:-https://choir.news/}" | tr -d '\r' | awk 'tolower($1)=="x-choir-build-commit:"{print $2}')
@@ -90,18 +108,20 @@ GREEN=${LAND_QUEUE_GREEN:-bash $STAGE/land-queue --wait-green}
 say "logs in $LOGS"
 cd "$TREE" || exit 1
 
-prev=""; landed=(); failed=()
+prev=""; prevlane=""; landed=(); failed=()
 for lane in "${LANES[@]}"; do
   log=$LOGS/$(printf '%s' "$lane" | tr '/' '_').log
   hook=""
   [ -n "$prev" ] && hook="$GREEN $prev || exit 6"
   say "$(date -u +%H:%M:%SZ) $lane: starting${prev:+ (its push waits for ${prev:0:9})}"
   git fetch -q origin main && git checkout -q --detach origin/main || { say "cannot check out origin/main in $TREE"; exit 1; }
+  export LAND_QUEUE_LANE=$lane  # the lane that waits in the hook, for the timing log's wait line
   LAND_HOOK_AFTER_VERIFY=$hook bash "$STAGE/land" "${LANDFLAGS[@]}" "$lane" >"$log" 2>&1
   rc=$?
   case $rc in
     0) prev=$(sed -n 's/^land: main is now \([0-9a-f]*\)$/\1/p' "$log" | tail -n1)
        [ -n "$prev" ] || { say "$lane: landed but its log names no commit; stopping"; exit 1; }
+       prevlane=$lane
        landed+=("$lane ${prev:0:9}"); say "$(date -u +%H:%M:%SZ) $lane: on main as ${prev:0:9}" ;;
     6) say "$lane: not pushed: the landing before it (${prev:0:9}) did not pass CI or deploy. Queue stopped."
        say "not run: the lanes after $lane"; exit 1 ;;
@@ -110,6 +130,7 @@ for lane in "${LANES[@]}"; do
   esac
 done
 if [ -n "$prev" ]; then
+  export LAND_QUEUE_LANE=$prevlane  # nothing waits here; the wait line names the lane that was waited on
   $GREEN "$prev" || { say "the last landing (${prev:0:9}) did not pass CI or deploy"; exit 1; }
 fi
 say "landed: ${landed[*]:-none}"

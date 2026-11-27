@@ -37,6 +37,7 @@ here=$(cd "$(dirname "$0")" && pwd -P)
 LAND=$here/land
 T=$(mktemp -d "${TMPDIR:-/tmp}/land-selftest.XXXXXX")
 trap 'rm -rf "$T"' EXIT
+export LAND_TIMING_LOG=$T/timings.tsv   # the landings below log their step timings here, not to the real log
 pass=0; failn=0
 ok() { pass=$((pass+1)); echo "  ok   $1"; }
 bad() { failn=$((failn+1)); echo "  FAIL $1"; shift; [ $# -gt 0 ] && printf '%s\n' "$@" | sed 's/^/       /'; }
@@ -290,6 +291,12 @@ expect "primary checkout refused" 1 $rc
 echo dirty >"$W/untracked.txt"
 out=$(land --dry-run laneC); expect "dirty tree refused" 1 $?
 rm -f "$W/untracked.txt"
+
+# timings: every landing above wrote one line; none to the real log
+expect "timings: a landed line per push" "yes" "$(awk -F'\t' '$1=="land" && $3=="landed"{n++} END{print (n>=3)?"yes":"no"}' "$T/timings.tsv")"
+expect "timings: a failed line names its step" "yes" "$(awk -F'\t' '$1=="land" && $3=="failed" && $4!=""{n++} END{print (n>=1)?"yes":"no"}' "$T/timings.tsv")"
+expect "timings: no dry-run or print-runner line" "0" "$(awk -F'\t' '$3=="dry-run"{n++} END{print n+0}' "$T/timings.tsv")"
+expect "timings: every line has 8 columns" "0" "$(awk -F'\t' 'NF!=8{n++} END{print n+0}' "$T/timings.tsv")"
 
 echo
 echo "selftest: $pass passed, $failn failed"
