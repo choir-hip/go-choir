@@ -61,3 +61,26 @@ that redirects; 3 needs the voice turn against a server that refuses.
 Stations E6.3 (order) and E6.4 (the inventory) of the design, which do not
 wait on the owner. Items 2 and 3 go with the turn's transport (E6.5),
 which does.
+
+## Left open by the reviews that accepted af5d69455 (2026-11-27)
+
+Both seats accepted with nothing blocking. These were adjudicated as deferred
+to station E6 and are not fixed:
+
+1. If the account wipe hung, the sign-out task would never end and every turn,
+   hands-free and take would refuse until relaunch, even after a new sign-in.
+   Before this change the key was already gone, so a new sign-in still worked.
+   No wipe step was seen to hang; not all were read.
+2. `SessionCoordinator.setRecordingTake(true)` checks the gate before taking
+   its own lock, and a take whose yield is suspended across a whole sign-out
+   opens the microphone briefly before its own re-check gives it back.
+3. When the 2 s session move times out, the move's task is not cancelled and
+   can hold the coordinator's mutex after the direct close.
+4. Nothing stops code inside the sign-out body from awaiting sign-out itself.
+   No such call exists today.
+5. A typed turn refused because a screen holds turns back shows "Sign in
+   first, then ask." to a signed-in person.
+6. A `setHandsFree(true, persist: false)` that passes the gate just before it
+   shuts can write its override after sign-out cleared it.
+7. One actor hop lies between the native op arriving and the gate shutting.
+   Closing it by shutting at arrival caused the stuck gate of round 3.
