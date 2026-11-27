@@ -106,16 +106,16 @@ stations:
   class: yellow
   review: one seat
   depends_on: []
-  carrier: 7c2ea0572
-  status: landed
+  carrier: 7c2ea0572 (CI run 45977867135 on 4ac73d992, which ran the full suite over it)
+  status: proved
 - id: T3
   name: one file per entry
   scope: a change-log entry and a ledger claim are each one new file in a directory, with the two long files kept as history and still joined for lanes in flight; CLAUDE.md's two rules point at the directories
   class: yellow
   review: one seat
   depends_on: []
-  carrier: e4cca635f
-  status: landed
+  carrier: e4cca635f (CI run 45977123111)
+  status: proved
 - id: T4
   name: the batched queue
   scope: scripts/land-queue stacks every approved lane, verifies the stack once and pushes once; a failing stack is halved to find the lane that broke it, which is set aside and named; the wait for staging between lanes is removed
@@ -147,7 +147,7 @@ stations:
   review: one seat
   depends_on: [T6]
   carrier: b80278aaa
-  status: landed
+  status: proved
 - id: T8
   name: the loaded file
   scope: CLAUDE.md shortened to the rules that must never be missed and the instruction to query before relying on a design; the rest moves to documents the query returns
@@ -178,6 +178,14 @@ stations:
   class: yellow
   review: none
   depends_on: [T2]
+  carrier: none yet
+  status: pending
+- id: T12
+  name: the closing pass
+  scope: 'from docs/evidence/half-started-work-2026-11-27.md: each of the 45 missions marked working, checkpoint_incomplete or blocked gets one verdict (complete with evidence, superseded by a named mission or campaign row, or working with one named next station); the unfinished phone lanes become stations of the Exact mission; landed lanes are removed; a station counts as done when its commit is on main with green CI'
+  class: green, and lane removal
+  review: the owner, for a verdict that supersedes a mission the owner ruled on
+  depends_on: [T7]
   carrier: none yet
   status: pending
 decisions_for_the_owner:

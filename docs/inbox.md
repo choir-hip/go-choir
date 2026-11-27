@@ -367,3 +367,10 @@ meaningfully?!?!" (Answer on 2026-11-27, from
 docs/design/desks-and-engine-2026-11-24.md: it was designed and two of its
 six steps landed; the capture desk, the creation verb, the scoring move
 and the root as designed are not built.)
+
+**Half-started work, and completing missions.** "theres a bunch of half
+started work. thats key to the docs transform. we should look into all of
+that and use it to refine the roadmap and scope of next missions. one key
+factor is we need to do better at completing missions. its easy for me to
+request something, much harder to land. so we make landing easier, and we
+make follow through and expectations setting easier and more accurate."
