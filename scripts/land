@@ -48,6 +48,11 @@
 # PostgreSQL is not touched), LAND_HOOK_AFTER_VERIFY (shell text run after the checks pass
 # and before the final fetch; the selftest uses it to move main).
 #
+# After a successful push the script prints, for each lane whose every commit went into
+# the train, the command that removes it (the lane tool compares commits and a cherry-pick
+# has other hashes, so "lane rm" alone refuses a landed lane), and for a lane that was
+# skipped or only partly picked a line saying not to remove it. It never removes anything.
+#
 # The script never adds, edits or invents a commit trailer.
 set -uo pipefail
 
@@ -88,6 +93,9 @@ if [ -f "$SELF_DIR/land-timing.sh" ]; then . "$SELF_DIR/land-timing.sh"; else
   lt_init() { :; }; lt_step() { :; }; lt_set_head() { :; }; lt_set_lanes() { :; }; lt_off() { :; }; lt_finish() { :; }
   lt_suite_name() { printf 'suite'; }
 fi
+# The gates (a child process) append their own "gates" line to the log this run's "land"
+# line goes to, whatever its HOME or its copy of the helper.
+if command -v lt_log_path >/dev/null 2>&1; then LAND_TIMING_LOG=$(lt_log_path); export LAND_TIMING_LOG; fi
 land_exit() {
   local rc=$?
   lt_finish "$rc" || true
@@ -249,10 +257,12 @@ union_docs() {
 }
 lt_step train
 git checkout -q --detach "$BASE" || { result "refused reason=checkout"; die "cannot check out origin/main"; }
-TRAIN_LANES=(); skipped=0
+TRAIN_LANES=(); TRAIN_WHOLE=(); skipped=0
 for lane in "${LANES[@]}"; do
   sha=$(git rev-parse --verify -q "$lane^{commit}" || git rev-parse --verify -q "origin/$lane^{commit}") || { restore; result "bad-lane lane=$lane"; die "lane '$lane' does not resolve to a commit"; }
   commits=$(git rev-list --reverse --no-merges --right-only --cherry-pick "$BASE...$sha")
+  # whole: every non-merge commit of the lane is one this train picks (none already on main) and it has no merge commits
+  allc=$(git rev-list --no-merges "$BASE..$sha" | wc -l | tr -d ' '); mrg=$(git rev-list --merges "$BASE..$sha" | wc -l | tr -d ' ')
   if [ -z "$commits" ]; then say "lane $lane ($(git rev-parse --short "$sha")): nothing to land (already on main or empty); skipped"; skipped=$((skipped+1)); SKIPPED_LANES="$SKIPPED_LANES $lane"; continue; fi
   n=$(printf '%s\n' "$commits" | wc -l | tr -d ' ')
   say "lane $lane: cherry-picking $n commit(s)"
@@ -265,6 +275,7 @@ for lane in "${LANES[@]}"; do
     fi
   done
   TRAIN_LANES+=("$lane")
+  if [ "$allc" = "$n" ] && [ "$mrg" = 0 ]; then TRAIN_WHOLE+=(1); else TRAIN_WHOLE+=(0); fi
 done
 [ "$(git rev-list --count "$BASE..HEAD")" -gt 0 ] || { restore; result "empty-train"; die "empty train: no lane has commits that are not already on origin/main"; }
 
@@ -545,4 +556,15 @@ for c in $(git rev-list --reverse "$BASE..HEAD"); do
   echo "  $(git log -1 --format='%H %s' "$c" | cut -c1-120)"
   echo "      $trs; $pe"
 done
+# Advice only: nothing here removes anything or changes the exit status (the last command stays the checkout).
+i=0
+while [ "$i" -lt "${#TRAIN_LANES[@]}" ]; do
+  if [ "${TRAIN_WHOLE[$i]:-0}" = 1 ]; then
+    echo "land: landed: ${TRAIN_LANES[$i]}; remove it with: (cd ${PRIMARY:-.} && lane rm ${TRAIN_LANES[$i]} --force)"
+  else
+    echo "land: ${TRAIN_LANES[$i]} was not fully landed here (some commit was already on main, or it has a merge commit); do not remove it"
+  fi
+  i=$((i+1))
+done
+for l in ${SKIPPED_LANES:-}; do echo "land: $l was not fully landed here (already on main, nothing of it picked); do not remove it"; done
 git checkout -q "$ORIG" 2>/dev/null

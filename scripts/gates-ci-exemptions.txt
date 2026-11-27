@@ -43,3 +43,4 @@ scripts/test-node-b-nix-retention.sh needs a Linux userland: BSD touch rejects i
 land-conditional .github/scripts/*-test only when the change touches .github/ (GH=1, the land script line 187)
 land-conditional scripts/go-test-runtime-shards only when agentcore and textureowner are both changed importers and not --local (SHARD=1, line 224)
 land-conditional scripts/go-test-with-timing only when agentcore and textureowner are both changed importers and not --local (SHARD=1, line 224)
+scripts/selftest-timing-log-guard runs land.test.sh and land-queue.test.sh (about 3 minutes); run by hand when a timing, gates or land script changes, not on every landing

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Guard: no selftest may write the developer's real timing log
+# (~/.cache/go-choir/land-timings.tsv). Each selftest and test script that runs
+# the gates, the land script, the land queue or the timing helpers is run with
+# HOME pointed at an empty temp directory and LAND_TIMING_LOG unset; a timing log (or
+# anything under ~/.cache/go-choir) that appears under that HOME fails the guard. It runs land.test.sh and land-queue.test.sh,
+# so it takes about 3 minutes and is not one of the gates' checks.
+# Usage: scripts/selftest-timing-log-guard [script-name...]  (default: all four)
+set -uo pipefail
+here=$(cd "$(dirname "$0")" && pwd -P)
+H=$(mktemp -d "${TMPDIR:-/tmp}/timing-guard-home.XXXXXX") || exit 2
+trap 'rm -rf "$H"' EXIT
+if [ "$#" -gt 0 ]; then names=("$@"); else
+  names=(selftest-gates-runner selftest-land-timings land.test.sh land-queue.test.sh)
+fi
+# the Go caches stay where they were, so the run is not cold and writes nothing else under HOME
+GOCACHE=${GOCACHE:-$(go env GOCACHE 2>/dev/null)}; GOMODCACHE=${GOMODCACHE:-$(go env GOMODCACHE 2>/dev/null)}
+[ -z "$GOCACHE" ] || export GOCACHE; [ -z "$GOMODCACHE" ] || export GOMODCACHE
+fails=0
+for n in "${names[@]}"; do
+  rm -rf "$H/.cache" "$H/sentinel.tsv"; mkdir -p "$H"
+  env -u LAND_TIMING_LOG HOME="$H" "$here/$n" >/dev/null 2>&1; rc=$?
+  # and with a landing's own log inherited: the script must override it, not append to it
+  : >"$H/sentinel.tsv"
+  env LAND_TIMING_LOG="$H/sentinel.tsv" HOME="$H" "$here/$n" >/dev/null 2>&1
+  if [ -s "$H/sentinel.tsv" ]; then echo "  FAIL $n appended to an inherited LAND_TIMING_LOG"; fails=$((fails+1)); fi
+  found=$({ find "$H/.cache/go-choir" -type f; find "$H" -name "land-timings*" -type f; } 2>/dev/null | sort -u)
+  if [ -n "$found" ]; then echo "  FAIL $n wrote a timing log under HOME: $found"; fails=$((fails+1))
+  elif [ "$rc" != 0 ]; then echo "  FAIL $n exited $rc (the guard needs it to pass)"; fails=$((fails+1))
+  else echo "  ok   $n leaves HOME empty"; fi
+done
+[ "$fails" = 0 ] && { echo "selftest-timing-log-guard: all passed"; exit 0; }
+echo "selftest-timing-log-guard: $fails failed"; exit 1

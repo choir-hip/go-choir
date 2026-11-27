@@ -14,6 +14,7 @@ set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 T=$(mktemp -d "${TMPDIR:-/tmp}/selftest-land-timings.XXXXXX")
 trap 'chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T"' EXIT
+export LAND_TIMING_LOG=$T/default-timings.tsv   # overrides any inherited log (a landing running the gates)
 fails=0
 ok() { echo "ok   $1"; }
 bad() { echo "FAIL $1"; shift; [ $# -gt 0 ] && printf '     %s\n' "$@"; fails=$((fails+1)); }

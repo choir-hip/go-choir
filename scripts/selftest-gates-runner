@@ -226,6 +226,11 @@ has "F23 and is named" "sleep 7" "$out"
 echo "timing"
 n=$(grep -c '^gates	' "$T/timings.tsv" 2>/dev/null); [ "${n:-0}" -ge 1 ] && ok "F11 a gates line is in the timing log" || bad "F11 a gates line is in the timing log" "$(cat "$T/timings.tsv" 2>/dev/null)"
 out=$(LAND_TIMING_LOG=/nonexistent/x/y drive 4 ""); has "F11 an unwritable log changes nothing" "ALL GATES PASS" "$out"
+# a sourced (selftest) run with no LAND_TIMING_LOG must not write the developer's real log
+H=$T/home; mkdir -p "$H"; body 'run sleep 1
+run true'
+( unset LAND_TIMING_LOG; export HOME=$H; drive 2 "" >/dev/null )
+expect "F11 a sourced run without LAND_TIMING_LOG writes nothing under HOME" "" "$(find "$H" -type f 2>/dev/null)"
 
 echo "nix"
 # N1: a check whose script text calls nix (an evaluation, a build, a flake command, the nix-* tools,
@@ -235,7 +240,7 @@ nixbad=$(cd "$here/.." && awk '/^[[:space:]]*gate_tag/{t=t" "$0} /^[[:space:]]*r
   [ -f "$sc" ] || continue
   [ "$sc" = scripts/selftest-gates-runner ] && continue
   if grep -vE '^[[:space:]]*(#|//)' "$sc" | grep -qE '(^|[;&|(!]|then|do|\$\()[[:space:]]*nix (eval|build|flake|develop|run)([^A-Za-z0-9_-]|$)|nix-(instantiate|build|store|shell)([^A-Za-z0-9_-]|$)|command -v nix([^A-Za-z0-9_-]|$)'; then
-    case "$tags" in *serial*) ;; *) echo "$sc" ;; esac
+    printf '%s' "$tags" | grep -q serial || echo "$sc"
   fi
 done)
 expect "N1 every check that calls nix is tagged serial" "" "$nixbad"

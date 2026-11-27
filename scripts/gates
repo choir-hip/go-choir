@@ -54,6 +54,7 @@ trap gates_abort INT TERM
 gates_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 # shellcheck disable=SC1091
 [ -f "$gates_dir/land-timing.sh" ] && { . "$gates_dir/land-timing.sh" 2>/dev/null || true; }
+command -v lt_init >/dev/null 2>&1 || { [ -f "$PWD/scripts/land-timing.sh" ] && . "$PWD/scripts/land-timing.sh" 2>/dev/null || true; }
 command -v lt_init >/dev/null 2>&1 || { lt_init() { :; }; lt_add() { :; }; lt_finish() { :; }; lt_clean() { printf '%s' "$1"; }; lt_set_head() { :; }; }
 gnow() { perl -MTime::HiRes=time -e 'printf "%.2f\n", time' 2>/dev/null || date +%s; }
 names=(); display=(); ser_idx=(); ser_cmd=()
@@ -139,6 +140,8 @@ gates_report() { # the ten slowest, the sum, one log line
   printf '%s' "$top" | sort -t "$(printf '\t')" -k1,1 -nr | head -10 | awk -F'\t' '{printf "  %7.2f  %s\n", $1, $2}'
   sum=$(printf '%s' "$top" | awk -F'\t' '{s+=$1} END{printf "%.0f", s}')
   echo "gates: sum of check seconds $sum, wall $(( $(date +%s) - gates_t0 )), jobs $jobs"
+  # a sourced run is a selftest: it writes the log only when it was given one, never the developer's real log
+  [ -z "${GATES_SOURCE_ONLY:-}" ] || [ -n "${LAND_TIMING_LOG:-}" ] || return 0
   lt_init gates "" >/dev/null 2>&1 || return 0
   lt_set_head "$(git rev-parse HEAD 2>/dev/null)"
   i=0; while [ "$i" -lt "$n" ]; do lt_add "${names[$i]}" "$(printf '%.0f' "${secs[$i]}")"; i=$((i+1)); done

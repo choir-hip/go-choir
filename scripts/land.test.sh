@@ -286,6 +286,41 @@ expect "queue: lane 3 landed before it went red" 1 "$(git log --format=%s origin
 expect "queue: lane 4 was not pushed" 0 "$(git log --format=%s origin/main | grep -c '^lane laneQ4$')"
 case "$out" in *"Queue stopped"*) ok "queue names the stop";; *) bad "queue stop message" "$out";; esac
 
+# the real gates, run from a staged copy as scripts/land runs them, append their
+# own line to the log the land line goes to
+echo "gates line from a stage"
+SG=$T/stage-gates; mkdir -p "$SG"; cp "$here/gates" "$here/land-timing.sh" "$SG/"
+GR=$T/gates-repo; mkdir -p "$GR"; git -C "$GR" init -q . ; G -C "$GR" commit -q --allow-empty -m x
+( cd "$GR" && LAND_TIMING_LOG=$T/gates-stage.tsv GATES_JOBS=4 bash "$SG/gates" >/dev/null 2>&1 )
+expect "the real gates run from a staged copy append a gates line with per-check seconds" "yes" \
+  "$(awk -F'\t' '$1=="gates" && $8 ~ /:[0-9]+\|/{n++} END{print (n==1)?"yes":"no"}' "$T/gates-stage.tsv" 2>/dev/null)"
+# land hands its own log path to the gates, so both lines go to the same file even by default
+printf '%s\n' '#!/usr/bin/env bash' 'printf %s "$LAND_TIMING_LOG" >"$T/gate.sawlog"' >"$T/gate-log.sh"; chmod +x "$T/gate-log.sh"
+git fetch -q origin main
+lane laneGL c/c.go 'package c
+func C() int { return 31 }'
+git checkout -q --detach "$base"
+HG=$T/home-gl; mkdir -p "$HG"
+out=$(cd "$W" && env -u LAND_TIMING_LOG HOME=$HG LAND_GATES=$T/gate-log.sh "$LAND" --local --no-push laneGL 2>&1)
+expect "land passes the gates the log path its own line goes to" "$HG/.cache/go-choir/land-timings.tsv" "$(cat "$T/gate.sawlog" 2>/dev/null)"
+
+# landed lanes: the advice printed after a push, and nothing ever removed
+echo "landed lanes"
+git fetch -q origin main
+lane laneR1 c/r1.go 'package c
+var R1 = 1'
+lane laneS1 c/s1.go 'package c
+var S1 = 1'
+git checkout -q --detach "$base"
+git worktree add -q "$T/lw-r1" laneR1; echo stray >"$T/lw-r1/stray.txt"   # a dirty lane tree: still only advice
+# main gets laneS1's commit under another hash, so laneS1 is skipped
+git -C "$T" clone -q "$O" "$T/pre" 2>/dev/null; ( cd "$T/pre" && git fetch -q "$M" laneS1 && git -c user.name=t -c user.email=t@example.com cherry-pick "$(git -C "$M" rev-parse laneS1)" >/dev/null 2>&1 && git push -q origin HEAD:main ); rm -rf "$T/pre"
+out=$(land --local laneR1 laneS1); rc=$?
+expect "the landing succeeds with a skipped lane" 0 $rc
+case "$out" in *"land: landed: laneR1; remove it with: (cd /nonexistent && lane rm laneR1 --force)"*) ok "a landed lane gets its removal command";; *) bad "removal command" "$out";; esac
+case "$out" in *"laneS1 was not fully landed here"*"do not remove it"*) ok "a skipped lane gets a do-not-remove line";; *) bad "do-not-remove line" "$out";; esac
+expect "nothing was removed: the branch, the tree and its file are there" "laneR1 stray" "$(git -C "$M" rev-parse --verify -q laneR1 >/dev/null && echo laneR1) $(cat "$T/lw-r1/stray.txt")"
+
 # guards
 out=$(cd "$M" && "$LAND" --dry-run laneA 2>&1); rc=$?
 expect "primary checkout refused" 1 $rc
