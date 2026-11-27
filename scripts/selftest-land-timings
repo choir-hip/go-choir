@@ -11,6 +11,8 @@
 #      directory is created
 #   6. land and land-queue source the helpers and stage them
 set -uo pipefail
+# never the caller's stage or result file: this selftest starts the queue itself
+unset LAND_QUEUE_STAGE LAND_STAGE_DIR LAND_RESULT_FILE LAND_QUEUE_LANE
 here=$(cd "$(dirname "$0")" && pwd -P)
 T=$(mktemp -d "${TMPDIR:-/tmp}/selftest-land-timings.XXXXXX")
 trap 'chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T"' EXIT
