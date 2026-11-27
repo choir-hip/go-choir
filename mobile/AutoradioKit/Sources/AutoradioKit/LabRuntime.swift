@@ -333,7 +333,12 @@ public final class LabRuntime: @unchecked Sendable {
         let ended = Locked<Bool>(false)
         let moved: Bool = await withCheckedContinuation { c in
             let once: @Sendable (Bool) -> Void = { ok in if ended.write({ let first = !$0; $0 = true; return first }) { c.resume(returning: ok) } }      // the first answer wins
-            Task { [engine, coordinator] in await engine.endForSignOut(); once(await coordinator.reapply()) }
+            Task { [engine, coordinator] in
+                await engine.endForSignOut()
+                try? await coordinator.setRecordingTake(false)      // a take's own give-back is a Task nobody waits for: the recording state is cleared here, awaited, before the move
+                let ok = await coordinator.reapply(), now = coordinator.current
+                once(ok && now != .listening && now != .talking)      // moved = the session is now in a state with the microphone closed, read from the coordinator
+            }
             Task { try? await Task.sleep(nanoseconds: UInt64(seconds * 1e9)); once(false) }
         }
         if !moved { stop() }

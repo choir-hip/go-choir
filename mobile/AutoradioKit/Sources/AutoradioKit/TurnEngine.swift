@@ -465,6 +465,7 @@ public actor TurnEngine {
         guard TurnGate.shared.admits(t.epoch) else { t.session.cancel(); t.partialTask?.cancel(); turn = nil; hf.answerTurnID = nil; setPhase(.playing); return }      // the last point before anything leaves the phone
         if !t.ended { t.ended = true; setPhase(.ended); env.log.emit(.turnEnded) }
         if let a = addressing { _ = await a.decide(.turnFinished, now: env.log.clock.now) }
+        guard TurnGate.shared.admits(t.epoch) else { t.session.cancel(); t.partialTask?.cancel(); turn = nil; hf.answerTurnID = nil; return }      // sign-out began while it waited: no pipeline, no phase
         let endedAt = env.log.clock.now
         turn = nil
         t.partialTask?.cancel()

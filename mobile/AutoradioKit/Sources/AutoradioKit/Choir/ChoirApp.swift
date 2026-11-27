@@ -45,7 +45,6 @@ public final class ChoirApp: @unchecked Sendable {
     private let lock = NSLock()
     private var message = ""
     private var loading = false
-    private var signOutTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
     public var onChange: (@Sendable () -> Void)?
     nonisolated(unsafe) var continuity: PlaybackContinuity?
@@ -207,11 +206,10 @@ public final class ChoirApp: @unchecked Sendable {
         }
     }
 
-    /// Sign-out, in this order: the gate shuts at once (synchronously, before any Task); the voice closes (microphone, turn, speech); playback stops; the run sheet gets up to five seconds to post with the old key still held (`waitSignedOut`); what is not answered is dropped;
+    /// Sign-out, in this order: the gate shuts (`beginSignOut`, the first statement); the voice closes (microphone, turn, speech); playback stops; the run sheet gets up to five seconds to post with the old key still held (`waitSignedOut`); what is not answered is dropped;
     /// then the key goes and the wipe runs, as on main; the server revoke is shared code's. A kill leaves: before the key, signed in with the microphone off (never kept across a launch); after it, signed out and shared code's marker finishes the wipe.
-    public func signOut() async {
-        lock.lock(); TurnGate.shared.closeForSignOut(); let t = signOutTask ?? Task { await self.signOutOnce(); self.lock.lock(); self.signOutTask = nil; TurnGate.shared.finishSignOut(); self.lock.unlock() }; signOutTask = t; lock.unlock(); await t.value      // shut first, here too; the sequence's end and the task slot are cleared in one step under this lock, so a second call joins a running task or starts its own, never one that has finished
-    }
+    public func beginSignOut() -> Task<Void, Never> { TurnGate.shared.signOut { [self] in await signOutOnce() } }      // the gate shuts here and nowhere else, at the sequence's first statement; the task's end reopens it
+    public func signOut() async { await beginSignOut().value }      // a second call joins the running sequence
     private func signOutOnce() async {
         await runtime.closeVoiceForSignOut()                     // first, before the wait and the key: the microphone closes, the turn is cancelled; the old key is still held for the post below
         lock.lock(); loading = false; lock.unlock(); runtime.player.pause(reason: "sign out")

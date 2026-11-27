@@ -261,7 +261,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         inner.release()
         do { try await inner.claim(state, preferBuiltInMic: false, reason: "reclaim: \(reason)") }
         catch {
-            lock.lock(); _current = nil; lock.unlock()
+            lock.lock(); _current = nil; _moveFailed = false; lock.unlock()
             let ns = error as NSError
             lastFailure = "\(ns.domain) \(ns.code): \(ns.localizedDescription)"
             print("AUTORADIO claim FAILED \(state.rawValue) (\(reason)) \(ns.domain) \(ns.code): \(ns.localizedDescription)")
@@ -324,7 +324,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
 
     public func release() {
         print("AUTORADIO released reason=stop")
-        lock.lock(); let had = _current != nil; _current = nil; lock.unlock()
+        lock.lock(); let had = _current != nil; _current = nil; _moveFailed = false; lock.unlock()
         if had { log.emit(.audioSession(category: "released", mode: "", note: "stop")) }
         inner.release()
     }

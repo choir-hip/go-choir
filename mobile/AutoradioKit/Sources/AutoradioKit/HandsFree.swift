@@ -309,7 +309,7 @@ extension TurnEngine {
         let transcriber = hf.transcriber
         hfEndSession(cancel: false)
         let text = ((try? await env.log.timed("transcribe") { try await session.finish() }) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard TurnGate.shared.admits(epoch) else { hf.cut = nil; await setLevelTo(.play, reason: .resume); await hfFeed(.turnDiscarded); return }
+        guard TurnGate.shared.admits(epoch) else { hf.cut = nil; await hfFeed(.turnDiscarded); return }      // a sign-out: nothing is resumed
         env.log.emit(.finalTranscript(text))
         print("AUTORADIO voice heard chars=\(text.count)")
         guard !text.isEmpty, let transcriber, let yield = try? env.registry.make(.yieldPolicy, as: YieldPolicy.self, config) else {

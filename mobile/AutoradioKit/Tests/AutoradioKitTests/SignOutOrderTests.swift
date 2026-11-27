@@ -20,16 +20,17 @@ final class SignOutProbe: @unchecked Sendable {
     private let l = NSLock()
     private var n = 0
     private var entries: [(Int, String)] = []
-    private var gate = false, hold = false
+    private var gate = false, hold = false, seal = false
     struct AtDelete: Sendable { var switchOn: Bool; var gateAllowed: Bool; var lastClaim: AudioState?; var deskLive: Bool; var voiceLive: Bool }
     private(set) var atDelete: AtDelete?
     private var lastClaimValue: AudioState?
     private var deskLiveValue = false, voiceLiveValue = false
-    func reset() { l.lock(); n = 0; entries = []; gate = false; hold = false; atDelete = nil; lastClaimValue = nil; deskLiveValue = false; voiceLiveValue = false; l.unlock() }
+    func reset() { l.lock(); n = 0; entries = []; gate = false; hold = false; seal = false; atDelete = nil; lastClaimValue = nil; deskLiveValue = false; voiceLiveValue = false; l.unlock() }
     @discardableResult func note(_ s: String) -> Int { l.lock(); defer { l.unlock() }; n += 1; entries.append((n, s)); return n }
     func seq(_ s: String) -> Int? { l.lock(); defer { l.unlock() }; return entries.first { $0.1 == s }?.0 }
     func count(_ s: String) -> Int { l.lock(); defer { l.unlock() }; return entries.filter { $0.1 == s }.count }
     var all: [String] { l.lock(); defer { l.unlock() }; return entries.map { "\($0.0):\($0.1)" } }
+    var sealOpen: Bool { get { l.lock(); defer { l.unlock() }; return seal } set { l.lock(); seal = newValue; l.unlock() } }
     var holdOpen: Bool { get { l.lock(); defer { l.unlock() }; return hold } set { l.lock(); hold = newValue; l.unlock() } }
     var gateOpen: Bool { get { l.lock(); defer { l.unlock() }; return gate } set { l.lock(); gate = newValue; l.unlock() } }
     func claimed(_ s: AudioState) { l.lock(); lastClaimValue = s; l.unlock(); note("claim:\(s.rawValue)") }
@@ -67,8 +68,8 @@ final class OrderOwner: AudioSessionOwner, @unchecked Sendable {
 
 /// What the module's TakeGate does (AutoradioModule+Takes.swift:12-26), which the Kit cannot link: the give-back turns hands-free on again, through the switch itself.
 @MainActor final class OrderTakeGate: TakeRadioGate {
-    let rt: LabRuntime; var handsFree = false; let waits: Bool
-    init(_ rt: LabRuntime, waits: Bool = false) { self.rt = rt; self.waits = waits }
+    let rt: LabRuntime; var handsFree = false; let waits: Bool; let giveBackDelayMs: UInt64
+    init(_ rt: LabRuntime, waits: Bool = false, giveBackDelayMs: UInt64 = 0) { self.rt = rt; self.waits = waits; self.giveBackDelayMs = giveBackDelayMs }
     func yieldForTake() async -> String? {
         handsFree = HandsFreeSwitch.shared.isOn
         if handsFree { HandsFreeSwitch.shared.set(false) }
@@ -79,7 +80,9 @@ final class OrderOwner: AudioSessionOwner, @unchecked Sendable {
     }
     func giveBack() {
         let hf = handsFree; handsFree = false
+        let delay = giveBackDelayMs
         Task { @MainActor in
+            if delay > 0 { try? await Task.sleep(nanoseconds: delay * 1_000_000) }      // a give-back that has not run yet when the close does
             try? await rt.coordinator.setRecordingTake(false)
             await rt.player.setLevel(.play)
             if hf { HandsFreeSwitch.shared.set(true) }
@@ -196,6 +199,7 @@ final class SignOutOrderTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        probe.sealOpen = true; try? await Task.sleep(nanoseconds: 50_000_000)
         await rt.engine.endForSignOut()      // a test that left a turn running must not leak its request into the next test
         _ = await poll(2) { !probe.deskLive && !probe.voiceLive }; try? await Task.sleep(nanoseconds: 400_000_000)      // and what it cancelled has finished (the probe is shared)
         probe.gateOpen = true
@@ -375,14 +379,14 @@ extension SignOutOrderTests {
         let feed = Task { for _ in 0..<12 { await engine.ingestHandsFree(frame(true)) }; for _ in 0..<45 { await engine.ingestHandsFree(frame(false)) } }      // the commit runs inside the frame that ends the turn
         let waiting = await poll(8) { probe.count("finish-waiting") > 0 }
         XCTAssertTrue(waiting, "precondition: the commit is suspended in transcription")
-        TurnGate.shared.closeForSignOut(); await engine.endForSignOut()
+        let release = shutGate(); await engine.endForSignOut()
         probe.gateOpen = true
         await feed.value
         try? await Task.sleep(nanoseconds: 600_000_000)
         XCTAssertEqual(RecordingDesk.turns.count, 0, "no request reached the server stage")
         XCTAssertEqual(probe.count("SPOKEN"), 0, "nothing was spoken: \(probe.all)")
         _ = pb
-        TurnGate.shared.finishSignOut()      // RESET
+        await release()
     }
 
     func testATypedTurnSuspendedBeforeItRunsSendsNothingAfterSignOutBegan() async throws {
@@ -390,14 +394,14 @@ extension SignOutOrderTests {
         let turn = Task { await engine.typedTurn("What changed in the harbour story?") }
         let waiting = await poll(5) { probe.count("spoken-waiting") > 0 }
         XCTAssertTrue(waiting, "precondition: the typed turn is suspended before runTurn")
-        TurnGate.shared.closeForSignOut(); await engine.endForSignOut()
+        let release = shutGate(); await engine.endForSignOut()
         probe.gateOpen = true
         let started = await turn.value
         try? await Task.sleep(nanoseconds: 400_000_000)
         XCTAssertFalse(started, "the turn did not start")
         XCTAssertEqual(RecordingDesk.turns.count, 0, "no request reached the server stage")
         XCTAssertEqual(probe.count("SPOKEN"), 0)
-        TurnGate.shared.finishSignOut()      // RESET
+        await release()
     }
 
     func testAnAnswerThatArrivesAfterSignOutBeganIsNotSpokenOrWritten() async throws {
@@ -407,13 +411,13 @@ extension SignOutOrderTests {
         let live = await poll(5) { probe.count("stream-request") > 0 }
         XCTAssertTrue(live, "precondition: the request is out, the answer not yet")
         let begun = probe.note("signout-begins")
-        TurnGate.shared.closeForSignOut(); await engine.endForSignOut()
+        let release = shutGate(); await engine.endForSignOut()
         probe.gateOpen = true                                          // the server answers now
         try? await Task.sleep(nanoseconds: 600_000_000)
         let after = probe.all.filter { (Int($0.split(separator: ":")[0]) ?? 0) > begun }
         XCTAssertFalse(after.contains { $0.hasSuffix("SPOKEN") || $0.hasSuffix("SPOKEN-revision") }, "nothing was spoken after sign-out began (the holding line before it is not this): \(after)")
         XCTAssertFalse(Conversation.shared.entries().contains { $0.answer.contains("harbour is open") }, "nothing was written to the conversation")
-        TurnGate.shared.finishSignOut()      // RESET
+        await release()
     }
 
     // Main's own race, kept exactly: a sign-in that lands while sign-out runs is destroyed with the old one (the person signs in again). Not fixed here (problem record).
@@ -490,8 +494,8 @@ extension SignOutOrderTests {
         let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [StubProtocol.self]
         StubProtocol.seen = []; StubProtocol.handler = { _ in .init() }
         let client = ChoirClient(baseURL: "https://example.test", keys: InMemoryKeyStore([KeyAccount.apiKey: "test-key", KeyAccount.computerID: "comp-1"]), session: URLSession(configuration: cfg), log: nil, trustedOrigin: nil)
-        TurnGate.shared.closeForSignOut()
-        defer { TurnGate.shared.finishSignOut() }      // RESET
+        let release = shutGate()
+        defer { SignOutProbe.shared.sealOpen = true }
         do { _ = try await client.send("GET", "/api/x", route: "/api/x"); XCTFail("a request was made while the account signs out") } catch ChoirError.notSignedIn {} catch { XCTFail("wrong error \(error)") }
         XCTAssertEqual(StubProtocol.seen.count, 0, "nothing reached the server")
     }
@@ -574,14 +578,30 @@ extension TurnEngine {
 }
 
 extension SignOutOrderTests {
-    func takeSession(waitsInMic: Bool = false, waitsInYield: Bool = false) async -> (TakeSession, FakeRecorder) {
+    func takeSession(waitsInMic: Bool = false, waitsInYield: Bool = false, giveBackDelayMs: UInt64 = 0) async -> (TakeSession, FakeRecorder) {
         await MainActor.run {
             let rec = FakeRecorder()
-            let s = TakeSession(recorder: rec, transcriber: FakeTranscriber(), gate: OrderTakeGate(rt, waits: waitsInYield), preview: FakePreview(),
+            let s = TakeSession(recorder: rec, transcriber: FakeTranscriber(), gate: OrderTakeGate(rt, waits: waitsInYield, giveBackDelayMs: giveBackDelayMs), preview: FakePreview(),
                                 micAllowed: { if waitsInMic { SignOutProbe.shared.note("mic-waiting"); while !SignOutProbe.shared.gateOpen { try? await Task.sleep(nanoseconds: 20_000_000) } }; return true },
                                 responds: { nil }, dir: FileManager.default.temporaryDirectory.appendingPathComponent("so-take-\(UUID().uuidString)"))
             TakeSession.live = s; return (s, rec)
         }
+    }
+    /// Shuts the gate the only way there is (a sign-out task in the slot) and holds it shut until `release()`.
+    func shutGate() -> (() async -> Void) {
+        let t = TurnGate.shared.signOut { while !SignOutProbe.shared.sealOpen { try? await Task.sleep(nanoseconds: 20_000_000) } }
+        return { SignOutProbe.shared.sealOpen = true; await t.value }
+    }
+    func testTheGateIsShutExactlyWhileTheSignOutTaskIsInTheSlot() async throws {
+        XCTAssertFalse(TurnGate.shared.signedOutShut)
+        let e0 = TurnGate.shared.epoch
+        let release = shutGate()
+        XCTAssertTrue(TurnGate.shared.signedOutShut); XCTAssertFalse(TurnGate.shared.admits(e0)); XCTAssertEqual(TurnGate.shared.epoch, e0 + 1)
+        let again = shutGate(); XCTAssertEqual(TurnGate.shared.epoch, e0 + 1, "a second begin joins the running one: the epoch does not move"); _ = again
+        await release()
+        XCTAssertFalse(TurnGate.shared.signedOutShut, "the task's end empties the slot")
+        XCTAssertFalse(TurnGate.shared.admits(e0), "an old turn stays refused: the epoch moved")
+        XCTAssertTrue(TurnGate.shared.admits(TurnGate.shared.epoch))
     }
     func takeLimits() -> TakeLimits { TakeLimits(minSeconds: 3, maxSeconds: 59.5, maxBytes: 512 * 1024) }
     func assertNoTakeIsOpen(_ take: TakeSession, _ rec: FakeRecorder, file: StaticString = #filePath, line: UInt = #line) async {
@@ -632,6 +652,21 @@ extension SignOutOrderTests {
         await MainActor.run { TakeSession.live = nil }
     }
 
+    // A take is recording when sign-out begins and its scheduled give-back has not run: the close clears the recording state itself, awaited, before the move
+    func testATakeRecordingWhenSignOutBeginsIsClosedBeforeTheKeyWithoutItsGiveBack() async throws {
+        try await startListening()
+        let (take, rec) = await takeSession(giveBackDelayMs: 1500)
+        await take.start(takeLimits())
+        let recording = await MainActor.run { take.state }
+        XCTAssertEqual(recording, .recording, "precondition")
+        XCTAssertEqual(probe.lastClaim, .listening, "precondition: the take holds the capture session")
+        ackAfter(200); await app.signOut()
+        try assertClosedAtKeyDelete()
+        let (state, _) = await MainActor.run { (take.state, rec.started.count) }
+        XCTAssertEqual(state, .idle, "the take is gone")
+        await MainActor.run { TakeSession.live = nil }
+    }
+
     // T3: only the guard at the start of the pipeline body stops this one
     func testATurnSuspendedInAddressingStartsNoPipelineAfterSignOut() async throws {
         rt.registry.register(.addressing, SlowAddressing.self) { SlowAddressing($0) }; rt.registry.register(.holder, SlowHolder.self) { SlowHolder($0) }
@@ -673,14 +708,14 @@ extension SignOutOrderTests {
         probe.gateOpen = true                                          // the answer arrives, passes its check, and waits for the engine
         try? await Task.sleep(nanoseconds: 300_000_000)
         let begun = probe.note("signout-begins")
-        TurnGate.shared.closeForSignOut()
+        let release = shutGate()
         probe.holdOpen = true; await hold.value
         try? await Task.sleep(nanoseconds: 500_000_000)               // the apply step runs now, with the flag up and the turn not yet cancelled: only its own check stops it
         let after = probe.all.filter { (Int($0.split(separator: ":")[0]) ?? 0) > begun }
         XCTAssertFalse(Conversation.shared.entries().contains { $0.answer.contains("harbour is open") }, "nothing was written to the conversation: \(after)")
         XCTAssertFalse(after.contains { $0.hasSuffix("SPOKEN") }, "nothing was handed to speech: \(after)")
         await engine.endForSignOut()
-        TurnGate.shared.finishSignOut()
+        await release()
     }
 
     // T6: the first sign-out's last callback calls sign-out again
@@ -697,26 +732,26 @@ extension SignOutOrderTests {
     // T7, T8
     func testAStaleHandsFreeSetDuringSignOutIsRefused() async throws {
         await rt.engine.handsFreeSet(false)      // the engine alone starts with it on
-        TurnGate.shared.closeForSignOut()
+        let release = shutGate()
         await rt.engine.handsFreeSet(true)
         let on = await rt.engine.hf.enabled
         XCTAssertFalse(on, "the engine is not left listening")
-        TurnGate.shared.finishSignOut()
+        await release()
     }
     func testTheEnrolmentTapCannotBeSetDuringSignOut() async throws {
-        TurnGate.shared.closeForSignOut()
+        let release = shutGate()
         await rt.setEnrolmentTap { _ in }
         let tap = await rt.engine.enrolmentTap
         XCTAssertNil(tap, "a tap on the microphone is not set while the account signs out")
-        TurnGate.shared.finishSignOut()
+        await release()
     }
 
     // T9: the gate is shut by one synchronous call (what the module makes where the native op arrives)
     func testAGateShutSynchronouslyRefusesTheNextTurn() async throws {
-        TurnGate.shared.closeForSignOut()
+        let release = shutGate()
         let started = await rt.engine.typedTurn("hello")
         XCTAssertFalse(started)
-        TurnGate.shared.finishSignOut()
+        await release()
     }
 
     // T10: after the 2 s fallback closed the engine, the next play or ask starts it again (ensureEngine / the host's startRequest)
@@ -734,6 +769,32 @@ extension SignOutOrderTests {
         _ = await app.ensureEngine()
         XCTAssertTrue(rt.snapshot().running, "the next play starts it again")
     }
+
+    // Final round (iv): the person who signs out and in again. Everything goes: ask (through the restart at LabRuntime.ask / the host's startRequest), hands-free, a take.
+    func everythingGoesAfterSignOutAndSignIn(fallback: Bool) async throws {
+        defer { LabEnvironment.virtualAudio = false; LabEnvironment.promptsAllowed = true }
+        rt.startRequest = { [rt] in await rt!.start(virtual: true) }      // what the module's startRequest does (AutoradioModule+Spine.swift:45)
+        _ = await app.ensureEngine()
+        try await startListening()
+        if fallback { owner.mode = .fails }
+        ackAfter(200); await app.signOut()
+        XCTAssertEqual(rt.snapshot().running, !fallback, fallback ? "the 2 s fallback stopped the engine" : "the engine goes on")
+        owner.mode = .normal
+        try keys.set("test-key-2", account: KeyAccount.apiKey)           // a new sign-in
+        XCTAssertTrue(TurnGate.shared.allowed, "the gate is open")
+        let asked = await rt.ask("What changed in the harbour story?")    // LabRuntime.swift:288 starts the engine again when it is not running
+        XCTAssertTrue(asked, "ask goes")
+        XCTAssertTrue(rt.snapshot().running, "the engine runs again")
+        let live = await poll(5) { probe.deskLive }; XCTAssertTrue(live, "its request reached the desk")
+        rt.setHandsFree(true); XCTAssertTrue(HandsFreeSwitch.shared.isOn, "hands-free turns on")
+        let (take, rec) = await takeSession()
+        await take.start(takeLimits())
+        let (state, started) = await MainActor.run { (take.state, rec.started.count) }
+        XCTAssertEqual(state, .recording, "a take starts"); XCTAssertEqual(started, 1)
+        await MainActor.run { take.discard(); TakeSession.live = nil }
+    }
+    func testTheRestartAfterSignOutAndSignInGoesThroughAsk() async throws { try await everythingGoesAfterSignOutAndSignIn(fallback: false) }
+    func testTheRestartAfterTheDirectCloseAndSignInGoesThroughAsk() async throws { try await everythingGoesAfterSignOutAndSignIn(fallback: true) }
 
     // NEWAPI-BEGIN
     // T11
