@@ -1,0 +1,46 @@
+# Every place Swift native code persists something (scripts/check-native-stores reads this; docs/evidence/native-stores-inventory-2026-11-27.md explains it).
+# file | token (appears in the file) | ruling | sites (persistence lines of that file this entry owns)
+# ruling: wiped:<what wipes it> | kept:<why it is deliberately not wiped> | unruled (nobody has decided; counted, a question)
+# A new site changes this file in the same diff. Do not add unruled to make the gate pass: say what the store holds and who removes it.
+#
+# --- the sign-in key and the mail key (Keychain)
+mobile/AutoradioKit/Sources/AutoradioKit/Choir/ChoirClient.swift | KeychainKeyStore | wiped:ChoirSignIn.signOut (the Keychain item is deleted before the wipe; ModelsEntry.swift re-reads it) | 1
+mobile/AutoradioKit/Sources/AutoradioKit/Choir/ChoirClient.swift | FileKeyStore | kept:a key file for the Mac replay and lab tools only (readOnlyKeyFile in autoradio-replay); the phone app uses KeychainKeyStore | 2
+mobile/AutoradioKit/Sources/AutoradioKit/Choir/MailSeal.swift | news.choir.autoradio.mailseal | wiped:MailSeal().forget() in mobile/AutoradioLab/modules/apple/ModelsEntry.swift (outside the AccountWipe registry) | 1
+# --- Application Support/Autoradio and the app target
+mobile/exact-package/apple/AutoradioModule+Onboarding.swift | voice-setup.json | kept:models are on the phone, not in the account; the record says which model was chosen for which stage (stated beside the write, setupFinished) | 2
+mobile/exact-package/apple/AutoradioModule.swift | filesCacheDisk | wiped:app-files (removeContents of the files cache) | 1
+mobile/exact-package/apple/AutoradioModule+Platform.swift | console.log | unruled | 6
+mobile/AutoradioKit/Sources/AutoradioKit/Deck.swift | deck-journal.json | wiped:deck (Deck.wipe removes the journal and seq.json) | 5
+mobile/AutoradioKit/Sources/AutoradioKit/Deck.swift | .bad | unruled | 1
+mobile/AutoradioKit/Sources/AutoradioKit/KeptTurns.swift | KeptTurnStore | wiped:kept-turns (registered when LabRuntime.store is passed in ChoirApp.registerAccountWipe) | 6
+mobile/AutoradioKit/Sources/AutoradioKit/Audio.swift | writeMono | wiped:kept-turns (the only caller is KeptTurnStore.save) | 1
+mobile/AutoradioKit/Sources/AutoradioKit/VoiceChoice.swift | VoiceChoiceStore | unruled | 2
+mobile/AutoradioKit/Sources/AutoradioKit/VoiceChoice.swift | FileVoiceReadiness | kept:which voice model is ready on this phone (device data; voice-ready.json in the model folder) | 2
+mobile/AutoradioKit/Sources/AutoradioKit/LabRuntime.swift | ConfigStore | unruled | 2
+mobile/AutoradioKit/Sources/AutoradioKit/Core.swift | LabConfiguration | unruled | 1
+mobile/AutoradioKit/Sources/AutoradioKit/Configurator.swift | voice-configuration.json | kept:the device probe and the plan chosen for it (chip, memory, disk, model plan); no content of the person | 2
+mobile/AutoradioKit/Sources/AutoradioKit/Choir/ClipLocator.swift | autoradio-clips | wiped:clips (ClipLocator.wipe; the folder is also emptied at launch) | 4
+mobile/AutoradioKit/Sources/AutoradioKit/TakeSession.swift | take- | wiped:takes (TakeSession.discard, AccountWipe.removeTakeScratch) | 2
+mobile/AutoradioKit/Sources/AutoradioKit/Voice/SpeakerProfile.swift | MikeVoice | wiped:voice-profile (SpeakerGate.forget) | 3
+# --- UserDefaults
+mobile/AutoradioKit/Sources/AutoradioKit/PlayerControls.swift | autoradio.playbackSpeed | kept:a playback-speed setting of the phone, not the person's content | 1
+mobile/AutoradioKit/Sources/AutoradioKit/KnownModels.swift | AutoradioResponderModel | kept:which model answers (device setting) | 2
+mobile/AutoradioKit/Sources/AutoradioKit/KnownModels.swift | AutoradioDecisionModel | kept:which model decides (device setting) | 2
+mobile/AutoradioKit/Sources/AutoradioKit/LabRuntime.swift | ResponderChoice.key | kept:which model answers or decides (device setting) | 2
+mobile/AutoradioKit/Sources/AutoradioKit/Voice/ModelUse.swift | AutoradioModelUse | kept:which model is used for a job (device setting) | 1
+mobile/AutoradioKit/Sources/AutoradioKit/Voice/VoicePreparation.swift | mike.voice.preparedFor | kept:the signature of the voice models last prepared (device data) | 1
+# --- models, voices and downloads (device data, not per person: design D6)
+mobile/AutoradioKit/Sources/AutoradioKit/ModelPins.swift | ModelManifests | kept:model manifests and pending marks next to the models (device data) | 4
+mobile/AutoradioKit/Sources/AutoradioKit/ModelStore.swift | KnownModels.storeRoot | kept:the model downloads and their .part files (device data, survive sign-out by design D6) | 9
+mobile/AutoradioKit/Sources/AutoradioKit/Voice/WeSpeakerEmbedder.swift | WeSpeaker | kept:the voice-print model download (device data; the person's profile is a separate store) | 4
+mobile/AutoradioKit/Sources/AutoradioKit/VoiceSetup.swift | backend.download | kept:model download during voice setup (device data) | 1
+mobile/AutoradioKit/Sources/AutoradioModels/ParakeetStages.swift | AsrModels.download | kept:the speech model download into FluidAudio's own cache (device data) | 1
+mobile/AutoradioKit/Sources/AutoradioModels/TinyVocaRunner.swift | compiled | kept:a compiled speech model (device data) | 1
+# --- fixtures and developer tools (never the person's data)
+mobile/AutoradioKit/Sources/AutoradioKit/FixtureClip.swift | autoradio-fixture-clip | kept:a synthetic test tone in tmp | 1
+mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurn.swift | autoradio-fixture-turn | kept:a bundled synthetic turn written to tmp and, only in an EXACT_DEVELOPMENT build, into the kept-turn folder | 4
+mobile/AutoradioKit/Sources/AutoradioModels/EmbedDeviceTrial.swift | embed-trial.json | kept:a proof result in Documents/proof, behind the EmbedTrial launch default (dev proof) | 2
+mobile/AutoradioKit/Sources/AutoradioModels/ModelProofLaunch.swift | results.json | kept:a proof result in Documents/proof, behind the ModelProofStages launch default (dev proof) | 1
+mobile/AutoradioKit/Sources/autoradio-models/main.swift | jsonOut | kept:a Mac command-line tool, not in the app | 4
+mobile/AutoradioKit/Sources/autoradio-replay/main.swift | fileURLWithPath | kept:a Mac command-line tool, not in the app | 1
