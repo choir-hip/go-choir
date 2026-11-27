@@ -118,6 +118,8 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         return policy() == .alwaysListening ? .listening : .talking
     }
     private var _backgrounded = false, _interrupted = false
+    /// The last session move failed (the claim is gone and the engine was put back as it was): `reapply` does not call that closed.
+    private var _moveFailed = false
     /// The radio is paused (the listener's pause or the system's). A paused radio keeps the claim, so the page
     /// stays alive and shared code keeps writing ahead, but it gives the MICROPHONE up: another app may record.
     private var _paused = false
@@ -128,6 +130,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     public var isRecordingTake: Bool { lock.lock(); defer { lock.unlock() }; return _recordingTake }
     /// Take the capture session for a take (`true`) or go back to what voice says (`false`). Throws when the session could not be taken.
     public func setRecordingTake(_ on: Bool) async throws {
+        if on, TurnGate.shared.signedOutShut { throw LabError.unavailable("the account is signing out") }      // the place that opens the microphone for a take refuses, whoever calls
         lock.lock(); _recordingTake = on; let has = _current != nil; lock.unlock()
         if has { await reapply() }
         else if on {
@@ -185,7 +188,7 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
     public func reapply() async -> Bool {
         await mutex.lock(); defer { mutex.unlock() }
         lock.lock(); let asked = _asked, cur = _current; lock.unlock()
-        guard cur != nil else { return true }
+        guard cur != nil else { lock.lock(); defer { lock.unlock() }; return !_moveFailed }      // no claim: closed, unless a move just failed (another caller's, which left the engine as it was)
         do { try await switchTo(target(for: asked), preferBuiltInMic: false, reason: "policy or voice changed"); return true } catch { return false }
     }
 
@@ -290,12 +293,12 @@ public final class SessionCoordinator: AudioSessionOwner, @unchecked Sendable {
         audio.detachObserver()                            // before the category changes: a notification of the old engine restarts nothing                                   // the category change would stop it anyway
         do { try await inner.claim(state, preferBuiltInMic: preferBuiltInMic, reason: reason) }
         catch {
-            lock.lock(); _current = nil; lock.unlock()
+            lock.lock(); _current = nil; _moveFailed = true; lock.unlock()
             log.emit(.error(stage: "audio-session", message: "claim \(state.rawValue) failed (\(reason)): \(error)"))
             try? audio.resume(voiceProcessing: from == .talking, mic: from.map { $0 != .playing })   // put the engine back as it was, if it can be
             throw error
         }
-        lock.lock(); _current = state; _suspect = false; lock.unlock()
+        lock.lock(); _current = state; _suspect = false; _moveFailed = false; lock.unlock()
         // A change of category moves the hardware format and the route: the engine's graph is built again, not started again.
         let buildsBefore = audio.engineBuilds
         lock.lock(); _engineOK = true; lock.unlock()

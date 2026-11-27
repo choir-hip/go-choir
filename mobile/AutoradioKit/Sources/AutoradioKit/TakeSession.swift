@@ -92,17 +92,23 @@ public protocol TakeTranscribing: Sendable { func transcribe(file: URL) async ->
     /// Start (from idle) or start again (from review: the previous file is deleted first).
     public func start(_ l: TakeLimits) async {
         guard state == .idle || state == .review else { return }
+        let epoch = TurnGate.shared.epoch
+        guard TurnGate.shared.admits(epoch) else { ended = "gate"; detail = "signing out"; changed(); return }      // not while the account signs out
+        func refused() { if holding { endHold() }; ended = "gate"; detail = "signed out"; state = .idle; changed() }      // sign-out began while this waited: the radio is given back
         limits = l
         if state == .review { dropFile(); transcript = ""; duration = 0; bytes = 0 }
         ended = ""; detail = ""
         guard await micAllowed() else { ended = "mic"; if holding { endHold() }; state = .idle; changed(); return }
+        guard TurnGate.shared.admits(epoch) else { return refused() }
         if !holding {
             if let why = await gate.yieldForTake() { ended = "gate"; detail = why; state = .idle; changed(); return }
             holding = true
+            guard TurnGate.shared.admits(epoch) else { return refused() }
         }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("take-\(UUID().uuidString.prefix(8).lowercased()).m4a")
         respondsTo = responds()
+        guard TurnGate.shared.admits(epoch) else { return refused() }
         do { try recorder.start(to: url) } catch { ended = "open"; endHold(); state = .idle; changed(); return }
         file = url; startedAt = now(); state = .recording
         print("AUTORADIO take recording started responds=\(respondsTo != nil)")

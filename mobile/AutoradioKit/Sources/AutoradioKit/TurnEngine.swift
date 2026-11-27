@@ -468,7 +468,7 @@ public actor TurnEngine {
         let endedAt = env.log.clock.now
         turn = nil
         t.partialTask?.cancel()
-        pipeline = Task { [self] in await self.runPipeline(t, transcript: transcript, endedAt: endedAt) }
+        pipeline = Task { [self] in await TurnGate.$turnEpoch.withValue(t.epoch) { await self.runPipeline(t, transcript: transcript, endedAt: endedAt) } }      // the turn's epoch travels with every request its tasks make
     }
 
     /// A command turn is over: shown as a one-line answer, the programme carries on, the microphone goes back to listening.
@@ -548,6 +548,7 @@ public actor TurnEngine {
         let cfg = t.config
         guard TurnGate.shared.admits(t.epoch) else { return }
         let pos = await env.playback.position()
+        guard TurnGate.shared.admits(t.epoch) else { return }      // sign-out began while the position was read: nothing is begun on the conversation
         let front = t.front ?? env.frontPage()
         setPhase(.acknowledging)
         Conversation.shared.begin(id: t.id, question: transcript)       // the question is on screen at once, whatever else happens
@@ -563,6 +564,7 @@ public actor TurnEngine {
         // What the phone holds for this question, searched once: the local model and the server desk are shown the same passages.
         let retrieved = await holder?.retrieve(words: transcript, pageTitle: front?.title ?? "", pageAddress: front?.address ?? "")
         print(DeskContext.turnLine(desk: desk != nil ? "server" : "local", retrieved: retrieved))
+        guard TurnGate.shared.admits(t.epoch) else { return }      // immediately before the desk request is made (the client's own check is the second thing that stops it)
 
         // The desk starts at once; System 1 and the acknowledgement do not wait for it.
         let revisionSeen = Flag()
@@ -602,15 +604,17 @@ public actor TurnEngine {
                         await self.markRevised()
                     }
                     do {
-                        for try await e in sd.speech(turnReq, heard: heard) {
+                        answers: for try await e in sd.speech(turnReq, heard: heard) {
                             if Task.isCancelled || !TurnGate.shared.admits(t.epoch) { break }
                             switch e {
                             case .sentence(_, let text):
                                 await deskSpeaks()
+                                guard TurnGate.shared.admits(t.epoch) else { break answers }      // checked again directly before the write and the hand-off to speech: deskSpeaks waited for the engine
                                 Conversation.shared.addAnswer(id: t.id, sentence: text)
                                 deskCont.yield(text)
                             case .failed(let text, _):
                                 await deskSpeaks()
+                                guard TurnGate.shared.admits(t.epoch) else { break answers }
                                 Conversation.shared.fail(id: t.id, note: text)
                                 deskCont.yield(text)
                             case .done(let status, let n, let a, let b):
@@ -655,7 +659,7 @@ public actor TurnEngine {
                         for try await r in desk.submit(baseReq, heard: heard) {
                             if Task.isCancelled || !TurnGate.shared.admits(t.epoch) { break }       // an interrupted turn's revision is not applied
                             if !firstSeen { firstSeen = true; log.emit(.deskFirstToken(msSinceTurnEnd: (log.clock.now - endedAt) * 1000)) }
-                            await self.onRevision(r, flag: revisionSeen, endedAt: endedAt, relay: { cutLocal.set(); relayTask?.cancel(); holder?.cancel() })   // real desk speech is ready: the local stream stops
+                            await self.onRevision(r, epoch: t.epoch, flag: revisionSeen, endedAt: endedAt, relay: { cutLocal.set(); relayTask?.cancel(); holder?.cancel() })   // real desk speech is ready: the local stream stops
                         }
                     } catch { log.emit(.error(stage: "desk", message: "\(error)")) }
                 }
@@ -796,7 +800,8 @@ public actor TurnEngine {
 
     func markRevised() { setPhase(.revised) }
 
-    func onRevision(_ r: Revision, flag: Flag, endedAt: Double, relay: () -> Void) async {
+    func onRevision(_ r: Revision, epoch: Int, flag: Flag, endedAt: Double, relay: () -> Void) async {
+        guard TurnGate.shared.admits(epoch) else { return }      // directly before the revision is applied (handed to the player)
         env.log.emit(.revisionArrived(id: r.id, fromBlock: r.fromBlock, blocks: r.blocks.count, summary: r.blocks.first?.summary ?? "(empty)"))
         flag.set()
         relay()    // no new holding lines; the one in flight finishes

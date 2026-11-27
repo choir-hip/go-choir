@@ -20,16 +20,17 @@ final class SignOutProbe: @unchecked Sendable {
     private let l = NSLock()
     private var n = 0
     private var entries: [(Int, String)] = []
-    private var gate = false
+    private var gate = false, hold = false
     struct AtDelete: Sendable { var switchOn: Bool; var gateAllowed: Bool; var lastClaim: AudioState?; var deskLive: Bool; var voiceLive: Bool }
     private(set) var atDelete: AtDelete?
     private var lastClaimValue: AudioState?
     private var deskLiveValue = false, voiceLiveValue = false
-    func reset() { l.lock(); n = 0; entries = []; gate = false; atDelete = nil; lastClaimValue = nil; deskLiveValue = false; voiceLiveValue = false; l.unlock() }
+    func reset() { l.lock(); n = 0; entries = []; gate = false; hold = false; atDelete = nil; lastClaimValue = nil; deskLiveValue = false; voiceLiveValue = false; l.unlock() }
     @discardableResult func note(_ s: String) -> Int { l.lock(); defer { l.unlock() }; n += 1; entries.append((n, s)); return n }
     func seq(_ s: String) -> Int? { l.lock(); defer { l.unlock() }; return entries.first { $0.1 == s }?.0 }
     func count(_ s: String) -> Int { l.lock(); defer { l.unlock() }; return entries.filter { $0.1 == s }.count }
     var all: [String] { l.lock(); defer { l.unlock() }; return entries.map { "\($0.0):\($0.1)" } }
+    var holdOpen: Bool { get { l.lock(); defer { l.unlock() }; return hold } set { l.lock(); hold = newValue; l.unlock() } }
     var gateOpen: Bool { get { l.lock(); defer { l.unlock() }; return gate } set { l.lock(); gate = newValue; l.unlock() } }
     func claimed(_ s: AudioState) { l.lock(); lastClaimValue = s; l.unlock(); note("claim:\(s.rawValue)") }
     var lastClaim: AudioState? { l.lock(); defer { l.unlock() }; return lastClaimValue }
@@ -66,13 +67,14 @@ final class OrderOwner: AudioSessionOwner, @unchecked Sendable {
 
 /// What the module's TakeGate does (AutoradioModule+Takes.swift:12-26), which the Kit cannot link: the give-back turns hands-free on again, through the switch itself.
 @MainActor final class OrderTakeGate: TakeRadioGate {
-    let rt: LabRuntime; var handsFree = false
-    init(_ rt: LabRuntime) { self.rt = rt }
+    let rt: LabRuntime; var handsFree = false; let waits: Bool
+    init(_ rt: LabRuntime, waits: Bool = false) { self.rt = rt; self.waits = waits }
     func yieldForTake() async -> String? {
         handsFree = HandsFreeSwitch.shared.isOn
         if handsFree { HandsFreeSwitch.shared.set(false) }
         await rt.player.setLevel(.pause)
-        try? await rt.coordinator.setRecordingTake(true)
+        if waits { SignOutProbe.shared.note("yield-waiting"); while !SignOutProbe.shared.gateOpen { try? await Task.sleep(nanoseconds: 20_000_000) } }
+        do { try await rt.coordinator.setRecordingTake(true) } catch { giveBack(); return "the microphone could not be taken (\(error))" }
         return nil
     }
     func giveBack() {
@@ -188,7 +190,7 @@ final class SignOutOrderTests: XCTestCase {
         rt = LabRuntime(supportDir: dir, session: owner, registry: registry, emptyProgramme: true)
         for (k, id) in [(StageKind.system1, "stub-s1"), (.voice, "stub-voice"), (.transcriber, "stub-tr"), (.holder, "local-ack"), (.desk, "order-desk")] { rt.setStage(k, id: id) }
         app = ChoirApp(runtime: rt, keys: keys)
-        TurnGate.shared.wire()      // what the module does at launch (OnboardingController.init)
+        TurnGate.shared.keyPresent = { [keys] in keys!.get(KeyAccount.apiKey) != nil }      // what the module wires at launch (main's own line)
         // What today's module registers (`OnboardingController.reset`, run inside the wipe, after the key): the microphone closed. It stands for the OLD order; the fix puts the close first.
         app.accountWipe.register("onboarding") { [rt] in rt!.setHandsFree(false) }
     }
@@ -308,13 +310,11 @@ final class SignOutOrderTests: XCTestCase {
 
     // F6, F7: no new turn from the start of sign-out until a new sign-in completes
     func testNoNewTurnStartsFromTheStartOfSignOutUntilANewSignInCompletes() async throws {
-        XCTAssertTrue(TurnGate.shared.allowed, "signed in: the gate (wired by ChoirApp, not by this test) allows a turn")
+        XCTAssertTrue(TurnGate.shared.allowed, "signed in: the gate (wired as the module wires it) allows a turn")
         ackAfter(100)
         await app.signOut()
         XCTAssertFalse(TurnGate.shared.allowed, "signed out")
         rt.setHandsFree(true); XCTAssertFalse(HandsFreeSwitch.shared.isOn, "the microphone cannot be turned on")
-        let started = await rt.engine.typedTurn("hello")
-        XCTAssertFalse(started, "a typed turn is refused")
         try keys.set("test-key-2", account: KeyAccount.apiKey)     // the next sign-in completes
         XCTAssertTrue(TurnGate.shared.allowed, "after a new sign-in the gate opens again")
         rt.setHandsFree(true); XCTAssertTrue(HandsFreeSwitch.shared.isOn)
@@ -416,36 +416,35 @@ extension SignOutOrderTests {
         TurnGate.shared.finishSignOut()      // RESET
     }
 
-    func testANewSignInDuringTheWaitKeepsItsKeyAndOpensTheGate() async throws {
+    // Main's own race, kept exactly: a sign-in that lands while sign-out runs is destroyed with the old one (the person signs in again). Not fixed here (problem record).
+    func testASignInThatLandsDuringSignOutIsDestroyedAsOnMain() async throws {
         let done = Task { await app.signOut() }
         try? await Task.sleep(nanoseconds: 500_000_000)
-        try keys.set("test-key-new", account: KeyAccount.apiKey); try keys.set("test-key-new-id", account: KeyAccount.keyID)      // a sign-in completes during the wait
+        try keys.set("test-key-new", account: KeyAccount.apiKey); try keys.set("test-key-new-id", account: KeyAccount.keyID)
         RadioBridge.shared.markSignedOut()
         await done.value
-        XCTAssertEqual(keys.get(KeyAccount.apiKey), "test-key-new", "sign-out deletes the key it began with and nothing else")
-        XCTAssertEqual(probe.count("keydelete"), 0)
-        XCTAssertTrue(TurnGate.shared.allowed, "the new account's gate is open when sign-out returns")
+        XCTAssertNil(keys.get(KeyAccount.apiKey), "the stored key is deleted, whichever it is, as on main")
+        XCTAssertEqual(probe.count("keydelete"), 1)
     }
 
-    func testAKeyThatCannotBeDeletedLeavesTheGateShut() async throws {
+    // A key that cannot be deleted is a sign-out that did not finish (shared code says "try again"): the person is still signed in, and the gate does not stay shut or stuck.
+    func testAKeyThatCannotBeDeletedLeavesTheSequenceEndedAndTheGateNotStuck() async throws {
         keys.failDelete = true
         ackAfter(200)
         await app.signOut()
         XCTAssertNotNil(keys.get(KeyAccount.apiKey), "precondition: the key is still stored")
-        XCTAssertFalse(TurnGate.shared.allowed, "the gate stays shut for the key that was leaving")
-        let started = await rt.engine.typedTurn("hello")
-        XCTAssertFalse(started)
+        XCTAssertFalse(TurnGate.shared.signedOutShut, "the sequence ended")
+        XCTAssertTrue(TurnGate.shared.allowed, "still signed in: as on main, a turn is allowed")
         keys.failDelete = false
     }
 
-    func testAStaleWriteOfTheOldKeyDoesNotReopenTheGate() async throws {
+    // A sign-in with the SAME key value after a completed sign-out is a sign-in (there is no identity to compare, and none is kept).
+    func testASignInWithTheSameKeyValueAfterSignOutIsAllowed() async throws {
         ackAfter(200)
         await app.signOut()
         XCTAssertFalse(TurnGate.shared.allowed)
-        try keys.set("test-key", account: KeyAccount.apiKey); try keys.set("test-key-id", account: KeyAccount.keyID)      // the old key written back late
-        XCTAssertFalse(TurnGate.shared.allowed, "the old account's key does not reopen it")
-        try keys.set("test-key-2", account: KeyAccount.apiKey); try keys.set("test-key-2-id", account: KeyAccount.keyID)
-        XCTAssertTrue(TurnGate.shared.allowed, "a different key is a new sign-in")
+        try keys.set("test-key", account: KeyAccount.apiKey); try keys.set("test-key-id", account: KeyAccount.keyID)
+        XCTAssertTrue(TurnGate.shared.allowed)
     }
 
     func testASessionMoveThatFailsStillClosesTheMicrophone() async throws {
@@ -514,3 +513,257 @@ extension SignOutOrderTests {
         return (TurnEngine(env: EngineEnvironment(registry: r, log: EventLog(clock: LabClock()), playback: pb), configuration: cfg), pb)
     }
 }
+
+
+// ---- Final round. Failure list, written before the code:
+//  T1 a take started during the wait, or suspended in the permission prompt / the radio's yield across sign-out, opens the microphone under the old account -> testATakeStartedDuring..., testATakeSuspendedIn...
+//  T3 a turn suspended in `addressing.decide` gets its pipeline created after sign-out ran `interruptPipeline` (nothing to cancel): only the guard at the start of the pipeline body stops it      -> testATurnSuspendedInAddressing...
+//  T4 a turn suspended in `holder.retrieve` goes on to the desk request: the re-check before it and the client's check both stop it                                                                   -> testATurnSuspendedInRetrieval...
+//  T5 an answer element that passed its check and is suspended in its apply step writes to the conversation / hands to speech after sign-out began                                                    -> testAnAnswerSuspendedInItsApplyStep...
+//  T6 a second sign-out called from the first's last callback finds the finished task and nobody clears the gate                                                                                      -> testASecondSignOutFromTheLastCallbackDoesNotStickTheGate
+//  T7 a stale `handsFreeSet(true)` after sign-out began leaves the engine listening                                                                                                                  -> testAStaleHandsFreeSetDuringSignOutIsRefused
+//  T8 the enrolment tap is set again after it was cleared                                                                                                                                            -> testTheEnrolmentTapCannotBeSetDuringSignOut
+//  T9 the gate is shut synchronously by the first call; a turn started right after is refused                                                                                                        -> testAGateShutSynchronouslyRefusesTheNextTurn
+//  T10 after the direct close (`stop`) nothing starts the engine again after a new sign-in                                                                                                           -> testTheEngineStartsAgainAfterTheDirectClose
+//  T11 an old turn's request, made after sign-out AND a new sign-in, carries the new key (request not bound to its turn's epoch)                                                                     -> testARequestIsBoundToTheEpochOfTheTurnThatMadeIt  (NEWAPI)
+
+final class SlowAddressing: Addressing, @unchecked Sendable {
+    static let stageID = "slow-addr"
+    static var descriptor: StageDescriptor { StageDescriptor(displayName: "slow addr") }
+    init(_ p: StageParams) {}
+    var holdsTurnOpen: Bool { false }
+    var noSpeechTimeout: Double { 6 }
+    func decide(_ input: AddressInput, now: Double) async -> AddressDecision {
+        if input == .turnFinished { SignOutProbe.shared.note("decide-waiting"); while !SignOutProbe.shared.gateOpen { try? await Task.sleep(nanoseconds: 20_000_000) } }
+        return .none
+    }
+}
+final class SlowHolder: Holder, @unchecked Sendable {
+    static let stageID = "slow-holder"
+    static var descriptor: StageDescriptor { StageDescriptor(displayName: "slow holder") }
+    init(_ p: StageParams) {}
+    func lines(for input: HolderInput) -> AsyncStream<String> { AsyncStream { $0.finish() } }
+    func lines(for input: HolderInput, later: @escaping @Sendable () async -> [System1Answer]) -> AsyncStream<String> { AsyncStream { $0.finish() } }
+    func cancel() {}
+    func diagnostics() -> String { "" }
+    func report() -> GenerationReport? { nil }
+    func retrieve(words: String, pageTitle: String, pageAddress: String) async -> RetrievalContext? {
+        SignOutProbe.shared.note("retrieve-waiting")
+        while !SignOutProbe.shared.gateOpen { try? await Task.sleep(nanoseconds: 20_000_000) }
+        return nil
+    }
+}
+/// A desk that makes its request through the REAL client (against a stand-in server), as the app's desks do.
+final class OrderClientDesk: Desk, @unchecked Sendable {
+    static let stageID = "order-client-desk"
+    static var descriptor: StageDescriptor { StageDescriptor(displayName: "order client desk") }
+    init(_ p: StageParams) {}
+    func submit(_ turn: DeskTurn) -> AsyncThrowingStream<Revision, Error> {
+        AsyncThrowingStream { c in
+            SignOutProbe.shared.note("client-desk-submit")
+            let cfg = URLSessionConfiguration.ephemeral; cfg.protocolClasses = [StubProtocol.self]
+            let client = ChoirClient(baseURL: "https://example.test", keys: InMemoryKeyStore([KeyAccount.apiKey: "test-key-new", KeyAccount.computerID: "comp-1"]), session: URLSession(configuration: cfg), log: nil, trustedOrigin: nil)
+            let t = Task { do { _ = try await client.send("GET", "/x", route: "/x"); SignOutProbe.shared.note("client-SENT") } catch { SignOutProbe.shared.note("client-refused") }; c.finish() }
+            c.onTermination = { _ in t.cancel() }
+        }
+    }
+}
+/// Blocks the engine's actor (a synchronous method) until the test lets go: whatever needs the actor waits behind it.
+extension TurnEngine {
+    func holdForTest() { SignOutProbe.shared.note("hold-running"); while !SignOutProbe.shared.holdOpen { usleep(10_000) } }
+}
+
+extension SignOutOrderTests {
+    func takeSession(waitsInMic: Bool = false, waitsInYield: Bool = false) async -> (TakeSession, FakeRecorder) {
+        await MainActor.run {
+            let rec = FakeRecorder()
+            let s = TakeSession(recorder: rec, transcriber: FakeTranscriber(), gate: OrderTakeGate(rt, waits: waitsInYield), preview: FakePreview(),
+                                micAllowed: { if waitsInMic { SignOutProbe.shared.note("mic-waiting"); while !SignOutProbe.shared.gateOpen { try? await Task.sleep(nanoseconds: 20_000_000) } }; return true },
+                                responds: { nil }, dir: FileManager.default.temporaryDirectory.appendingPathComponent("so-take-\(UUID().uuidString)"))
+            TakeSession.live = s; return (s, rec)
+        }
+    }
+    func takeLimits() -> TakeLimits { TakeLimits(minSeconds: 3, maxSeconds: 59.5, maxBytes: 512 * 1024) }
+    func assertNoTakeIsOpen(_ take: TakeSession, _ rec: FakeRecorder, file: StaticString = #filePath, line: UInt = #line) async {
+        let (state, started) = await MainActor.run { (take.state, rec.started.count) }
+        XCTAssertEqual(state, .idle, "no take is recording", file: file, line: line)
+        XCTAssertEqual(started, 0, "the recorder never started", file: file, line: line)
+        XCTAssertFalse(HandsFreeSwitch.shared.isOn, file: file, line: line)
+        XCTAssertNotEqual(probe.lastClaim, .listening, "the session is not the capture one", file: file, line: line)
+        XCTAssertNotEqual(probe.lastClaim, .talking, file: file, line: line)
+    }
+
+    // T1, scenario 1: Record is tapped during the wait, after the voice was closed
+    func testATakeStartedDuringTheWaitOpensNoMicrophone() async throws {
+        try await startListening()
+        let (take, rec) = await takeSession()
+        let done = Task { await app.signOut() }
+        try? await Task.sleep(nanoseconds: 700_000_000)
+        await take.start(takeLimits())
+        await assertNoTakeIsOpen(take, rec)
+        RadioBridge.shared.markSignedOut(); await done.value
+        try assertClosedAtKeyDelete()
+        await assertNoTakeIsOpen(take, rec)
+        await MainActor.run { TakeSession.live = nil }
+    }
+    // T1, scenario 2: start() is suspended in the permission prompt when sign-out begins
+    func testATakeSuspendedInThePermissionPromptIsRefusedWhenItResumes() async throws {
+        try await startListening()
+        let (take, rec) = await takeSession(waitsInMic: true)
+        let started = Task { await take.start(takeLimits()) }
+        let waiting = await poll(5) { probe.count("mic-waiting") > 0 }; XCTAssertTrue(waiting)
+        ackAfter(200); await app.signOut()
+        probe.gateOpen = true; await started.value
+        try assertClosedAtKeyDelete()
+        await assertNoTakeIsOpen(take, rec)
+        await MainActor.run { TakeSession.live = nil }
+    }
+    // T1, scenario 2b: start() is suspended in the radio's yield; the sign-out ends before it resumes. Its microphone is given back at once (the brief opening is what remains).
+    func testATakeSuspendedInTheRadiosYieldEndsWithTheMicrophoneClosed() async throws {
+        try await startListening()
+        let (take, rec) = await takeSession(waitsInYield: true)
+        let started = Task { await take.start(takeLimits()) }
+        let waiting = await poll(5) { probe.count("yield-waiting") > 0 }; XCTAssertTrue(waiting)
+        ackAfter(200); await app.signOut()
+        probe.gateOpen = true; await started.value
+        for _ in 0..<10 { try? await Task.sleep(nanoseconds: 50_000_000); await MainActor.run {} }
+        await assertNoTakeIsOpen(take, rec)
+        XCTAssertEqual(probe.lastClaim, .playing, "the capture session was given back")
+        await MainActor.run { TakeSession.live = nil }
+    }
+
+    // T3: only the guard at the start of the pipeline body stops this one
+    func testATurnSuspendedInAddressingStartsNoPipelineAfterSignOut() async throws {
+        rt.registry.register(.addressing, SlowAddressing.self) { SlowAddressing($0) }; rt.registry.register(.holder, SlowHolder.self) { SlowHolder($0) }
+        rt.setStage(.addressing, id: "slow-addr"); rt.setStage(.holder, id: "slow-holder")      // the quick holder: the default one waits for shared code's retrieval
+        let applied = await poll(5) { let c = await rt.engine.configuration; return c.setting(.addressing)?.id == "slow-addr" && c.setting(.holder)?.id == "slow-holder" }; XCTAssertTrue(applied, "precondition: the engine has the stage")
+        let before = probe.count("desk-request-live")
+        let t = Task { await rt.engine.typedTurn("What changed in the harbour story?") }
+        let waiting = await poll(5) { probe.count("decide-waiting") > 0 }; XCTAssertTrue(waiting, "precondition: runTurn is suspended in addressing.decide")
+        ackAfter(200); await app.signOut()
+        probe.gateOpen = true; _ = await t.value
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(probe.count("desk-request-live"), before, "no request reached the desk: \(probe.all)")
+        XCTAssertEqual(probe.count("SPOKEN"), 0)
+    }
+
+    // T4: suspended in holder.retrieve; the desk's request goes through the real client against a stand-in server
+    func testATurnSuspendedInRetrievalMakesNoRequestAfterSignOut() async throws {
+        rt.registry.register(.holder, SlowHolder.self) { SlowHolder($0) }; rt.registry.register(.desk, OrderClientDesk.self) { OrderClientDesk($0) }
+        rt.setStage(.holder, id: "slow-holder"); rt.setStage(.desk, id: "order-client-desk")
+        let applied = await poll(5) { let c = await rt.engine.configuration; return c.setting(.holder)?.id == "slow-holder" && c.setting(.desk)?.id == "order-client-desk" }; XCTAssertTrue(applied, "precondition: the engine has the stages")
+        StubProtocol.seen = []; StubProtocol.handler = { _ in .init() }
+        let started = await rt.engine.typedTurn("What changed in the harbour story?"); XCTAssertTrue(started)
+        let waiting = await poll(10) { probe.count("retrieve-waiting") > 0 }; XCTAssertTrue(waiting, "precondition: the pipeline is suspended in holder.retrieve: \(probe.all)")
+        ackAfter(200); await app.signOut()
+        try keys.set("test-key-new", account: KeyAccount.apiKey)       // a new sign-in has completed
+        probe.gateOpen = true
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        XCTAssertEqual(StubProtocol.seen.count, 0, "no request reached the server: \(probe.all)")
+        XCTAssertEqual(probe.count("client-SENT"), 0)
+    }
+
+    // T5: the element passed its check; its apply step (the hop to the engine) is suspended across sign-out beginning
+    func testAnAnswerSuspendedInItsApplyStepIsNotSpokenOrWritten() async throws {
+        let (engine, _) = hfEngine(streaming: true)
+        let started = await engine.typedTurn("What changed in the harbour story?"); XCTAssertTrue(started)
+        let live = await poll(5) { probe.count("stream-request") > 0 }; XCTAssertTrue(live)
+        let hold = Task { await engine.holdForTest() }
+        let holding = await poll(5) { probe.count("hold-running") > 0 }; XCTAssertTrue(holding, "precondition: the engine is busy")
+        probe.gateOpen = true                                          // the answer arrives, passes its check, and waits for the engine
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        let begun = probe.note("signout-begins")
+        TurnGate.shared.closeForSignOut()
+        probe.holdOpen = true; await hold.value
+        try? await Task.sleep(nanoseconds: 500_000_000)               // the apply step runs now, with the flag up and the turn not yet cancelled: only its own check stops it
+        let after = probe.all.filter { (Int($0.split(separator: ":")[0]) ?? 0) > begun }
+        XCTAssertFalse(Conversation.shared.entries().contains { $0.answer.contains("harbour is open") }, "nothing was written to the conversation: \(after)")
+        XCTAssertFalse(after.contains { $0.hasSuffix("SPOKEN") }, "nothing was handed to speech: \(after)")
+        await engine.endForSignOut()
+        TurnGate.shared.finishSignOut()
+    }
+
+    // T6: the first sign-out's last callback calls sign-out again
+    func testASecondSignOutFromTheLastCallbackDoesNotStickTheGate() async throws {
+        let again = Locked<Task<Void, Never>?>(nil)
+        app.onChange = { [app] in if again.value == nil { again.value = Task { await app!.signOut() } } }
+        ackAfter(200)
+        await app.signOut()
+        await again.value?.value
+        XCTAssertFalse(TurnGate.shared.signedOutShut, "the gate is not stuck shut")
+        app.onChange = nil
+    }
+
+    // T7, T8
+    func testAStaleHandsFreeSetDuringSignOutIsRefused() async throws {
+        await rt.engine.handsFreeSet(false)      // the engine alone starts with it on
+        TurnGate.shared.closeForSignOut()
+        await rt.engine.handsFreeSet(true)
+        let on = await rt.engine.hf.enabled
+        XCTAssertFalse(on, "the engine is not left listening")
+        TurnGate.shared.finishSignOut()
+    }
+    func testTheEnrolmentTapCannotBeSetDuringSignOut() async throws {
+        TurnGate.shared.closeForSignOut()
+        await rt.setEnrolmentTap { _ in }
+        let tap = await rt.engine.enrolmentTap
+        XCTAssertNil(tap, "a tap on the microphone is not set while the account signs out")
+        TurnGate.shared.finishSignOut()
+    }
+
+    // T9: the gate is shut by one synchronous call (what the module makes where the native op arrives)
+    func testAGateShutSynchronouslyRefusesTheNextTurn() async throws {
+        TurnGate.shared.closeForSignOut()
+        let started = await rt.engine.typedTurn("hello")
+        XCTAssertFalse(started)
+        TurnGate.shared.finishSignOut()
+    }
+
+    // T10: after the 2 s fallback closed the engine, the next play or ask starts it again (ensureEngine / the host's startRequest)
+    func testTheEngineStartsAgainAfterTheDirectClose() async throws {
+        defer { LabEnvironment.virtualAudio = false; LabEnvironment.promptsAllowed = true }
+        rt.startRequest = { [rt] in await rt!.start(virtual: true) }
+        _ = await app.ensureEngine()
+        XCTAssertTrue(rt.snapshot().running, "precondition: the engine runs")
+        try await startListening()
+        owner.mode = .fails
+        ackAfter(200); await app.signOut()
+        XCTAssertFalse(rt.snapshot().running, "the direct close stopped the engine")
+        owner.mode = .normal
+        try keys.set("test-key-2", account: KeyAccount.apiKey)           // a new sign-in
+        _ = await app.ensureEngine()
+        XCTAssertTrue(rt.snapshot().running, "the next play starts it again")
+    }
+
+    // NEWAPI-BEGIN
+    // T11
+    func testARequestIsBoundToTheEpochOfTheTurnThatMadeIt() async throws {
+        let client = ChoirClient(baseURL: "https://example.test", keys: InMemoryKeyStore([KeyAccount.apiKey: "test-key-new", KeyAccount.computerID: "comp-1"]), session: .shared, log: nil, trustedOrigin: nil)
+        let oldEpoch = TurnGate.shared.epoch
+        ackAfter(100); await app.signOut()                              // fast sign-out, then a new sign-in completes: the gate is open again
+        try keys.set("test-key-new", account: KeyAccount.apiKey)
+        XCTAssertTrue(TurnGate.shared.allowed)
+        await TurnGate.$turnEpoch.withValue(oldEpoch) {
+            do { _ = try await client.request("GET", "/x"); XCTFail("the old turn's request was built with the new account's key") } catch ChoirError.notSignedIn {} catch { XCTFail("\(error)") }
+        }
+        let fresh = try await TurnGate.$turnEpoch.withValue(TurnGate.shared.epoch) { try await client.request("GET", "/x") }
+        XCTAssertNotNil(fresh.value(forHTTPHeaderField: "Authorization"), "a request of the current epoch is built")
+    }
+    func testTheTurnsEpochTravelsToItsDesk() async throws {
+        rt.registry.register(.desk, OrderEpochDesk.self) { OrderEpochDesk($0) }; rt.setStage(.desk, id: "order-epoch-desk")
+        let applied = await poll(5) { await rt.engine.configuration.setting(.desk)?.id == "order-epoch-desk" }; XCTAssertTrue(applied)
+        let e = TurnGate.shared.epoch
+        let started = await rt.engine.typedTurn("What changed in the harbour story?"); XCTAssertTrue(started)
+        let seen = await poll(5) { probe.count("epoch-\(e)") > 0 }
+        XCTAssertTrue(seen, "the desk ran under the turn's epoch: \(probe.all)")
+    }
+    // NEWAPI-END
+}
+// NEWAPI-BEGIN
+final class OrderEpochDesk: Desk, @unchecked Sendable {
+    static let stageID = "order-epoch-desk"
+    static var descriptor: StageDescriptor { StageDescriptor(displayName: "order epoch desk") }
+    init(_ p: StageParams) {}
+    func submit(_ turn: DeskTurn) -> AsyncThrowingStream<Revision, Error> { SignOutProbe.shared.note("epoch-\(TurnGate.turnEpoch ?? -1)"); return AsyncThrowingStream { $0.finish() } }
+}
+// NEWAPI-END

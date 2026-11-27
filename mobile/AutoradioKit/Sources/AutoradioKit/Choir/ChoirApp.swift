@@ -208,19 +208,17 @@ public final class ChoirApp: @unchecked Sendable {
     }
 
     /// Sign-out, in this order: the gate shuts at once (synchronously, before any Task); the voice closes (microphone, turn, speech); playback stops; the run sheet gets up to five seconds to post with the old key still held (`waitSignedOut`); what is not answered is dropped;
-    /// then the key it began with goes (a newer one is kept) and the wipe runs; the server revoke is shared code's. A kill leaves: before the key, signed in with the microphone off (never kept across a launch); after it, signed out and shared code's marker finishes the wipe.
+    /// then the key goes and the wipe runs, as on main; the server revoke is shared code's. A kill leaves: before the key, signed in with the microphone off (never kept across a launch); after it, signed out and shared code's marker finishes the wipe.
     public func signOut() async {
-        TurnGate.shared.closeForSignOut()
-        lock.lock(); let t = signOutTask ?? Task { await self.signOutOnce(); self.lock.lock(); self.signOutTask = nil; self.lock.unlock() }; signOutTask = t; lock.unlock(); await t.value      // a second call joins the first: its `stopAll` would reset the first's wait
+        lock.lock(); TurnGate.shared.closeForSignOut(); let t = signOutTask ?? Task { await self.signOutOnce(); self.lock.lock(); self.signOutTask = nil; TurnGate.shared.finishSignOut(); self.lock.unlock() }; signOutTask = t; lock.unlock(); await t.value      // shut first, here too; the sequence's end and the task slot are cleared in one step under this lock, so a second call joins a running task or starts its own, never one that has finished
     }
     private func signOutOnce() async {
         await runtime.closeVoiceForSignOut()                     // first, before the wait and the key: the microphone closes, the turn is cancelled; the old key is still held for the post below
         lock.lock(); loading = false; lock.unlock(); runtime.player.pause(reason: "sign out")
         runtime.player.clearQueue(); runtime.player.setDocument(ProgrammeDocument(id: "none", title: "", blocks: []))
-        await MainActor.run { Deck.shared.engine?.stopSpoken(); Deck.shared.engine?.stopRemote() }; RadioBridge.shared.send("stopAll")                      // shared code's run sheet leaves the air (`left`) and posts, then the account wipe runs
+        await MainActor.run { Deck.shared.engine?.stopSpoken(); Deck.shared.engine?.stopRemote() }; RadioBridge.shared.send("stopAll")      // shared code's run sheet leaves the air (`left`) and posts, then the account wipe runs
         await RadioBridge.shared.waitSignedOut(seconds: 5)      // until shared code says it is done (its own wait for the route is 3 s), with the old key still held
-        await runtime.endSignOut { await signIn.signOut() }     // last: the key goes and the wipe runs, unless a new sign-in replaced the key; the gate then stays shut only for the key that left
-        lock.lock(); message = ""; lock.unlock(); onChange?()
+        await signIn.signOut(); lock.lock(); message = ""; lock.unlock(); onChange?()
     }
 
     /// Every store of the account, wiped by one call at sign-out. The module adds the stores that live in the app target (mail).

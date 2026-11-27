@@ -350,12 +350,14 @@ public final class ChoirClient: @unchecked Sendable {
         r.setValue(accept, forHTTPHeaderField: "Accept")
         if body != nil { r.setValue(contentType, forHTTPHeaderField: "Content-Type"); r.httpBody = body }
         if authenticated {
-            if TurnGate.shared.signedOutShut { throw ChoirError.notSignedIn }      // the one place a native request reads the key: none leaves while the account signs out (shared code's own post uses the shared client)
-            guard let key = keys.get(KeyAccount.apiKey) else { throw ChoirError.notSignedIn }
+            // The one place a native request reads the key, under the gate's lock: refused while the account signs out, and when the turn that makes it began under an older sign-out epoch (it must not go out under a later account's key).
+            // Shared code's own "left the air" post uses the shared client, not this one. A request that read the key just before the gate shut still goes out with that key (bounded: the turn's tasks are cancelled, and the URLSession task with them); its revoke is shared code's.
+            guard let key = TurnGate.shared.guarded(TurnGate.turnEpoch, { keys.get(KeyAccount.apiKey) }) else { throw ChoirError.notSignedIn }
             r.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
             if !path.hasPrefix("/auth/") && path != Self.statusPath {
                 r.setValue(try await computerID(), forHTTPHeaderField: "X-Choir-Computer")
             }
+            if TurnGate.shared.guarded(TurnGate.turnEpoch, { true }) == nil { throw ChoirError.notSignedIn }      // after the awaits above: still the same epoch
         }
         return r
     }

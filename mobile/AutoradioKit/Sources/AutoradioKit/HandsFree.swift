@@ -70,7 +70,7 @@ extension TurnEngine {
 
     /// One microphone frame in a voice session.
     /// While set, every microphone frame goes to this closure and the engine does nothing else with it (`ingestHandsFree`).
-    public func setEnrolmentTap(_ tap: (@Sendable (AudioFrame) -> Void)?) { enrolmentTap = tap }
+    public func setEnrolmentTap(_ tap: (@Sendable (AudioFrame) -> Void)?) { if tap != nil, TurnGate.shared.signedOutShut { return }; enrolmentTap = tap }      // no tap on the microphone is set while the account signs out
 
     public func ingestHandsFree(_ f: AudioFrame) async {
         // Voice enrolment is listening (VoiceEnrolment page): the frames are its and nothing else's. No turn is looked for, so no sentence read to teach the radio a voice can become a request.
@@ -155,6 +155,7 @@ extension TurnEngine {
 
     /// Hands-free on or off, at once, in the middle of a turn too: off drops the open turn and hears nothing more.
     public func handsFreeSet(_ on: Bool) async {
+        if on, TurnGate.shared.signedOutShut { return }      // a stale turn-on task that runs after sign-out began does not leave the engine listening
         let was = hf.enabled
         hf.enabled = on
         if !on && was { await hfDropTurn(requireQuiet: false) }
