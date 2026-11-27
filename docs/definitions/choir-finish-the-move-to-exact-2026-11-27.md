@@ -116,8 +116,8 @@ stations:
   class: green for the verdicts; each landing states its own
   review: one seat per landing
   depends_on: [E0]
-  carrier: none yet
-  status: pending
+  carrier: 'docs/evidence/phone-lanes-verdicts-2026-11-27.md: no lane lands as it is (every one conflicts with main); the mail seal deletion folds into E4, the Imported and Mail module deletions and the clock into E5, the one reader of signed in into E6, the first run into E7; the trial gate and the pinned voice packs go to the next mission; the editor read-only fix needs its own landing'
+  status: landed
 - id: E4
   name: the mail seal goes
   scope: MailSeal.swift deleted with what calls it, from lane exact-rest (owner, 2026-11-24)
@@ -198,7 +198,7 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: E1 and E3, each with its own builder
+  slice: E1 (the pin), in preparation
   source_ref: origin/main 5844447d4
   deploy_identity: staging on 323df6f3b
   candidate:
