@@ -231,11 +231,11 @@ now:
     evidence_ref: CLAUDE.md, Product
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: the facts are gathered and nothing of this mission is built; the earlier cutover took nine days to reach 3,375 lines from a larger number
-    main_uncertainty: 'how much of the unlanded lanes'' work is already on main by another route, and whether the two Android patches can be re-made on a current Exact'
-    next_observation: E3's verdicts on the lanes, and the first attempt to apply the patches at the new pin
+    believed_state: 'the facts and the lane verdicts are on main and no code of this mission is built. A builder sent to delete non-voice Swift with no production reader (2026-11-27) deleted nothing: none of the 34 files is dead. SegmentTracker has no production observer but the voice engine feeds it at nine places and about fifteen player tests read through it; every BarState member has a production caller. So the 3,375 lines fall only by moving behaviour, not by deletion.'
+    main_uncertainty: 'whether the two Android patches can be re-made on a current Exact, and how much of each remaining Swift file the shared code already duplicates'
+    next_observation: the pin preparation's patch and contract findings
   blocker_or_risk: every native build is the lead's and one at a time, so moved pages can land faster than they can be tried on a device
-  next_action: start E1 and E3 in parallel, each with its own builder; E2 as a list for the owner
+  next_action: 'E1 from the preparation lane (the lead''s native build); then E5 file by file, shared code first with its tests, the Swift deleted in the same change: SegmentTracker needs the player tests rewritten to assert on player state before it can go'
 receipts: []
 ---
 
