@@ -120,18 +120,6 @@
  },
  "names": [
   {
-   "source": "readerFollow",
-   "live": true,
-   "answers": "ReaderFollowInfo",
-   "substitute": {
-    "default": {
-     "address": "",
-     "blockId": "",
-     "sentence": -1
-    }
-   }
-  },
-  {
    "source": "readerAim",
    "live": true,
    "answers": "ReaderAimInfo",

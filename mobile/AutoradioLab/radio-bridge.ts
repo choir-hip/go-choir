@@ -20,6 +20,8 @@ import { lapYield, lap } from './lap.ts';
 import { firstRunOver } from './onboarding.ts';
 import { deskMode } from './consent.ts';
 import { perform } from './radio-model.ts';
+import { followOf, NO_FOLLOW, saying, spokenNow, type Follow, type SpokenFacts } from './radio-follow.ts';
+import { heldDocument } from './reader.ts';
 import { voiceFacts, respondsOf, airAddressOf } from './voice-facts.ts';
 import { htmlToText } from './mail-model.ts';
 import { parseList, weight, FRONT_LIMIT, type Story } from './paper-model.ts';
@@ -612,11 +614,27 @@ function sheetText(sheet: Sheet): string {
   return text;
 }
 
+/** What only the audio knows of the block on air (`radioFacts`, asked to peek: the inbox stays): its spoken words, its number among the programme's and the audio's place in it. Nothing is made from it here. */
+async function spokenFacts(later: ReturnType<typeof nativeLater>): Promise<SpokenFacts> {
+  if (!later) return { spoken: '', block: 0, blocks: 0, fraction: 0 };
+  try { const o = obj(await later({ op: 'radioFacts', peek: true })); return { spoken: str(o.spoken), block: num(o.block), blocks: num(o.blocks), fraction: num(o.blockFraction) }; }
+  catch { return { spoken: '', block: 0, blocks: 0, fraction: 0 }; }
+}
+
+/** The block and sentence of the page in front that the radio is saying (the reader lights it): from the radio's own sentence and the page the reader holds for the address on air. Nothing is kept: asked again, it is read again,
+ *  so the sign-out wipe (the reader forgets its pages, the radio its sheet) leaves nothing to clear. */
+export async function readerFollow(storage: Store | undefined, native: NativeReader | undefined): Promise<Follow> {
+  const r = await getRadio(storage, native, false), later = nativeLater();
+  const address = airAddressOf(r.rt.store.onAir());
+  if (address === '' || !r.rt.view().playing) return NO_FOLLOW;
+  const said = saying(true, address, spokenNow(await spokenFacts(later)));
+  return followOf(address, said, heldDocument(address));
+}
+
 export async function radioPageFacts(storage: Store | undefined, native: NativeReader | undefined): Promise<RadioFacts> {
   const r = await getRadio(storage, native, false);
   const v = r.rt.view(), later = nativeLater();
-  let sentences: string[] = [], sentenceIndex = 0, progress = 0;
-  if (later) { try { const o = obj(await later({ op: 'radioFacts', peek: true })); sentences = Array.isArray(o.sentences) ? o.sentences.filter((x): x is string => typeof x === 'string') : []; sentenceIndex = num(o.sentenceIndex); progress = num(o.progress); } catch { /* none */ } }
+  const { sentences, sentenceIndex, progress } = spokenNow(await spokenFacts(later));
   const prog = r.rt.programme(), route = prog.route;
   const airEntry = r.rt.store.onAir(), takeRef = airEntry?.kind === 'take' && airEntry.source?.ref.startsWith('take:') ? airEntry.source.ref.slice(5) : '';
   const take = takeRef !== '' ? r.takeList.find((t) => t.takeID === takeRef) : undefined;

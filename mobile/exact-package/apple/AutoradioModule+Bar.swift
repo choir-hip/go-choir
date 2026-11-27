@@ -62,9 +62,7 @@ extension AutoradioModule {
 
         handle("radioView") { [unowned self] _, reply in
             scheduleExpiry()
-            let route = RadioBridge.shared.airAddress()
-            let info = MainActor.assumeIsolated { (tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: "")) }   // lane autoradio-queue
-            ReaderFeed.shared.feed(info, address: route)
+            let info = MainActor.assumeIsolated { tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document) }
             reply(json(info))
         }
 
@@ -74,14 +72,11 @@ extension AutoradioModule {
         handle("radioSpeed") { [unowned self] args, reply in
             if let v = Double(args["speed"] as? String ?? "") { tracker.setSpeed(v); SpeedStore.standard.save(tracker.speed) }
             touch(["radioView"])
-            let route = RadioBridge.shared.airAddress()
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: "")))
+            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document)))
         }
     }
 }
 
-/// Lane 1 feeds the reader: the sentence the radio is saying, by address, so the reader lights it (ReaderFollow, lane 3).
-/// Only a change is passed on; when nothing plays the follow is cleared.
 /// The bar's facts as the shared bar page model reads them (interface/bar.json `BarFacts`).
 struct BarFacts: Codable {
     var at = 0.0
@@ -115,12 +110,12 @@ extension AutoradioModule {
     /// each second while it is false (spine.contract `posKey`). A host that does not give it is taken as in front.
     @MainActor public func radioFacts(peek: Bool) -> [String: Any] {
         let s = runtime.snapshot(), tracker = BarTracker.shared, deck = Deck.shared
-        let route = RadioBridge.shared.airAddress()
-        let info = tracker.radioInfo(player: choir.playerView(), snapshot: s, document: runtime.player.document, route: route, nextTitle: "")
+        // The block on air as the document holds it (only native holds the document): shared code makes the sentences, the one being said and the progress from these (radio-follow.ts).
+        let block = BarTracker.blockOnAir(s, document: runtime.player.document)
         let pos = runtime.player.storyPosition()
         var o: [String: Any] = ["at": Date().timeIntervalSince1970 * 1000, "turnOpen": s.phase != "playing", "remainder": runtime.player.remainingText() ?? "",
                                 "position": ["block": pos.block, "seconds": pos.seconds], "wants": !runtime.player.userPaused, "foreground": !runtime.coordinator.isBackgrounded, "ready": OnboardingController.shared?.finished ?? false,
-                                "sentences": info.sentences, "sentenceIndex": info.sentenceIndex, "progress": info.progress, "inbox": peek ? [] : RadioBridge.shared.drain()]
+                                "spoken": block.spoken, "block": block.index, "blocks": block.count, "blockFraction": tracker.blockFraction(s), "inbox": peek ? [] : RadioBridge.shared.drain()]
         if let c = deck.current, c.kind == "audio", let r = deck.engine?.remotePosition() {
             o["audio"] = ["url": c.url, "title": c.title, "show": c.show, "start": c.start, "elapsed": r.elapsed] as [String: Any]
             o["remote"] = ["elapsed": r.elapsed, "duration": r.duration ?? 0] as [String: Any]

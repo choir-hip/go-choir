@@ -21,14 +21,6 @@ public enum PlaybackSpeed {
         let n = (c / step).rounded() * step
         return clamp((n * 1000).rounded() / 1000)
     }
-    /// "1" for 1, "1.25" for 1.25, "2.5" for 2.5: no trailing zeros.
-    public static func name(_ s: Double) -> String {
-        let v = snap(s)
-        if v == v.rounded() { return String(Int(v)) }
-        var t = String(format: "%.2f", v)
-        while t.hasSuffix("0") { t.removeLast() }
-        return t
-    }
 }
 
 /// Where the chosen speed is kept between launches. A value that is not a number in range is ignored.

@@ -178,6 +178,7 @@ const sources: Sources = {
   queueAdd: ([mode, kind, ref, title, local], _s, storage, native) => radioBridge.queueAdd(storage as never, native as never, mode, kind, ref, title, local),
   queueAct: ([op, arg], _s, storage, native) => radioBridge.queueAct(storage as never, native as never, op, arg),
   barRun: ([_t, _pos], _s, storage, native) => radioBridge.barRun(storage as never, native as never) as never,
+  readerFollow: ([_t, _pos], _s, storage, native) => radioBridge.readerFollow(storage as never, native as never) as never,
   radioPageFacts: ([_t, _pos], _s, storage, native) => radioBridge.radioPageFacts(storage as never, native as never) as never,
   radioPageAct: ([op, arg, to], _s, storage, native) => radioBridge.radioPageAct(storage as never, native as never, op, arg, to),
   radioPlayPause: (_a, _s, storage, native) => radioBridge.radioPlayPause(storage as never, native as never),

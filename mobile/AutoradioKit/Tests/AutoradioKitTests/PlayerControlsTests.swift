@@ -14,8 +14,6 @@ final class PlaybackSpeedTests: XCTestCase {
     func testP2_ASpeedOffTheStepSnapsToTheStep() {
         XCTAssertEqual(PlaybackSpeed.snap(1.2345), 1.25); XCTAssertEqual(PlaybackSpeed.snap(1.02), 1); XCTAssertEqual(PlaybackSpeed.snap(2.99), 3)
         XCTAssertEqual(PlaybackSpeed.snap(0.7), 0.7); XCTAssertEqual(PlaybackSpeed.snap(1.15), 1.15)
-        XCTAssertEqual(PlaybackSpeed.name(1), "1"); XCTAssertEqual(PlaybackSpeed.name(1.25), "1.25"); XCTAssertEqual(PlaybackSpeed.name(2.5), "2.5")
-        XCTAssertEqual(PlaybackSpeed.name(3), "3"); XCTAssertEqual(PlaybackSpeed.name(1.05), "1.05"); XCTAssertEqual(PlaybackSpeed.name(7), "3")
     }
     func suite() -> UserDefaults { let n = "speed-\(UUID().uuidString)"; let d = UserDefaults(suiteName: n)!; d.removePersistentDomain(forName: n); return d }
     func testP5_TheChosenSpeedIsKeptAndAGarbageOneIsIgnored() {
@@ -37,8 +35,8 @@ final class PlaybackSpeedTests: XCTestCase {
         var info = RadioInfo(); info.speedValue = 3
         XCTAssertEqual(info.speedValue, 3)
         var snap = LabSnapshot(); snap.running = true; snap.blockCount = 1
-        let r = tr.radioInfo(player: ChoirPlayerView(), snapshot: snap, document: ProgrammeDocument(id: "d", title: "T", blocks: [.speech(text: "One.")]), route: "r")
-        XCTAssertEqual(r.speedValue, 1.25); XCTAssertEqual(r.speed, "1.25")
+        let r = tr.radioInfo(player: ChoirPlayerView(), snapshot: snap, document: ProgrammeDocument(id: "d", title: "T", blocks: [.speech(text: "One.")]))
+        XCTAssertEqual(r.speedValue, 1.25)
     }
     func testP4_ThreeTimesIsThreeTimesFasterForAnyVoice() async {
         let a = virtualAudio(); a.programmePlay()

@@ -9,7 +9,7 @@
 //  R8 prefetch: the neighbours that are stories and not held are fetched once each, an ask for one in flight shares the request, the empty address and other pages are skipped, a failure is kept nowhere.
 //  R9 at most 40 held, the least recently used goes first.
 //  R10 reload forgets; restore posts the revision as latest and forgets, the head is already the latest; stop cancels the trajectory (a 409 or 404 is fine) and forgets; each says whether it worked.
-//  R13 the page in front is handed to the native voice (it holds the page text the turn reads): its blocks with sentences, once per ask, only a ready document, nothing when there is no native module, never from another account.
+//  R13 the page in front is handed to the native voice (it holds the page text the turn reads): its blocks (the follow-along is radio-follow.ts: no sentences go over), once per ask, only a ready document, nothing when there is no native module, never from another account.
 //  R14 the log says "handed" only when native answered that it held the page; a refusal is logged.
 //  R11 "Hear it": the story's clips come with it; a failing clip route gives none and does not fail the story.   R12 a document the desk is revising says so.
 import { beforeEach, describe, expect, test } from 'bun:test';
@@ -253,19 +253,19 @@ describe('actions', () => {
 });
 
 describe('the voice holds the page in front', () => {
-  type Sent = { op: string; address: string; title: string; dek: string; kind: string; blocks: { id: string; kind: string; text: string; sentences: string[] }[] };
-  test('R13 a ready document is handed over with its blocks and sentences; others are not', async () => {
+  type Sent = { op: string; address: string; title: string; dek: string; kind: string; blocks: { id: string; kind: string; text: string }[] };
+  test('R13 a ready document is handed over with its blocks and no sentences; others are not', async () => {
     const sent: Sent[] = [];
     R.setHandOverForTest(async (r) => { sent.push(r as Sent); return { ok: true }; });
     const f = fake({ pub: (p) => (p.endsWith('/resolve') ? { publication: { title: 'Harbor', kind: 'story', dek: 'A dek.' }, artifact: { content: 'First sentence here. Second one follows.\n\n```\ncode\n```' }, nav: {} } : {}) });
     await R.readerDocShared('pub:pub/x', 'in', false, f.net);
     expect(sent.length).toBe(1);
     expect(sent[0]).toMatchObject({ op: 'pageText', address: 'pub:pub/x', title: 'Harbor', dek: 'A dek.', kind: 'story' });
-    expect(sent[0].blocks[0]).toMatchObject({ kind: 'p', text: 'First sentence here. Second one follows.', sentences: ['First sentence here.', 'Second one follows.'] });
+    expect(sent[0].blocks[0]).toMatchObject({ kind: 'p', text: 'First sentence here. Second one follows.', });
     expect(sent[0].blocks.map((b) => b.kind)).toContain('code');
     const tricky = fake({ pub: (p) => (p.endsWith('/resolve') ? { publication: { title: 'T', kind: 'story' }, artifact: { content: 'Dr. Smith paid $3.5 million. He said \u201CStop.\u201D Then left.' }, nav: {} } : {}) });
     await R.readerDocShared('pub:pub/tricky', 'in', false, tricky.net);
-    expect(sent[sent.length - 1].blocks[0].sentences).toEqual(['Dr. Smith paid $3.5 million.', 'He said \u201CStop.\u201D', 'Then left.']);    // the one splitter's sentences are what native matches against
+    expect(sent[sent.length - 1].blocks[0]).toEqual({ id: sent[sent.length - 1].blocks[0].id, kind: 'p', text: 'Dr. Smith paid $3.5 million. He said \u201CStop.\u201D Then left.' });    // the words whole, nothing cut: the follow-along is shared code's
     sent.pop();
     await R.readerDocShared('pub:pub/x', 'in', false, f.net);               // held: handed again (the voice may have dropped it)
     expect(sent.length).toBe(2);

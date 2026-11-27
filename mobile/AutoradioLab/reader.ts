@@ -7,7 +7,7 @@
 // so it is asked for again each time and the held copy only stands in when the ask fails. Logs carry counts only, never a title.
 import { accountGeneration, authedJSON, getJSON, HTTPError, nativeLater, segment, SignedOutError, type Authed, type Query, type Reply } from './api.ts';
 import { lapYield } from './lap.ts';
-import { blankDoc, parseAddress, parseBundleAsync, parseRelated, parseRevision, sentenceTexts, splitRoute, type ReaderDoc } from './reader-parse.ts';
+import { blankDoc, parseAddress, parseBundleAsync, parseRelated, parseRevision, splitRoute, type ReaderDoc } from './reader-parse.ts';
 import { WORDS } from './words.ts';
 
 export type { ReaderDoc };
@@ -34,6 +34,8 @@ let held = new Map<string, ReaderDoc>();
 let inflight = new Map<string, Promise<ReaderDoc>>();
 let heldGen = -1;
 export function resetReaderForTest(): void { held = new Map(); inflight = new Map(); unseen = new Set(); lastHanded = null; heldGen = -1; }
+/** The page held for an address, for the radio's follow-along (radio-bridge.ts `readerFollow`); nothing is fetched. A ready page only. */
+export const heldDocument = (address: string): ReaderDoc | undefined => { current(); const d = held.get(address); return d?.status === 'ready' ? d : undefined; };
 export const heldCount = (): number => held.size;
 function current(): number {
   const g = accountGeneration();
@@ -128,8 +130,7 @@ async function ask(address: string, net: Net, prefetch = false): Promise<ReaderD
 }
 
 // THE VOICE HOLDS THE PAGE IN FRONT. The one native call this file makes, with the reason only native code can meet: the voice turn (Swift today, Kotlin on Android) answers "what is this page
-// about" and matches what the radio is saying against the page, and it runs in the native engine, which cannot ask this module. So the page in front, once read, is handed over as its blocks with their
-// sentences (`{op: 'pageText', gen}` on the app module, `gen` the account generation the page was read under: native drops a hand-over older than the newest it knows, so one in flight at sign-out cannot hold the old account's page for the next account's voice; it holds at most 40 and forgets them at sign-out). Nothing is read back. A host with no native module, a failed call or a stale account is silent.
+// about" and matches what the radio is saying against the page, and it runs in the native engine, which cannot ask this module. So the page in front, once read, is handed over as its blocks (`{op: 'pageText', gen}` on the app module, `gen` the account generation the page was read under: native drops a hand-over older than the newest it knows, so one in flight at sign-out cannot hold the old account's page for the next account's voice; it holds at most 40 and forgets them at sign-out). Nothing is read back. A host with no native module, a failed call or a stale account is silent.
 type HandOver = (request: Record<string, unknown>) => Promise<unknown>;
 let handOver: HandOver | null | undefined;
 /** Test only: the native hand-over (null: no native module; undefined: the real one). */
@@ -141,7 +142,7 @@ function hand(d: ReaderDoc, gen: number): void {
   if (!send || d.status !== 'ready' || gen !== accountGeneration()) return;
   if (lastHanded !== null && lastHanded.gen === gen && lastHanded.doc === d) return;
   lastHanded = { gen, doc: d };
-  const blocks = d.blocks.filter((b) => b.text !== '').map((b) => ({ id: b.id, kind: b.kind, text: b.text, sentences: sentenceTexts(b) }));
+  const blocks = d.blocks.filter((b) => b.text !== '').map((b) => ({ id: b.id, kind: b.kind, text: b.text }));
   void Promise.resolve().then(() => send({ op: 'pageText', gen, address: d.address, title: d.title, dek: d.dek, kind: d.kind, blocks })).then((r) => { const took = obj(r) && r.ok === true; if (!took && lastHanded?.doc === d) lastHanded = null; console.log(took ? `reader: handed to the voice blocks=${blocks.length}` : 'reader: the voice did not take the page'); }, () => { if (lastHanded?.doc === d) lastHanded = null; });
 }
 

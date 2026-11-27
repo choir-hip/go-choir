@@ -33,34 +33,27 @@ final class BarStateTests: XCTestCase {
         XCTAssertEqual(tr.raw().errorAt, 0); XCTAssertEqual(tr.raw().holding, ""); XCTAssertEqual(tr.raw().revisedAt, 0)
     }
 
-    func testClockCountsOnlyRunningTime() {
-        var c = BlockClock()
-        c.update(index: 0, running: true, now: t0)
-        c.update(index: 0, running: false, now: t0.addingTimeInterval(2))
-        c.update(index: 0, running: false, now: t0.addingTimeInterval(9))
-        c.update(index: 0, running: true, now: t0.addingTimeInterval(10))
-        XCTAssertEqual(c.seconds(now: t0.addingTimeInterval(11)), 3, accuracy: 0.001)
-        c.update(index: 1, running: true, now: t0.addingTimeInterval(11))
-        XCTAssertEqual(c.seconds(now: t0.addingTimeInterval(11)), 0, accuracy: 0.001)
-    }
-
-    func testSentencesAndIndex() {
-        let s = BarTracker.sentences("One short. Two is a longer sentence here. Three.")
-        XCTAssertEqual(s.count, 3)
-        XCTAssertEqual(BarTracker.sentenceIndex(s, progress: 0.0), 0)
-        XCTAssertEqual(BarTracker.sentenceIndex(s, progress: 0.99), 2)
-        XCTAssertEqual(BarTracker.sentenceIndex([], progress: 0.5), 0)
-    }
-
-    func testRadioInfoClampsTheBlockIndex() {
-        let tr = BarTracker()
+    // Failure list for what is left of the radio view (the sentences, progress and follow-along are radio-follow.test.ts):
+    //  V1 the block on air is clamped into the programme: a block past the end (after a revision shortens it) is the last, a negative one the first, no blocks is nothing; a clip speaks its summary, a speech block its words.
+    //  V2 the title is the document's, or the segment's when the block is in one; nothing is "N of M".
+    //  V3 the block's place is the audio's own, for THIS block only: another block's position, or no position, is 0, and a place at the very end stays below 1.
+    func testBlockOnAirClampsIntoTheProgramme() {
         let blocks = (0..<100).map { ProgrammeBlock.speech(text: "Block \($0). More words.") }
         let d = ProgrammeDocument(id: "d", title: "Doc", blocks: blocks)
-        let r = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: 99, count: 100), document: d, route: "pub:x", now: t0)
-        XCTAssertEqual(r.index, 99); XCTAssertEqual(r.count, 100)
-        let over = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: 500, count: 100), document: d, route: "", now: t0)
-        XCTAssertEqual(over.index, 99)
-        let empty = tr.radioInfo(player: player(playing: false, title: ""), snapshot: snap(count: 0), document: ProgrammeDocument(id: "n", title: "", blocks: []), route: "", now: t0)
-        XCTAssertEqual(empty.count, 0); XCTAssertFalse(empty.paused)
+        let last = BarTracker.blockOnAir(snap(idx: 99, count: 100), document: d)
+        XCTAssertEqual(last.index, 99); XCTAssertEqual(last.count, 100); XCTAssertEqual(last.spoken, "Block 99. More words.")
+        XCTAssertEqual(BarTracker.blockOnAir(snap(idx: 500, count: 100), document: d).index, 99)
+        XCTAssertEqual(BarTracker.blockOnAir(snap(idx: -4, count: 100), document: d).index, 0)
+        let none = BarTracker.blockOnAir(snap(count: 0), document: ProgrammeDocument(id: "n", title: "", blocks: []))
+        XCTAssertEqual(none.count, 0); XCTAssertEqual(none.spoken, ""); XCTAssertEqual(none.index, 0)
+    }
+
+    func testRadioInfoCarriesTheTitleAndFlags() {
+        let tr = BarTracker()
+        let d = ProgrammeDocument(id: "d", title: "Doc", blocks: [.speech(text: "One."), .speech(text: "Two.")])
+        let r = tr.radioInfo(player: player(playing: true), snapshot: snap(level: "dip", idx: 1, count: 2), document: d)
+        XCTAssertEqual(r.title, "Doc"); XCTAssertTrue(r.playing); XCTAssertEqual(r.level, "dip"); XCTAssertEqual(r.speedValue, 1)
+        let empty = tr.radioInfo(player: player(playing: false, title: ""), snapshot: snap(count: 0), document: ProgrammeDocument(id: "n", title: "", blocks: []))
+        XCTAssertEqual(empty.title, ""); XCTAssertFalse(empty.playing)
     }
 }
