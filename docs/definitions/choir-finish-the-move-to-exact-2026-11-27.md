@@ -133,7 +133,7 @@ stations:
   class: orange
   review: one seat
   depends_on: [E1, E3]
-  carrier: '7abe41baf (SegmentTracker removed) and 6d0ff7ed7 (the mail approval link and the Imported page ask Swift for nothing; Activity''s clock is Exact''s date): 32 files, 3,182 lines, CI run 46019166955 green, staging serves it, seat 1 accepted each at its last round. Owed on a device: the mail approval link opens, Activity shows ages once the date is known. The app version is still read from Swift.'
+  carrier: '7abe41baf (SegmentTracker removed), 6d0ff7ed7 (the mail approval link and the Imported page ask Swift for nothing; Activity''s clock is Exact''s date) and 97dea4262 (test-only programme types removed; CI run 46025608432): 32 files, 3,127 lines; staging serves it; seat 1 accepted each at its last round. In review: lane bar-facts (the radio''s sentence and reader follow in shared code, to about 3,006 lines). Owed on a device: the mail approval link opens, Activity shows ages, a spoken entry speaks and the lock screen shows its title. The app version is still read from Swift.'
   status: working
 - id: E6
   name: sign-out and the server client
@@ -210,8 +210,8 @@ owner_rulings:
 now:
   status: working
   slice: E1 prepared and waiting on the build tree; E5 on the present pin
-  source_ref: origin/main 6d0ff7ed7
-  deploy_identity: staging on 6d0ff7ed7
+  source_ref: origin/main 97dea4262
+  deploy_identity: staging on 97dea4262
   candidate:
     id: none
     state: none
@@ -236,11 +236,11 @@ now:
     evidence_ref: CLAUDE.md, Product
     owner_ratification_ref: not_applicable
   belief:
-    believed_state: 'two slices of E5 are on main and deployed: 3,375 lines became 3,182 in about four hours, 193 lines, with five review rounds between them. No non-voice Swift is dead, so every further line needs behaviour moved. Nothing of this mission has run on a device, and the pin has not moved.'
-    main_uncertainty: 'whether the two Android patches can be re-made on a current Exact, and how much of each remaining Swift file the shared code already duplicates'
+    believed_state: 'three slices of E5 are on main and deployed: 3,375 lines became 3,127. A builder who read Conversation, SavedAnswerHolder, EditionSetup and Takes found them to be the voice turn''s own state, written while a turn runs, with their page logic already in shared code; they are not on the voice list, which is the owner''s to change (D2). Counting those, RadioProgramme''s speech blocking and what stays of BarState as voice, the non-voice code that can still move without the red stations is small; most of the rest is ChoirClient, ChoirApp and AccountWipe (E6). Nothing has run on a device and the pin has not moved.'
+    main_uncertainty: 'whether the owner counts the voice turn''s state as voice (it decides whether the gate can reach zero without rewriting the turn), and whether the build tree may move'
     next_observation: 'the contract build and bun test on the new pin, once the build tree may move'
   blocker_or_risk: 'the pin move can be verified only by moving the one Exact checkout, which lives in the build tree (lane qa-mac). That tree holds another session''s uncommitted Android work, 38 paths, among them its own edit of patch 0003. I have not moved it. The pin does not go to main unverified, because every lane checks its pin against the build tree.'
-  next_action: 'the next slices of E5 by size and safety: RadioProgramme (288), BarState (the fields shared code no longer reads), SavedAnswerHolder (148), Conversation (124), the reader and notebook helpers; each a lane, shared code and tests first; a device build of main is owed before any of it is called done'
+  next_action: 'land bar-facts when review accepts it; then E6 needs a design before code (the server client and sign-out are red): write the failure list and the boundary from the unlanded commit 75f81d7e0 and lane account-boundary-l1 as inputs'
 receipts: []
 ---
 
