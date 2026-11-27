@@ -860,12 +860,12 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             outer: while !Task.isCancelled {
                 while !Task.isCancelled {
                     // One look at the state per block: the block to play, and whether this loop is still the current one.
-                    let step = self.st.write { s -> (ProgrammeBlock, Bool, PlayLevel, ProgrammeDocument)? in
+                    let step = self.st.write { s -> (ProgrammeBlock, Bool, PlayLevel)? in
                         guard s.epoch == my, n < s.document.blocks.count else { return nil }
                         s.blockIndex = n
-                        return (s.document.blocks[n], s.userPaused, s.level, s.document)
+                        return (s.document.blocks[n], s.userPaused, s.level)
                     }
-                    guard let (block, paused, lvl, _) = step else { break }
+                    guard let (block, paused, lvl) = step else { break }
                     self.audio.clearPlayhead(); self.onChange?(); self.publishNowPlaying()
                     if paused { self.audio.programmePause() } else if lvl != .pause { self.audio.programmePlay() }
                     let played = await self.playBlock(block, index: n)

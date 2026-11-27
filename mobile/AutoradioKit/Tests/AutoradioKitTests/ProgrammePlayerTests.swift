@@ -276,9 +276,9 @@ final class PlayerWatch: @unchecked Sendable {
     let log: EventLog
     init(_ log: EventLog, _ p: ProgrammePlayer) {
         self.log = log
-        p.onRanDry = { [weak self] id, played in self?.lock.lock(); self?.dry.append((id, played)); self?.lock.unlock() }
-        p.onPaused = { [weak self] on in self?.lock.lock(); self?.paused.append(on); self?.lock.unlock() }
-        p.onLevel = { [weak self] l in self?.lock.lock(); self?.levels.append(l); self?.lock.unlock() }
+        p.onRanDry = { [weak self] id, played in guard let self else { return }; self.lock.lock(); defer { self.lock.unlock() }; self.dry.append((id, played)) }
+        p.onPaused = { [weak self] on in guard let self else { return }; self.lock.lock(); defer { self.lock.unlock() }; self.paused.append(on) }
+        p.onLevel = { [weak self] l in guard let self else { return }; self.lock.lock(); defer { self.lock.unlock() }; self.levels.append(l) }
     }
     /// The blocks that began to play, in order.
     var air: [Int] { log.events.compactMap { if case .programmeAudioStart(let b) = $0.event { return b } else { return nil } } }
@@ -317,7 +317,7 @@ final class SegmentPlayerTests: XCTestCase {
     func testF14_ASegmentArrivingDuringPlayDoesNotDisturbTheBlockNow() async {
         let (p, w) = makePlayer(voice: "long-voice", doc: segmentedDocument(["One.\n\nTwo."]))
         p.play()
-        _ = await poll { p.renderPosition() != nil || p.blockIndex == 0 }
+        let onAir = await poll(4) { w.air == [0] }; XCTAssertTrue(onAir, "block 0 is on air before the arrival")
         try? await Task.sleep(nanoseconds: 300_000_000)
         let before = (p.blockIndex, w.log.count, w.air)
         let extra = SegmentPrep.prepare(IncomingSegment(stretchID: "st1", segmentID: "st1/9", kind: "story", title: "Late", text: "Late words.", cites: [], blockCount: nil))!
@@ -362,7 +362,7 @@ final class SegmentPlayerTests: XCTestCase {
         p.play()
         let ok3 = await poll { w.air == [0] }; XCTAssertTrue(ok3)
         p.next()
-        let ok4 = await poll { w.air == [0, 1] }; XCTAssertTrue(ok4)
+        let ok4 = await poll(1.5) { w.air == [0, 1] }; XCTAssertTrue(ok4, "the skip began segment 1 at once, well inside the 3 s block it left")
         p.next()                                            // the last segment: nothing happens
         try? await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(w.air, [0, 1], "the skip began the next segment once; the skip at the end began nothing")
@@ -401,18 +401,27 @@ final class SegmentPlayerTests: XCTestCase {
         let ok6 = await poll(4) { w.air == [0] }; XCTAssertTrue(ok6)
         p.pause(); XCTAssertTrue(p.userPaused); p.play(); XCTAssertFalse(p.userPaused)
         await p.setLevel(.pause); XCTAssertEqual(p.level, .pause); await p.setLevel(.play); XCTAssertEqual(p.level, .play)
-        XCTAssertEqual(w.pauses.suffix(2), [true, false], "paused, then resumed, each once")
+        XCTAssertEqual(w.pauses, [false, true, false], "play, pause, play: each told once, nothing doubled")
         XCTAssertEqual(w.levelChanges, [.pause, .play], "the yield to a turn and its return, each once")
         p.pause()
     }
 
+    /// What the original asserted (the tracker's last event was `superseded` at once): the open segment is let go of when the document is
+    /// replaced. On the player: the index returns to 0 and the document is the new one; the loop already running is not stopped, it ends
+    /// dry on the replacement (the block it was on finishing first), and the replacement's own block is never begun.
     func testReplacingTheDocumentMidSegmentSupersedes() async {
-        let (p, w) = makePlayer(voice: "long-voice", doc: segmentedDocument(["One."]))
+        let (p, w) = makePlayer(voice: "long-voice", doc: segmentedDocument(["A1.", "B1.", "C1."]))
         p.play()
         let ok7 = await poll(4) { w.air == [0] }; XCTAssertTrue(ok7)
+        p.next()
+        let ok8 = await poll(4) { w.air == [0, 1] }; XCTAssertTrue(ok8)
+        XCTAssertEqual(p.blockIndex, 1, "playing the second segment")
         p.setDocument(ProgrammeDocument(id: "choir:x", title: "T", blocks: [.speech(text: "Other.")]))
+        XCTAssertEqual(p.document.id, "choir:x"); XCTAssertEqual(p.blockIndex, 0, "the index of the old document does not carry over")
+        let dry = await poll(8) { !w.ranDry.isEmpty }; XCTAssertTrue(dry, "the running loop ends on the replacement")
+        XCTAssertEqual(w.ranDry.map(\.id), ["choir:x"])
+        XCTAssertEqual(w.air, [0, 1], "nothing of the replacement began by itself")
         XCTAssertEqual(p.document.id, "choir:x"); XCTAssertEqual(p.blockIndex, 0)
-        XCTAssertEqual(w.air, [0], "the replacement began nothing by itself")
         p.pause()
     }
 }
