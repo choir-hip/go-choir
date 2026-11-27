@@ -128,5 +128,7 @@ receipts:
 
 # FP10 NET-03 and NET-04: vsock control plane, then no guest NIC
 
+Standing: built | kind: happened | scope: in part | settled-by: design committed 6096e3e72 and station 0ad393bec; file now.status checkpoint_incomplete line 97 | note: design only; no vsock control plane and no guest NIC removal built, NET-03 and NET-04 unticked in the checklist
+
 Problem: [guest-host-identity-rides-tap-addresses-2026-10-22.md](../problems/guest-host-identity-rides-tap-addresses-2026-10-22.md).
 Design: [vsock-control-plane-and-nic-removal-2026-10-22.md](../design/vsock-control-plane-and-nic-removal-2026-10-22.md).

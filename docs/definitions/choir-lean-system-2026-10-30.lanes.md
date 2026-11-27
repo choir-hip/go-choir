@@ -1,5 +1,7 @@
 # Lean system: open lanes
 
+Standing: built | kind: happened | scope: in part | settled-by: f0e9b8fa6 and now.status checkpoint_incomplete at choir-lean-system-2026-10-30.md:226 (build work deployed; the multi-day watch never settled) | note: ea124dd70 paused the lean system for guest isolation; the watch settlement is not on record (the lane register of the mission file)
+
 The register of lane branches this mission has opened that are not on main.
 Owner, 2026-10-31: "we should be careful to not accumulate lane branches
 that don't land. We should keep track of them and understand when we can

@@ -1,5 +1,7 @@
 # The egress grant object: one model for open egress and app-desk grants (NET-05)
 
+Standing: superseded | kind: wanted | settled-by: its own line 3-4: built unwired in internal/egressgrant, never wired, code removed November 2026 | replaced-by: none
+
 Status: design, green; the record and its rules were built unwired in
 `internal/egressgrant` (red, off); the code was removed in November 2026
 (never wired; `internal/appnet` with it) and stays in git history. Date: 2026-10-21. Station:

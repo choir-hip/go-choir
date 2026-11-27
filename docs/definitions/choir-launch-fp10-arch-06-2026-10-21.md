@@ -140,6 +140,8 @@ now:
 
 # FP10 / ARCH-06: agents are records, worker slots are pooled
 
+Standing: undecided | kind: wanted | settled-by: nothing found; only the station file and problem record landed (1600e21ea), now.status is blocked_incomplete (line 112), design only, no pooled-slot code or checklist tick for ARCH-06 on origin/main
+
 ## The split
 
 Today a desk session is one object: an agent's REPL values living in one

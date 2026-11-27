@@ -1,5 +1,7 @@
 # Coding-agent desk over MCP: station (2026-11-10)
 
+Standing: built | kind: happened | scope: in part | settled-by: 65dee1879 and 3238c5e35 (internal/deskmcp, internal/deskjudge, cmd/choir-desk-mcp) | note: line 7 says built additive and unwired; no runtime path calls it and shape (a) is not built (line 103)
+
 Lane X4 of the overnight mission. This is the named station a later session
 continues from. Design: [coding-agent-desk-over-mcp-2026-11-09.md](coding-agent-desk-over-mcp-2026-11-09.md)
 with its section 11 rulings. Failure list:

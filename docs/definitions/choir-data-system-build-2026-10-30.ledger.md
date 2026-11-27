@@ -1,5 +1,7 @@
 # Ledger: choir-data-system-build-2026-10-30
 
+Standing: built | kind: happened | scope: in part | settled-by: the ledger of choir-data-system-build-2026-10-30.md: now.status superseded at line 400, phase 1 landed (871ab6531, 8f867aaeb on origin/main); system-map.md line 30 | note: phase 2 moved to docs/definitions/choir-lean-system-2026-10-30.md
+
 Append-only. One terse entry per pass. Never edit earlier entries.
 
 - 2026-10-30 ~06:15 UTC (FP0). Goal authored on the owner's word ("start

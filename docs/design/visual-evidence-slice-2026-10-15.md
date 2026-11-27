@@ -1,5 +1,7 @@
 # Visual Evidence Slice: Screenshots From the Engineering Capsule
 
+Standing: built | kind: happened | scope: in part | settled-by: d43f5f7bd self-dev visual preview; 0f6928b13 | note: 0f6928b13 deleted choir-capture, internal/visualcapture, the capture grant list and the visual-evidence route, replaced by the engineer's own screenshot files
+
 Date: 2026-10-15. Branch `feat/visual-evidence-slice`. Mutation class:
 **orange** overall (capsule runtime, Freeze bundle, a precommit rule, a
 read-only owner route, prompt framing), **red** for the guest image, the

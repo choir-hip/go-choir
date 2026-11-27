@@ -181,6 +181,8 @@ weak_measures:
 
 # The overnight Autopaper mission (2026-11-09)
 
+Standing: built | kind: happened | scope: in part | settled-by: ledger passes show landings 0a03add78 (auth rate classes) and b473db3af (poll arm) on origin/main; the file's own now.status is working (line 117) | note: no terminal receipt; image stations deferred by the owner
+
 Run it with `/goal docs/definitions/choir-autopaper-overnight-2026-11-09.md`.
 Ledger: [choir-autopaper-overnight-2026-11-09.ledger.md](choir-autopaper-overnight-2026-11-09.ledger.md).
 

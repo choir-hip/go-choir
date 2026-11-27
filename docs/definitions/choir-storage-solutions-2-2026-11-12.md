@@ -345,6 +345,8 @@ weak_measures:
 
 # Storage solutions, part 2
 
+Standing: built | kind: happened | scope: in part | settled-by: bfe378e98 (tape write counters) and 68ee06726; file now.status working at line 268 | note: S4 snapshots, S5 coalescing and S7 sweep were still in flight at its last card
+
 Part 1 was the lean-system work of 2026-10-30 and the releases of
 2026-11-11. It freed space and bounded three surfaces. This mission bounds
 the rest by changing what is written, in the order above. The frame, the

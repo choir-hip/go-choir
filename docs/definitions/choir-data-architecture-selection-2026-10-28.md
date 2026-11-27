@@ -1,5 +1,7 @@
 # Choir data architecture selection (2026-10-28)
 
+Standing: superseded | kind: wanted | settled-by: docs/ACTIVE.md line 427 heads it Superseded (2026-10-30); the data system build goal carries its decision (PostgreSQL on the host, SQLite in computers) | replaced-by: docs/definitions/choir-data-system-build-2026-10-30.md
+
 ```yaml
 definition_version: throughline/1
 readiness: reviewed

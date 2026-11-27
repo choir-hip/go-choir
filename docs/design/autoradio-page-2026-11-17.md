@@ -1,5 +1,7 @@
 # The Autoradio page
 
+Standing: built | kind: happened | scope: in part | settled-by: a RadioPage page kind is wired in mobile/AutoradioLab/pages.contract lines 22 and 35; run sheet and radio row docs/current-architecture.md:113 | note: header line 3 says not built; the Built on rows and tile removal not individually verified
+
 Status: design, 2026-11-17. Not built. Owner: "we should definitely have a
 page for auto radio itself. That should be what it loads into, not just the
 auto paper front page. Because right now we're just using the sheet for

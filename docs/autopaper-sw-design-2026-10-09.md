@@ -1,5 +1,7 @@
 # Autopaper design (station SW) — draft v3
 
+Standing: built | kind: happened | scope: in part | settled-by: line 9 Autopaper live since 2026-10-13; docs/current-architecture.md line 76 and 81 | note: line 3 rough draft v3; its storage (Store B, Dolt) was replaced by the object graph and SQLite state.db
+
 Date: 2026-10-09. Status: **rough draft, co-designed with the owner.**
 Station: `SW-world-wire-interface` in the
 [app-dev metamission](archive/definitions/choir-supervised-app-development-metamission-2026-10-01.md).

@@ -1,5 +1,7 @@
 # The append-clustered guest store (2026-10-31)
 
+Standing: built | kind: happened | scope: in part | settled-by: own status line 3: part 1 (WAL bound) and S1 (UUIDv7 run-memory ids) built, S1 is 0d99548b6 | note: S2 to S5 (og_id layout) designed only; the header/body split mission took a different route
+
 Status: part 1 built (the WAL bound), step S1 of part 2 built (time-ordered
 run-memory entry ids), steps S2 to S5 designed and measured on a synthetic
 store, not built. Mutation class: part 1 orange (guest store pragmas and a

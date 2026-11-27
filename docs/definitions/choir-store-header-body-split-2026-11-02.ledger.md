@@ -1,5 +1,7 @@
 # Store Header/Body Split — Ledger
 
+Standing: built | kind: happened | settled-by: the ledger of docs/definitions/choir-store-header-body-split-2026-11-02.md (now.status complete, line 78; S6 judged complete in the ledger's last entry; landed 1d33cafce)
+
 Append-only. One terse entry per pass.
 
 - 2026-11-01T19:00-0500 drafted at 3529f400d after five reread fixes on 2026-11-01 that were one defect (filter fields after the body).

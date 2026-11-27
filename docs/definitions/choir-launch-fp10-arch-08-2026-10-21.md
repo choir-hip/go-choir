@@ -1,6 +1,8 @@
 definition_version: 4
 
 # Station FP10 / ARCH-08 of the launch first pass
+
+Standing: built | kind: happened | scope: in part | settled-by: eb16f144a and d99b5ce08 (research children return token spending; slice 1), 3c46d5196 now card; file now.status checkpoint_incomplete line 89 | note: later slices of budgets passed down agent trees not found; ARCH-08 unticked in the checklist
 # (choir-launch-first-pass-metamission-2026-10-21.md): budgets passed down
 # agent trees. Authority: the metamission's FP10 entry (P2 items, each
 # decided item by item) and SDC ARCH-08.

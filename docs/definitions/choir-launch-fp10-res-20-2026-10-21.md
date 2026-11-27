@@ -119,5 +119,7 @@ receipts:
 
 # FP10 RES-20: Cloud Hypervisor behind a backend seam
 
+Standing: built | kind: happened | scope: in part | settled-by: design report a7a6d8812 and station b6cf4f86e on origin/main; file now.status checkpoint_incomplete line 91 | note: design only; no Cloud Hypervisor backend seam built (checklist RES-20 unticked)
+
 Problem: [vmmanager-has-no-hypervisor-seam-2026-10-21.md](../problems/vmmanager-has-no-hypervisor-seam-2026-10-21.md).
 Design: [vm-hypervisor-seam-design-2026-10-21.md](../reports/vm-hypervisor-seam-design-2026-10-21.md).

@@ -1,5 +1,7 @@
 # The object graph, redesigned (2026-10-30)
 
+Standing: built | kind: happened | scope: in part | settled-by: phase 0 guest write removal landed 2026-10-30 (line 575) and the cutover 871ab6531 | note: header line 3 says proposal; later phases 1 to 4 not verified
+
 Status: proposal. The doc is green; the work it designs is red (store schema,
 tape, Texture canonical writes, auth). It is reviewed like the change it
 designs before a build follows it. Amended the same evening (§11): the

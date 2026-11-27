@@ -1,5 +1,7 @@
 # Choir store header/body split: design (S1)
 
+Standing: built | kind: happened | settled-by: f3e5f7d2b security epoch 33 for the store header/body split; ce210a56b store split S6 goal settled complete; 8a85a2ca7 closing report
+
 Status: design, read-only. Source: worktree `agent-a68a1d96eb5bf63ea` at `2ec066cdb`. Inputs:
 - the goal, `docs/definitions/choir-store-header-body-split-2026-11-02.md`
 - the S0 evidence, `docs/evidence/store-layout-reads-2026-11-01.md`

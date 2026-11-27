@@ -1,5 +1,7 @@
 # Derived-key marks: a boot trusts a side table that is known current
 
+Standing: built | kind: happened | settled-by: 6b30bcd67 and hardening 3e0f2997a on origin/main; own status line 3 says built
+
 Date: 2026-11-01. Status: built (this commit); deployed proof is the
 orchestrator's. Mutation class: red (the store's read correctness, the
 projector's transaction, the replay path). Problem:

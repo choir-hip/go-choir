@@ -8,6 +8,8 @@ readiness: executable
 
 # FP0 lane: VM-state retention (test computers and quarantined data images)
 
+Standing: built | kind: happened | scope: in part | settled-by: scripts/proofs/fp0-vm-retention.sh on origin/main (deb31074f); the retention shadow plan was replaced by the active plan (70563c0d1) | note: own status waiting_on_fp0 at line 251; enforcement waited on the shadow report and owner questions
+
 Mutation class: red (VM lifecycle: vmctl deletes VM state). Lane branch
 `lane/fp0-vm-retention`. Problem record:
 [docs/problems/vm-state-retention-skips-test-computers-and-quarantines-2026-10-22.md](../problems/vm-state-retention-skips-test-computers-and-quarantines-2026-10-22.md).

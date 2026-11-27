@@ -193,6 +193,8 @@ receipts:
 
 # FP10: package mirrors beyond goproxy (NET-02)
 
+Standing: built | kind: happened | scope: in part | settled-by: f2a5dd85a (npm, PyPI, crates mirror), 252ff704d (git mirror), e1497db1b (per-computer capsule switch), all on origin/main; file now.status checkpoint_incomplete line 104 | note: every ecosystem off by default; deployed proof not found
+
 ## Design
 
 One host service, `go-choir-pkgmirror` (`cmd/pkgmirror`,

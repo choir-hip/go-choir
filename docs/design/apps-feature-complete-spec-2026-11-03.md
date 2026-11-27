@@ -1,5 +1,7 @@
 # Apps feature-complete spec (2026-11-03)
 
+Standing: undecided | kind: wanted | settled-by: nothing found; its goal file choir-selfdev-apps-feature-complete-2026-11-03.md has now.status working (line 234), no terminal receipt; only scattered Files and Slides commits (89c780936, 3b2aa7eef)
+
 Status: green (design text; the requests the self-development arms build
 from). Goal: [`definitions/choir-selfdev-apps-feature-complete-2026-11-03.md`](../definitions/choir-selfdev-apps-feature-complete-2026-11-03.md).
 

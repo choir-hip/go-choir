@@ -1,5 +1,7 @@
 # Station L1, the programme call: ways it can be wrong (2026-11-15)
 
+Standing: built | kind: happened | settled-by: station L1 programme route 45bf7ce4c; its F-tests exist in internal/agentcore/api_autoradio_programme_test.go; docs/current-architecture.md:110 (programme route proven)
+
 Written before the tests and the code, as the method requires. Station L1 of
 [the goal file](../definitions/choir-autoradio-learning-engine-2026-11-14.md),
 design [autoradio-learning-engine-2026-11-14.md](autoradio-learning-engine-2026-11-14.md)

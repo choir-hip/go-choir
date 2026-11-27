@@ -1,5 +1,7 @@
 # Tape group commit: fewer tape events for the same writes (2026-10-31)
 
+Standing: built | kind: happened | scope: in part | settled-by: abfab8754 tape group commit | note: the setting tape.group_commit was deleted by owner ruling; 10018c430 replaced it with lossless coalescing and no setting
+
 Status: design and build, mutation class red (tape write path, evidence).
 Rollback: the computer setting `tape.group_commit` off (live, no restart),
 or revert. Inputs: [telemetry batching design](../reports/telemetry-batching-design-2026-10-20.md),

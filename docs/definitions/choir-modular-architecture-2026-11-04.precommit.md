@@ -1,5 +1,7 @@
 # Precommitment ledger: modular architecture (opened 2026-11-04 19:13 UTC)
 
+Standing: built | kind: happened | scope: in part | settled-by: the precommit of docs/definitions/choir-modular-architecture-2026-11-04.md (546a37cf6; now.status working at line 236) | note: F5 and later left open
+
 Companion to
 [choir-modular-architecture-2026-11-04.md](choir-modular-architecture-2026-11-04.md).
 It applies the precommitment-records practice to the mission that builds it:

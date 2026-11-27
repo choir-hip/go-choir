@@ -329,6 +329,8 @@ receipts:
 
 # FP7: gateway identity and fairness
 
+Standing: built | kind: happened | scope: in part | settled-by: 55420cab4 (the Claude delegate token relay, FP7 finished) and 3d4037f6b (gateway body caps enforce); file now.status working at line 151 | note: the file's other batches and its re-freeze were never marked closed
+
 Four changes to one process, kept in separate commits so each lands and rolls
 back alone (SEC-08's gateway half uses SEC-05's bound bearer, so it follows
 it; RES-11 and SEC-16 are independent of both). Problem records:

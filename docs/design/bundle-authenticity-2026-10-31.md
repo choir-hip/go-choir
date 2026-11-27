@@ -1,5 +1,7 @@
 # Bundle authenticity (2026-10-31)
 
+Standing: built | kind: happened | settled-by: 013c7de93 on origin/main (squash of lane/bundle-authenticity); line 3 'not on main' is stale
+
 Status: built on `lane/bundle-authenticity`, not on main. Class red
 (evidence and import trust). Part of moving a computer from Node B to the
 owner's Mac and back (owner approved 2026-10-31; one-tape-durability §4a, §6a2

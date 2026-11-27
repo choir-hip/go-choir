@@ -382,6 +382,8 @@ receipts:
 
 # FP2: the guest desk boundary
 
+Standing: built | kind: happened | scope: in part | settled-by: fcfc8c8ae (desk manifest, per-frame role check, slot-bound frame) and 139d1b23d (checklist ticks SEC-01, SEC-02, ARCH-02, ARCH-07 with deployed evidence); file now.status checkpoint_incomplete line 185 | note: ARCH-05, SEC-13, SEC-15 and RES items not all settled; some candidates not landed (lines 359, 374)
+
 ## The problem in one paragraph
 
 A desk is a worker process that runs model-written Go. What that worker may do

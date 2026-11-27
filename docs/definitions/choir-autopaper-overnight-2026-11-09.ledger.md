@@ -1,5 +1,7 @@
 # Ledger: the overnight Autopaper mission (2026-11-09)
 
+Standing: built | kind: happened | scope: in part | settled-by: the ledger of choir-autopaper-overnight-2026-11-09.md; landings 0a03add78 and b473db3af on origin/main, and its own passes to 2026-11-10 12:20Z | note: goal file now.status is still working (line 117); no terminal receipt
+
 Append-only. One terse entry per pass.
 
 - 2026-11-10T03:00Z define. Goal file authored at the owner's order from the

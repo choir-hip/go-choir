@@ -1,5 +1,7 @@
 # Autoradio: what happens after the listener speaks (2026-11-10)
 
+Standing: built | kind: happened | scope: in part | settled-by: the turns route /api/autoradio/turns (docs/current-architecture.md:22) and the programme route 45bf7ce4c; dfe1bbbff added the note | note: header line 3 says not built; prepared pivots and a desk with cells not built (current-architecture.md:20)
+
 Status: design, not built. Mutation class of this document: green.
 Rollback: revert. Companion to
 [autoradio-voice-modes-2026-11-10.md](autoradio-voice-modes-2026-11-10.md),

@@ -1,5 +1,7 @@
 # D6 design: guest page cache goes back to the host (2026-10-26)
 
+Standing: built | kind: happened | settled-by: D6 S1 b068de456, S3 f9af6e7d3, S5 fixes a7f2a7e33, active on d@e cba66873b | note: the DAMON reading (R5) is superseded and deleted 2026-11-20 (line 167)
+
 Station D (density), item D6 of
 [choir-density-2026-10-26.md](../archive/definitions/choir-density-2026-10-26.md)
 ("balloon inflation returns guest page cache", RES-10 step 3, unbuilt,

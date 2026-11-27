@@ -143,6 +143,8 @@ receipts: []
 
 # CI and test co-optimization (CI0)
 
+Standing: built | kind: happened | scope: in part | settled-by: C2 cache prune 18cc777d9 and prove-once wiring ba6625542 (inert, CI_REUSE_GREEN_PR_RUN false); CI wall-clock fix 17a7b353f, 1ed31abef (line 41) | note: now.status waiting_for_FP0 (line 121); C3 to C6 not shown landed
+
 Faster CI accelerates every other station, so this track runs first, in
 parallel with the readiness waves, and its slices land between them. A Sonnet
 worker runs it on the agents VM, measuring from the CI logs and proving each

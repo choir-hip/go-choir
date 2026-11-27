@@ -1,5 +1,7 @@
 # MA6.5: one runtime, yaegi with Go modules, for every desk (2026-11-06)
 
+Standing: built | kind: happened | settled-by: 5c83a08ff (MA6.5 gomodule) and d@e receipts 4e63947a6 (MA6.4 and MA6.5 accepted)
+
 Class red, tier 2. Rollback: revert. Plan row:
 docs/design/modular-architecture-plan-2026-11-04.md, MA6.5; rulings R13
 (expressivity after security), R26 (per-desk import sets, code mode), R42

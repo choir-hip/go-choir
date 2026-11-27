@@ -1,5 +1,7 @@
 # The source-entities list is not stored in the run record (T2, first slice)
 
+Standing: built | kind: happened | settled-by: 8d81b7fe5 fix(texture) the source-entities list is no longer stored in the run record; the join ids are (first slice T2)
+
 Date: 2026-11-15, round 1 repair. Class of this document: green (design
 only). The change it designs is red: it touches the start of a Texture run,
 whose record run acceptance and the evidence surfaces read.

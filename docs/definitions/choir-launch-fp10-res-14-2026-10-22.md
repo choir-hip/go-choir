@@ -125,6 +125,8 @@ receipts: []
 
 # FP10: RES-14, the snapshot budget's real bytes
 
+Standing: built | kind: happened | settled-by: a0ede4268 (checklist: RES-14 done, snapshot budget counts true compressed bytes, probe 20ea9b6b6 on main); checklist line 491 is ticked; the file's own now.status blocked (line 82) is stale
+
 The audit (what each measure counts, file:line, gaps G1 to G4) is the
 2026-10-22 section of
 [snapshot-budget-falls-back-to-logical-bytes-2026-10-14.md](../problems/snapshot-budget-falls-back-to-logical-bytes-2026-10-14.md).

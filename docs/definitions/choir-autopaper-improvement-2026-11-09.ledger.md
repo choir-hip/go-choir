@@ -1,5 +1,7 @@
 # Ledger: Autopaper improvement (2026-11-09)
 
+Standing: superseded | kind: wanted | settled-by: the ledger of choir-autopaper-improvement-2026-11-09.md, now.status superseded at line 286 (only D13 landed, 36534be53; S2 to S5 deferred) | replaced-by: docs/definitions/choir-autopaper-overnight-2026-11-09.md
+
 Append-only. One line per move; newest last.
 
 - 2026-11-09 Problem doc: docs/problems/paper-quota-incidents-2026-11-09.md (3bafcbf9e). The paper's queue held 1763 tasks, the oldest 70 h; quota incidents waited without a bound.

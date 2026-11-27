@@ -264,6 +264,8 @@ receipts:
 
 # Autoradio overnight, 17 November
 
+Standing: superseded | kind: wanted | settled-by: docs/ACTIVE.md line 206 heads it Superseded (2026-11-17 night); its own now.status is working (line 219) | replaced-by: docs/definitions/choir-autoradio-exact-cutover-2026-11-18.md
+
 The owner asked for seven things in one evening and then for this file to hold
 them together. They are the stations above. Three points are worth prose.
 

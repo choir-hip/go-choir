@@ -179,6 +179,8 @@ receipts: []
 
 # FP3: the host floor
 
+Standing: built | kind: happened | scope: in part | settled-by: f0b382feb (SEC-03, SEC-09 done by FP3 cut 1, deploy M, SEC-10 host side) and 4bc3aa3ec (cut 1 deployed proof) on origin/main; file now.status working line 110 | note: groups 2 and 3 (batches B4 and B5) were not all landed under this file
+
 Three groups, landed one per deploy, in this order. The bodies of the groups'
 designs live in their problem records; this file is the authority for the
 finish line and the current action.

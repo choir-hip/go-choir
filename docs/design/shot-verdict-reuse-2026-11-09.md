@@ -1,5 +1,7 @@
 # Reuse a shot verdict when the judged content is unchanged (2026-11-09)
 
+Standing: built | kind: happened | scope: in part | settled-by: line 3 the tonight cut is built; 6c8c42616 feat(selfdev) a clean rebase with unchanged shot inputs reuses its screenshot verdict | note: only the tonight cut (section 12); the wider slices S1 to S5 are not shown built
+
 Status: design; the tonight cut (section 12) is built. Class of this document: green. Class of the build: red
 (slices S1 to S4 loosen or add to an apply gate; S0 and S5 are orange).
 Problem record: [shot-review-repeats-on-every-rebase-2026-11-09](../problems/shot-review-repeats-on-every-rebase-2026-11-09.md).

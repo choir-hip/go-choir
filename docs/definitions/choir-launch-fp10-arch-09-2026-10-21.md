@@ -87,5 +87,7 @@ now:
 
 # FP10 ARCH-09: a compute capsule kind for app desks
 
+Standing: built | kind: happened | scope: in part | settled-by: 93931bbe2 (S0 internal/computecapsule on origin/main), 9f098a5d8 now card; file now.status checkpoint_incomplete line 60 | note: slices S1 to S4 (wiring the capsule kind to app desks) were left as residuals; nothing imports the package
+
 The item is large and crosses three lanes in review, so this station writes
 the design and builds only the contract package nobody else touches.

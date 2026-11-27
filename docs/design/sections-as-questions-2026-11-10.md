@@ -1,5 +1,7 @@
 # Sections as questions (lane B, 2026-11-10)
 
+Standing: built | kind: happened | scope: in part | settled-by: 3c1cf9c9c, 6030e6240; docs/current-architecture.md line 101 | note: not built (line 139): the reader-side list scored on the reader's computer, a reader-editable list, digest_render section list
+
 Mutation class: orange (runtime behavior of the host scorer and the front read
 path). Rollback: revert the lane B commits; a scores file written by the new
 scorer is read by the old corpusd (it ignores the new fields and keeps the

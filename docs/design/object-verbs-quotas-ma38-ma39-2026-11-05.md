@@ -1,5 +1,7 @@
 # Object verbs, desk quotas and cost attribution (MA3.8, MA3.9)
 
+Standing: built | kind: happened | settled-by: own status line 3 'built 2026-11-05'; 15ac89707 (MA3.8) and bac28589a (MA3.9)
+
 Status: built 2026-11-05. Class red (MA3.8, tier 2) and orange (MA3.9).
 Plan: [modular-architecture-plan-2026-11-04.md](modular-architecture-plan-2026-11-04.md)
 section 7.3, rows MA3.8 and MA3.9; R8 (no spend ceiling, monitor cost).

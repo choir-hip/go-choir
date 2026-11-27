@@ -1,5 +1,7 @@
 # Small objects: one rule for every tiny thing Choir stores (2026-10-31)
 
+Standing: undecided | kind: wanted | settled-by: nothing found; line 3 says nothing is built by this note; searched commits for small object, store split, compaction and changes.md
+
 Status: design, revision 1. Nothing is built or deployed by this note.
 Mutation class of the work it proposes: **red** (tape/evidence storage,
 store schema, snapshot layout, btrfs profile of the host). This note

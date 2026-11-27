@@ -1,4 +1,5 @@
 ---
+# Standing: built | kind: happened | settled-by: now.status complete at line 118, owner at line 119: Yes, close pd. It works.; cb1a6cba9 and 869255bb4; leftovers carried to the modular architecture goal
 definition_version: 5
 
 # Progressive delivery, built: every switch walks the rings on measured

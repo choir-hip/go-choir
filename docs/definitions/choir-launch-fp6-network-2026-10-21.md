@@ -295,6 +295,8 @@ receipts:
 
 # FP6: the host-mediated network, first half
 
+Standing: built | kind: happened | scope: in part | settled-by: 074a86b9a (Obscura removed from the guest image, replay baa388d02), SEC-06 tunnel binding ba643e435 and enforce selector e03fb969a on origin/main; file now.status checkpoint_incomplete line 146 | note: host-mediated network not complete; enforce rollout and proofs pending
+
 This is the lane that takes the guest's browser away and writes down the
 rest of what the guest can reach. The order is the orchestrator's: problem
 record, launcher, deletion, inventory, then SEC-06. Each commit is one

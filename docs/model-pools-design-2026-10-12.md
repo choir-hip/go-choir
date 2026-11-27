@@ -1,5 +1,7 @@
 # Model pools: design
 
+Standing: built | kind: happened | scope: in part | settled-by: b0d69d4d4 M0 model pools; 8e515d24b pools autoroute on failures | note: 269c1e11a made every desk thread run gpt-6-luna with deepseek only as failover, unlike the two-model mix designed
+
 Owner direction, 2026-10-12. Every desk runs on a mix of two models,
 opencode-go `deepseek-v4.1-flash` (lowest cost, good quality) and chatgpt
 `gpt-6-luna`, so each builds a sample size. Each model falls back to the

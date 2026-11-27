@@ -1,5 +1,7 @@
 # Precommitment records: the practice (2026-11-08)
 
+Standing: built | kind: happened | settled-by: line 3 status says it describes the engineering on main; internal/store/commitment.go exists on origin/main
+
 Status: written at MA8.0 of the modular architecture mission. It describes the
 engineering on main at the date above: the files, the invariants, the failure
 modes and how to extend each part. The theory is the four-stroke learning

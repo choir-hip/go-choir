@@ -1,5 +1,7 @@
 # One search verb that asks the corpus first (design, 2026-11-19)
 
+Standing: built | kind: happened | scope: in part | settled-by: landing L1 (search leads) b1257d04a, docs/current-architecture.md row 94, ledger C172 settled true | note: header line 5 says not built; L2 (Sufficiency, Leads), L3 (the one verb, guest gate deleted), L4 not shown landed
+
 Design for fixes 2 and 3 of
 [the search-volume problem](../problems/web-searches-are-sent-without-asking-what-is-held-2026-11-19.md).
 Produced by an Opus design pass from the code at `lane/search-gate`; not

@@ -1,5 +1,7 @@
 # The enforce flip for the built-in kinds (F6), 2026-11-08
 
+Standing: built | kind: happened | settled-by: 1c9fcf758 (writer, reader and disclosure gates enforce for every kind; observe leaves product code), 13618eec5, 922a1a58d
+
 Status: r4 (r0 sent back by Devin and a Sonnet seat, r1 to r3 by Devin; §6 to §9 amend it and govern where they differ). Design for review. Goal: docs/definitions/choir-modular-architecture-2026-11-04.md, F6.
 Inputs: the prerequisite map (scratchpad f6-prereqs, 2026-11-08), ledger 2026-11-05T17:30Z and
 2026-11-06T01:50Z, and a fresh read of `GET /api/runtime/observability` on d@e at 6eb19408e

@@ -484,6 +484,8 @@ receipts:
 
 # FP4: the self-development architecture items
 
+Standing: built | kind: happened | scope: in part | settled-by: a233b7506 (ARCH-10 admission queues, FIFO), 6f0a35a40 (ARCH-04 one writer per object kind), 50e3bc862 (ARCH-03 deskworker app desk) on origin/main; file now.status checkpoint line 208 | note: ARCH-03 install not wired (checklist unticked)
+
 This station builds three items of the security and density checklist in the
 order the owner set: engineering admission that does not cancel live work
 (ARCH-10, the launch half of launch item L3-08), one writer per object kind

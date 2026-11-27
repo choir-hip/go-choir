@@ -1,5 +1,7 @@
 # App Design Bar
 
+Standing: built | kind: happened | scope: in part | settled-by: the bar landed a8423e965 and 84203ceb5 (review fixes); the Reader redesigned to it 5f536fdee | note: header (line 3) says green doc only; Slides and signed-out /read change lists not verified built
+
 Date: 2026-10-26. Mutation class: **green** (a doc; no runtime change).
 
 The owner called the two apps that self-development rebuilt this weekend, the

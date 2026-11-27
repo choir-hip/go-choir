@@ -1,5 +1,7 @@
 # The play queue and the Autoradio desk (2026-11-15)
 
+Standing: built | kind: happened | scope: in part | settled-by: own status line 3 and section 4 line 191 (first slice built); internal/autoradioqueue; c00312841; docs/current-architecture.md:116 row built | note: section 6 line 211: the cell module and queue ops on the programme route not built
+
 Status: design, with the first slice built on `lane/autoradio-queue-desk`.
 Mutation class of this note: green. Rollback: revert.
 

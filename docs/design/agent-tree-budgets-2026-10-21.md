@@ -1,5 +1,7 @@
 # Budgets passed down agent trees: design (ARCH-08, 2026-10-21)
 
+Standing: built | kind: happened | scope: in part | settled-by: slice 1 (observe-only token totals, one research tree line) eb16f144a and d99b5ce08 on origin/main; header line 5 says one observe-only slice built | note: slices 2 to 5 (egress, child bound, worker bound, management trees) not built
+
 Problem: [agent-tree-budgets-are-time-only-2026-10-21.md](../problems/agent-tree-budgets-are-time-only-2026-10-21.md).
 Station: [FP10 ARCH-08](../definitions/choir-launch-fp10-arch-08-2026-10-21.md).
 This is a design with one observe-only slice built. Everything past slice 1

@@ -209,6 +209,8 @@ receipts:
 
 # FP10: snapshot levers and host slab
 
+Standing: built | kind: happened | scope: in part | settled-by: 591f75306 (L3a Diff snapshot on hibernate) and 933870ff2 (D5 step 2 Diff snapshots for test computers) on origin/main; file now.status blocked line 93 | note: RES-13 L4 and L20 and RES-22 slab and btrfs metadata not found built; checklist unticked
+
 The design, the owner questions and FP0's read-only commands are in
 [docs/design/fp10-snapshot-levers-and-host-slab-2026-10-22.md](../design/fp10-snapshot-levers-and-host-slab-2026-10-22.md).
 The problems are

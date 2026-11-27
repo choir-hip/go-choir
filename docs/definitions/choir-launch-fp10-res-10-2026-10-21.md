@@ -42,6 +42,8 @@ finish:
 
 # Why design only
 
+Standing: built | kind: happened | scope: in part | settled-by: a60a5b731 (guest procmem reports balloon features, DAMON reclaim and page reporting, FP8 P4 / RES-10) on origin/main; file readiness built_steps_1_2 line 7 | note: emergency inflation (later steps) not found
+
 Every part of the slice sits in files FP8 is changing: `fcapi.go` (new
 `GET /balloon/statistics`, `PATCH /balloon`), `balloon.go` and `config.go`
 (stats interval default), `manager.go` (boot config), and the confined/jailed

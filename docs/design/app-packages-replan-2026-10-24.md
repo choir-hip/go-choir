@@ -1,5 +1,7 @@
 # App packages, replanned under I27 (2026-10-24)
 
+Standing: built | kind: happened | settled-by: own status line 3 (2026-10-30: app packages have landed); internal/apppackage exists; 886bf9510 (MA5.M4 packages load as modules) on origin/main
+
 Status 2026-10-30: app packages have landed. The `objectgraph` `dolt_store.go` and platform Dolt GC citations describe code and a store that are deleted. Design source for the new data system: [the data system frame](choir-data-system-frame-2026-10-30.md).
 
 Status: **design, green.** No code. Written by an FP0 design worker on lane

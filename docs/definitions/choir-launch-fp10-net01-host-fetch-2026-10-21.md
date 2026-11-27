@@ -196,6 +196,8 @@ receipts:
 
 # FP10: NET-01's host fetch service
 
+Standing: built | kind: happened | scope: in part | settled-by: 0967e296f (host fetch verb behind the gateway) on origin/main, 45f5d6ea9 says on main, off; file now.status checkpoint_incomplete line 85 | note: landed off by default; closing general guest egress (NET-04) was not this station and is not built
+
 Problem: [guest-fetches-public-internet-itself-2026-10-21.md](../problems/guest-fetches-public-internet-itself-2026-10-21.md).
 
 ## What was built

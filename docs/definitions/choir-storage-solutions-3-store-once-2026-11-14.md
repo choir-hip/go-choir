@@ -316,6 +316,8 @@ weak_measures:
 
 # Storage solutions, part 3: store once
 
+Standing: built | kind: happened | scope: in part | settled-by: a512e78d5, c1ea7a418 (T7 prune) and d46fb88b7 (run-memory retirement); file now.status working at line 248 | note: T1 and T2 were design lanes at the last card
+
 Part 2 stopped the drain and bounds what the host keeps. This mission
 changes what is written in the first place. The frame, what the review
 corrected and the refactors are in

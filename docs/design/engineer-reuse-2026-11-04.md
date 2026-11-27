@@ -1,5 +1,7 @@
 # Engineer reuse: a rejection returns to the same engineer; an app's engineer resumes from its lineage (2026-11-04)
 
+Standing: built | kind: happened | settled-by: 07a98d046 (engineer reuse wired to per-shot review and verify-owed), e2634dd4f, afc343285; docs/ledger records it proven live
+
 Status: design, revision 2: revision 1 reviewed (Devin and DeepSeek v4.1
 flash, both "revise"); their blocking findings (the retained-candidate
 composition; a passed candidate lost to a run end before its Complete

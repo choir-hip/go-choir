@@ -1,5 +1,7 @@
 # Data system build sheet (2026-10-30)
 
+Standing: built | kind: happened | settled-by: 871ab6531 data system cutover (Dolt deleted, guest SQLite, host PostgreSQL) and 1db2d897a; docs/current-architecture.md:28
+
 Station D1 of [the build goal](../definitions/choir-data-system-build-2026-10-30.md).
 These are the decisions each builder needs, and nothing more. The frame is
 [`choir-data-system-frame-2026-10-30.md`](choir-data-system-frame-2026-10-30.md),

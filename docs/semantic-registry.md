@@ -1,5 +1,7 @@
 # Choir Semantic Registry
 
+Standing: undecided | kind: wanted | settled-by: nothing found; line 3 says derived navigation for the doctrine, a standing reference that is not a work with a completion to prove
+
 **Status:** derived navigation for the doctrine; not a second doctrine.
 
 This registry makes the durable semantic kernel readable without creating a

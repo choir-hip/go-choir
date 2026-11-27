@@ -1,5 +1,7 @@
 # Autoradio app: one bar, many pages (2026-11-10)
 
+Standing: built | kind: happened | scope: in part | settled-by: Autoradio 1.0 build 473021 WAITING_FOR_REVIEW (docs/current-architecture.md:27); pages run as shared Exact (rows 113, 143); plan added in 3b23b6714 | note: header line 3 says design not built; the whole-app plan was built as Exact not as written, per-ruling status unchecked
+
 Status: design, not built; the plan for a whole-app build. Mutation class:
 green (a document). Rollback: revert. Lane: `lane/ar-ui`. Companions:
 [the lab note](autoradio-lab-2026-11-10.md),

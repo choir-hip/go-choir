@@ -186,6 +186,8 @@ receipts:
 
 # FP10 NET-10: network policy for app agents
 
+Standing: superseded | kind: wanted | settled-by: a18568ee4 deleted internal/appnet and internal/egressgrant, never wired (appnet landed unwired as 54ded1675); file now.status checkpoint_incomplete line 97 | replaced-by: none
+
 Problem: [app-package-cannot-declare-network-2026-10-22.md](../problems/app-package-cannot-declare-network-2026-10-22.md).
 Earlier design: [app-agent-network-policy-2026-10-21.md](../archive/design/app-agent-network-policy-2026-10-21.md)
 (its rules §1, approval §3 and ingress flow §4 stand; its §2 field list and

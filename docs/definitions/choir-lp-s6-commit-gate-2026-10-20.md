@@ -400,6 +400,8 @@ receipts: []
 
 # S6: the commit gate
 
+Standing: built | kind: happened | scope: in part | settled-by: S6-0 drills 77d8a5863 and 16b97d28c and fix 22b287a5d; file now.status working at line 236 | note: the card stops at S6-0, later stations not shown closed
+
 The six legs of the reviewed S6 definition stand. Since it was written on
 2026-10-01 the loop exists (P1, P4, P5, P6 to P8), the preview was cut,
 packages moved to the tape, and the owner ordered this station first. Start by

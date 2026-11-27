@@ -1,5 +1,7 @@
 # Source-only freeze and candidate shots (2026-11-06)
 
+Standing: built | kind: happened | settled-by: e65affa11 source-only freeze, shot plan, candidate_shot interlock; 3706f7cc7 security epoch 93
+
 Status: r2 (r0 SEND BACK by Devin and a Sonnet seat; r1 Devin ACCEPT with N1-N5, folded in; §6 adjudicates). Mutation class: red (bundle contract, Freeze,
 materializer apply path). Mission: modular architecture
 (`docs/definitions/choir-modular-architecture-2026-11-04.md`).

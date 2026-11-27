@@ -130,6 +130,8 @@ receipts: []
 
 # FP10: CI deploys as choir-deploy
 
+Standing: built | kind: happened | settled-by: b549daeae (CI deploys as choir-deploy through the gate), f77799459 (root no longer accepts the CI key), 674460d15 (SEC-14 step 3 proved, rollout complete); the file's own now.status checkpoint_incomplete (line 80) is stale
+
 Problem record: `docs/problems/ci-deploys-to-node-b-as-root-2026-10-21.md`.
 
 ## Rebase onto main 6fb1a6580

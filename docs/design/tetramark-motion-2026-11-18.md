@@ -1,5 +1,7 @@
 # The tetramark in motion
 
+Standing: undecided | kind: wanted | settled-by: nothing found on main; line 3 says built on lane tetramark-motion, not seen on a device; origin/lane/tetramark-motion (a445ce8cf) is not an ancestor of origin/main
+
 Status: built on lane `tetramark-motion` (2026-11-18), not yet seen on a device. Owner, 2026-11-17: "we can play with giving
 motion to the tetra mark. We started on this a few days ago and never got anywhere ... we can rotate it clockwise or
 counterclockwise, but also give it a 3D sense so it can be rotating like a tetrahedron as well. And it can also stretch and

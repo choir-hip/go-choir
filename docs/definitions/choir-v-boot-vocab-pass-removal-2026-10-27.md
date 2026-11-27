@@ -1,4 +1,5 @@
 ---
+# Standing: built | kind: happened | scope: in part | settled-by: landed 8f8b2a26c (receipts line 117; frozen_ref line 14; paper boot vocabulary phase 0 s) and the b@c 8 GiB start observed 2026-10-28 | note: now.status is checkpoint_incomplete (line 94), never settled complete; residuals at lines 108-113
 definition_version: 4
 
 # Station V of docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.md.

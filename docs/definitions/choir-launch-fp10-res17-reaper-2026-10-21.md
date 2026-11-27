@@ -8,6 +8,8 @@ readiness: executable
 
 # FP10 / RES-17: desk-worker idle reaper and a smaller worker binary
 
+Standing: built | kind: happened | settled-by: 24627242f and 57ad29ef0 (reaper, dedicated desk-worker binary) on origin/main, a00232665 ledger deploy F: RES-17 workers 87 to 24 MiB RSS; deskReaperTimer in internal/agentcore/tools_desk.go:150; file line 81 leaves only FP0 proof steps
+
 Mutation class: orange (runtime behavior of the desk worker pool; no
 provider routing, no VM lifecycle). Rollback: revert the commits; the
 reaper is a timer on the pool and the dedicated binary is optional (the

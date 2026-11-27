@@ -1,5 +1,7 @@
 # Desk shots and review (2026-11-07)
 
+Standing: built | kind: happened | settled-by: 9ff269597 (choir.ShotStart, ShotWait, ShotVerdict replace the platform shot worker; the worker file is gone) and internal/agentcore/desk_shots.go
+
 Status: r2 (r0 seats and the Devin r1 re-review adjudicated). Mutation class: red (self-development apply path, desk verbs,
 tool loop failover). Mission: modular architecture
 (`docs/definitions/choir-modular-architecture-2026-11-04.md`). Supersedes the

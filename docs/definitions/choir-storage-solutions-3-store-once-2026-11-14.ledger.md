@@ -1,5 +1,7 @@
 # Ledger: storage solutions, part 3 (store once)
 
+Standing: built | kind: happened | scope: in part | settled-by: the ledger of docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.md (a512e78d5, 824a01aab; now.status working at line 248) | note: T1 and T2 were design lanes at the last card
+
 - 2026-11-14T01:15Z. Authored on the owner's word that the refactors are the
   top priority ahead of Autoradio. Start: main eecafd3f1. In flight from part
   2: coalescing (landing), the updater prune (review round 2), the per-table

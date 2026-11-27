@@ -1,5 +1,7 @@
 # MA6.6: code mode with per-desk import sets (2026-11-06)
 
+Standing: built | kind: happened | settled-by: 916114811 (MA6.6 code mode, per-desk import sets) and receipt 9ce5a09e7 (MA6.6 accepted on d@e)
+
 Class red, tier 2. Rollback: revert. Plan row:
 docs/design/modular-architecture-plan-2026-11-04.md, MA6.6; rulings R26 (each
 desk has its own least-privilege yaegi import set; code mode: a hundred tool

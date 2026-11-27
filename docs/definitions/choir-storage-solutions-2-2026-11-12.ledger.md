@@ -1,5 +1,7 @@
 # Storage solutions, part 2: ledger
 
+Standing: built | kind: happened | scope: in part | settled-by: the ledger of docs/definitions/choir-storage-solutions-2-2026-11-12.md (bfe378e98; now.status working at line 268) | note: S4, S5 and S7 in flight at last card
+
 Append-only. One terse entry per pass.
 
 - 2026-11-12T20:30Z. Authored on the owner's direction. Start: 81 GiB free,

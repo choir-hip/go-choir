@@ -1,5 +1,7 @@
 # Intake at the desk's pace: sourcing scales, language-model work stays flat (2026-11-10)
 
+Standing: undecided | kind: wanted | settled-by: nothing found; line 3 says design, not built; db1bdc647 changed intake (oldest first, own lane) the opposite of the sampling asked, and no commit makes arrivals stop minting tasks
+
 Status: design, not built. Mutation class of this document: green.
 Rollback: revert. The build it describes is orange (management task
 selection, arrival minting) with a revert rollback.

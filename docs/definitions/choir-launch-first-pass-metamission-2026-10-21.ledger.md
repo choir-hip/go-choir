@@ -1,5 +1,7 @@
 # Launch first pass, ledger
 
+Standing: superseded | kind: wanted | settled-by: the ledger of choir-launch-first-pass-metamission-2026-10-21.md, now.status superseded at line 284 of the mission file (owner order 2026-10-24); docs/ACTIVE.md:472 | replaced-by: docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.md
+
 Append-only. One terse entry per orchestrator pass.
 
 - 2026-10-21 17:50 UTC. c893a956a pushed (capture labels by key). Metamission drafted (f399a2e8c). Five lanes started from f399a2e8c.

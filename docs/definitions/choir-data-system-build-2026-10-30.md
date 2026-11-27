@@ -1,5 +1,7 @@
 # Choir data system build: settle the frame, then build it and cut over once (2026-10-30)
 
+Standing: built | kind: happened | scope: in part | settled-by: goal now.status superseded at line 400 with phase 1 landed (PostgreSQL on the host, SQLite in computers; 871ab6531, 8f867aaeb, 226cab848 on origin/main); system-map.md line 30 | note: phase 2 moved to docs/definitions/choir-lean-system-2026-10-30.md as L4 and L5
+
 Run with `/goal docs/definitions/choir-data-system-build-2026-10-30.md`.
 
 This is a metamission whose stations are slices of this file. Phase 1 (D0,

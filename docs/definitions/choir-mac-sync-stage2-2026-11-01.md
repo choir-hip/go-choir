@@ -1,5 +1,7 @@
 # Choir Mac app with sync, stage 2: read your computer on the Mac, offline (2026-11-01)
 
+Standing: undecided | kind: wanted | settled-by: nothing found; now.status reviewed at line 150; only design commits 345075752, 17ad01f18, aef02845a found by grep for key release, no code
+
 Run with `/goal docs/definitions/choir-mac-sync-stage2-2026-11-01.md`.
 
 Roadmap stage 2 (`docs/roadmap-2026-10-31.md`): "The owner's Mac follows its

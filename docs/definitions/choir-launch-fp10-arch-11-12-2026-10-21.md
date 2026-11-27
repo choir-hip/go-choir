@@ -142,5 +142,7 @@ now:
 
 # FP10: ARCH-11 and ARCH-12, design only
 
+Standing: built | kind: happened | scope: in part | settled-by: design committed 36aa9dae1 and station file 44591f56f; file now.status checkpoint_incomplete line 99 | note: design only by its own header; no executor VMs or cross-host executors built, ARCH-11 and ARCH-12 unticked in the checklist
+
 The design is [docs/design/outboard-capsules-arch-11-12-2026-10-22.md](../design/outboard-capsules-arch-11-12-2026-10-22.md);
 the problem is [agent-tree-leaves-share-the-computer-guest-2026-10-22.md](../problems/agent-tree-leaves-share-the-computer-guest-2026-10-22.md).

@@ -1,5 +1,7 @@
 # System 1 route on the computer (2026-11-10)
 
+Standing: built | kind: happened | settled-by: POST /api/system1/judgments in internal/agentcore/api_system1.go and internal/apihandler/routes.go, added in 79bd88f8b; docs/current-architecture.md:169 row
+
 Mutation class: orange (a new product API on the computer runtime). Rollback: revert.
 
 A native client signed in with a bearer API key (`choir_sk_...`) asks Jev a few

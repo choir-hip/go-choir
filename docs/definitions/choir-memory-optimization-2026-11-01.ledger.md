@@ -1,5 +1,7 @@
 # Ledger: choir memory optimization (2026-11-01)
 
+Standing: superseded | kind: wanted | settled-by: docs/definitions/choir-memory-optimization-2026-11-01.md:71-72 (now.status superseded by the guest isolation goal, owner: I'll drop the current goal) | replaced-by: docs/definitions/choir-guest-isolation-2026-11-01.md
+
 - 05:40Z start. Paper firecracker RSS 7.8 GiB (6.1 GiB inactive file in the guest); restic thrashing at 4G MemoryHigh; b@c wake refused (charged its 7.2 GiB peak).
 - 05:39Z runtime-only cap raise on go-choir-offhost-backup (7G/8G); shard rate 84 -> ~1,700 files/s (docs/problems/offhost-backup-shard-thrashes-at-4g-2026-11-01.md).
 - 05:52Z problem: a832d94db (seed deletion) failed CI's guest-security-epoch gate (guest code, epoch not raised). Fix: dd84b1f6c raises 27 -> 28 in the same push; the gate passes from the live base 9d3cbb7a4.

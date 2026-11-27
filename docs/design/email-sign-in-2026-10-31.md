@@ -1,5 +1,7 @@
 # Email sign-in
 
+Standing: built | kind: happened | settled-by: email sign-in d439ba098 (security epoch 25, 849966c1e) and deployed e2e 0cff2f27a; ledger 3ae113888 says live
+
 Date: 2026-10-31. Status: design v3 (round 2 below), revised after the tier-2 review (Devin
 send_back: three blocking, nine should-fix or notes; see "Review round 1"
 at the end). Mutation class of the build: red (auth and session).

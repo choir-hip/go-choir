@@ -1,5 +1,7 @@
 # Object storage: one store for every blob, by tier and owner (2026-10-30)
 
+Standing: built | kind: happened | scope: in part | settled-by: cutover 871ab6531 with Dolt removed 1db2d897a (frame says storage design realized) | note: header line 3 says design revision 13; holder holds and later items not verified
+
 Status: design, revision 13 (after the round-12 reviews,
 `.agentic-consensus/object-storage-r12/out/`: both send_back, and the
 [restore and audit design](computer-history-restore-audit-2026-10-30.md),

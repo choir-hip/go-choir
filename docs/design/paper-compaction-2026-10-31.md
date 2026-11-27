@@ -1,5 +1,7 @@
 # Compaction that reaches the paper (2026-10-31)
 
+Standing: built | kind: happened | scope: in part | settled-by: fe6477cd4, 5a4fa56ad; docs/changes.md line 607 | note: the layout trigger and layout marker were deleted by 06c49c1b8 (2026-11-22, header lines 3-6); only the free-pages trigger remains
+
 > **2026-11-22: the layout trigger was removed** (`compactLayoutMaxAge`,
 > `compactLayoutMinBytes`, the layout branch of `compactReason`, and the
 > `state.db.layout.json` marker). A copy is now due only by free pages (10% or

@@ -180,6 +180,8 @@ receipts: []
 
 # Autoradio, the full experience, overnight 2026-11-15
 
+Standing: built | kind: happened | scope: in part | settled-by: K landed a99e07d3b and S landed 53747dcca (podcast clips) on origin/main; ledger 08:40Z final install | note: now.status is working (line 170); ACTIVE.md:215 heads it Superseded by the 2026-11-17 goal; automatic matching and the durable worker were not built
+
 The owner's words, the lanes and the rules each builder works under are in
 the common brief the lead gave them; the rulings are in
 `docs/problems/autoradio-owner-phone-review-2026-11-15.md`. The ledger is

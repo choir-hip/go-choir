@@ -1,5 +1,7 @@
 # Ledger: the ordinary prompt path (2026-11-09)
 
+Standing: built | kind: happened | settled-by: the ledger of docs/definitions/choir-ordinary-prompt-path-2026-11-09.md (now.status complete at line 112; 043db0977)
+
 Append-only. One line per move; newest last.
 
 - 2026-11-09 Investigation landed: docs/problems/ordinary-prompt-path-2026-11-09.md (7c209d975). Prompt to v2 202 s on d@e; research's first citable source +18 s, first packet +126 s; 12 reads, 3 errors unseen; no loop cap or repeated-call detector; the 498-call runaway did not reproduce on d@e.

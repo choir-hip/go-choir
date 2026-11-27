@@ -1,5 +1,7 @@
 # Restart subsystem: bounded recovery, no crash loops (design draft, 2026-10-13)
 
+Standing: built | kind: happened | scope: in part | settled-by: 22fec6022 planned restart one resume; 23c461b58 delete restart-resumption sweeps; CLAUDE.md Restarts rules | note: the v3 design's numbered parts were not each matched to code
+
 Status: **v3**: v2 after a lateral review (seven panelists, §8), amended by
 the convergent round (six answered, five ready with changes, §9). Where §9
 and the text above it differ, §9 governs. Requested by the owner

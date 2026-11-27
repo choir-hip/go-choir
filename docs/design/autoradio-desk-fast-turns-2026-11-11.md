@@ -1,5 +1,7 @@
 # Where a voice turn's time goes, and the Autoradio desk (2026-11-11)
 
+Standing: undecided | kind: wanted | settled-by: nothing found; header line 3 says nothing built; docs/current-architecture.md:20 says there is no Autoradio desk that runs cells and the turns route is one streamed model call
+
 Status: design and investigation, nothing built. Mutation class of this
 document: green. Rollback: revert. Read-only: no code was changed and no
 computer was acted on. No run was started (the four real turns below were

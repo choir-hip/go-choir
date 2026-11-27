@@ -1,5 +1,7 @@
 # Autoradio app API: what the phone can call today (2026-11-10)
 
+Standing: built | kind: happened | settled-by: own status line 3 (a map of what exists at origin/main 7f1b2487f, step 0.2); added in 72aed7b5f | note: a map, not a design; later routes may have changed it
+
 Status: map of what exists at origin/main 7f1b2487f; mutation class green;
 rollback: revert. This is step 0.2 of the
 [goal](../definitions/choir-autoradio-pass1-2026-11-10.md) (lane A, App API).

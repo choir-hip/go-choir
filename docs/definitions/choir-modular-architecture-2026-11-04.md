@@ -350,6 +350,8 @@ receipts:
 
 # Modular architecture
 
+Standing: built | kind: happened | scope: in part | settled-by: 546a37cf6 (phases 1 to 3 closed) and 25ecce33c (MA3.7c) on origin/main; file now.status working at line 236 | note: F5 and later left open at the 2026-11-08 rewrite
+
 The base becomes two small kernels and a locked record protocol, and
 everything else is an installed package whose privilege is its grants. The
 build plan is

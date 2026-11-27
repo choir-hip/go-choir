@@ -119,6 +119,8 @@ receipts: []
 
 # FP0 support: script the staging proof
 
+Standing: built | kind: happened | settled-by: scripts/proofs library and fp1 to fp8 scripts on origin/main (50d5c3773); own status checkpoint_complete at line 86 | note: parent launch first pass is superseded (ACTIVE.md:472)
+
 See the front matter. Branch sources read for the steps: lane/b2-store-b1fix
 (FP1), lane/b3-desk-boundary-b1fix (FP2 batch 1), lane/b7-gateway-b1fix (FP7),
 lane/b10-selfdev-b1fix (FP4), lane/fp8-image-jailer (FP8),

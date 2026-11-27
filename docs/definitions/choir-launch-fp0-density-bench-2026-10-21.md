@@ -1,4 +1,5 @@
 ---
+# Standing: built | kind: happened | scope: in part | settled-by: scripts/density written (a70fa7cec on origin/main, with accept_five.py 3cb626bb6) and the file's status ready_for_fp0 at line 84 | note: its own card says nothing had run on Node B; no receipt of the measurements found
 definition_version: 4
 
 # FP10/FP0 support of the launch first pass

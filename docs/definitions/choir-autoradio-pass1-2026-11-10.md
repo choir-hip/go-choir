@@ -225,6 +225,8 @@ weak_measures:
 
 # Autoradio, pass 1
 
+Standing: built | kind: happened | scope: in part | settled-by: round 3 landings 6f0c773ed, 26f9d66f3 and 215e9ac9a on origin/main, deployed 2026-11-11 (line 146) | note: now.status is blocked_incomplete (line 143) on the owner install go and the TestFlight verdict
+
 The inputs are the
 [handoff](../design/autoradio-mission-handoff-2026-11-09.md) and the review
 of Mike on 2026-11-10. This file changes the handoff in the places below and

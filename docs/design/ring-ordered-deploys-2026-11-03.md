@@ -1,5 +1,7 @@
 # Ring-ordered deploys and automatic code rollback (2026-11-03)
 
+Standing: built | kind: happened | settled-by: 869255bb4 ring-ordered deploys and automatic guest-release rollback; internal/vmctl/ring_walk.go on origin/main
+
 Station: `docs/definitions/choir-progressive-delivery-2026-11-03.md`, slices
 P1 (design S5) and P2 (design S6, the guest-release half). Parent design:
 `docs/design/progressive-delivery-2026-10-26.md` sections 3, 5, 6, 9 and the

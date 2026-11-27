@@ -138,6 +138,8 @@ now:
 
 # The ordinary prompt path
 
+Standing: built | kind: happened | settled-by: now.status complete at line 112 and 043db0977 (sandbox pause drill passed on d@e)
+
 Goal string: `/goal docs/definitions/choir-ordinary-prompt-path-2026-11-09.md`
 
 The owner's ask, 2026-11-09: "make sure the whole basic functionality is

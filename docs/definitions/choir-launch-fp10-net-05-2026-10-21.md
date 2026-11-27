@@ -162,6 +162,8 @@ receipts:
 
 # FP10 NET-05: the grant object for open egress
 
+Standing: superseded | kind: wanted | settled-by: a18568ee4 deleted internal/egressgrant (landed unwired as b52a4c026) as never wired; the package no longer exists on origin/main | replaced-by: none
+
 Problem: [no grant object for open egress](../problems/no-grant-object-for-open-egress-2026-10-21.md).
 Design: [egress grant object](../design/egress-grant-object-2026-10-21.md).
 

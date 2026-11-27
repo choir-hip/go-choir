@@ -1,5 +1,7 @@
 # Bounding the guest store (2026-11-14)
 
+Standing: built | kind: happened | scope: in part | settled-by: store readings 0f4421aae (docs/changes.md:596) and run-memory retirement fixes 789db9dc4 | note: only the reading and R-1 retirement are shown landed; R-2 to R-7 not verified
+
 Status: revised 2026-11-14 from named-tree readings of the paper's 47.5 GB
 file (section 0 and its ranking, 0.5). Sections 1 to 4 are the earlier
 design, written before those numbers existed, and are marked superseded where

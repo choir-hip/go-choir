@@ -1,5 +1,7 @@
 # S12 build: runtime install (2026-11-04)
 
+Standing: built | kind: happened | settled-by: line 3 record of what landed; 889b73619 packages runtime install (S12); 03037239a; 9f3970680
+
 Status: build plan and record of what landed on branch `s12-runtime-install`,
 red (a new code-loading path, code from published releases, an owner-act
 route). Builds "### S12" of

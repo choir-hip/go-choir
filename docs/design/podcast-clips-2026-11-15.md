@@ -1,5 +1,7 @@
 # Podcast clips: audio that sources the paper's stories (2026-11-15)
 
+Standing: built | kind: happened | scope: in part | settled-by: 24cd67412; docs/current-architecture.md line 88 (row status partial) | note: only tonight's slice (worker match mode) landed; the row says partial and the document's own status line 8 says rapid prototype
+
 Owner, 2026-11-10: "we should look for audio content that sources the
 autopaper articles." Owner, 2026-11-15: "i want podcast clips ... autoradio
 with ai dj ... mixing between news, podcast clips." Status: tonight's slice,

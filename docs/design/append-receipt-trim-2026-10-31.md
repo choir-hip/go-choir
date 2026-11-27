@@ -1,5 +1,7 @@
 # Append receipt trim: compact the body, keep every row (2026-10-31)
 
+Standing: built | kind: happened | scope: in part | settled-by: phase 1 lossless compact receipt body with paced backfill, d68fb3d87 on origin/main | note: phase 2 (deleting rows) is marked not built (line 162); it was not part of the store split mission
+
 Mission: docs/definitions/choir-lean-system-2026-10-30.md (stopping condition:
 Node B bytes and PostgreSQL rows flat day over day). Class red: it rewrites
 stored evidence (`computer_event_append_receipts.event_head_receipt_json`),

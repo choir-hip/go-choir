@@ -1,5 +1,7 @@
 # The Choir data system, one frame (2026-10-30)
 
+Standing: built | kind: happened | settled-by: 871ab6531 data system cutover (guest SQLite, host PostgreSQL, Dolt deleted) and 1db2d897a; docs/current-architecture.md:28 says Dolt and Store B deleted 2026-10-30
+
 Status: frame for owner argument, then panel review (Devin, DeepSeek and a
 Sonnet subagent; Codex once all three accept). Class: green as a document;
 it designs red surfaces (tape, keys, deletion, restore, boot path), so it is

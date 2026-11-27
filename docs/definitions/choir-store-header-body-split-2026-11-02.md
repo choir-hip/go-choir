@@ -136,6 +136,8 @@ receipts:
 
 # Store Header/Body Split
 
+Standing: built | kind: happened | settled-by: own now.status complete (line 78, 2026-11-03); landed 1d33cafce, dcbe7b4c4, 17afb82f2 on origin/main; cmd/store-split-migrate exists
+
 Inspiration (owner, 2026-11-01): data-oriented design. Keep hot fields
 together, put cold blobs elsewhere, and redesign rather than add caches.
 An index on a field that the row layout hides behind a blob is a cache.

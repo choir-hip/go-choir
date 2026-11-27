@@ -1,5 +1,7 @@
 # A package operation decides, publishes and installs with no owner act (D7 item 1)
 
+Standing: built | kind: happened | scope: in part | settled-by: P3 fe7b1f70f and epoch 5d49b1504 (package operation publishes by decision, package revert uninstalls) | note: line 3 says design for build; P5 host build seat is later and not verified
+
 Date: 2026-11-06, revision r2. Status: design, for build. Mutation class: red (decision
 authority, publishing to the public Library, install on a user's computer).
 Mission: [modular architecture](../definitions/choir-modular-architecture-2026-11-04.md).

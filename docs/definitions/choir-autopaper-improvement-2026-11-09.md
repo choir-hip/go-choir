@@ -350,6 +350,8 @@ receipts: []
 
 # Autopaper improvement (draft)
 
+Standing: superseded | kind: wanted | settled-by: now.status superseded at line 286 of the goal file (merged into the overnight goal; only D13 landed, S2 to S5 deferred) | replaced-by: docs/definitions/choir-autopaper-overnight-2026-11-09.md
+
 ## Why this order
 
 The owner's words: fix how the paper uses the sources it has, then add images.

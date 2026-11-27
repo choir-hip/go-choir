@@ -1,5 +1,7 @@
 # Choir lean system: shrink the paper, clean the nodes, finish phase 2, make the docs true (2026-10-30)
 
+Standing: built | kind: happened | scope: in part | settled-by: f0e9b8fa6 and now.status checkpoint_incomplete at choir-lean-system-2026-10-30.md:226 (build work deployed; the multi-day watch never settled) | note: ea124dd70 paused the lean system for guest isolation; the watch settlement is not on record
+
 Run with `/goal docs/definitions/choir-lean-system-2026-10-30.md`.
 
 This metamission supersedes

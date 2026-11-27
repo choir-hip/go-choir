@@ -1,5 +1,7 @@
 # App motion: the frame never leaves (2026-11-18)
 
+Standing: built | kind: happened | settled-by: mobile/AutoradioLab/transitions.contract and mobile/scripts/check-no-loading.py exist on origin/main (joined in 33cf20826); NoWaitingWordsTests present; no status line in the doc itself
+
 Owner, 2026-11-17, after tapping Quarantine on the Mail page: the whole page below the title became "Loading your mail..." and the tab row
 vanished until the list came back. "Anytime the screen changes, there should be animations... get rid of anywhere it says loading... anything
 which stays constant, like the headings, should stay visible during the animation. Ideally, they could even be clickable." And: "we should

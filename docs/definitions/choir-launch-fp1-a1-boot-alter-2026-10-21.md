@@ -1,4 +1,5 @@
 ---
+# Standing: superseded | kind: wanted | settled-by: docs/problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md line 3 (Dolt EnsureRecordIndexes is gone; the problem stays open as a boot-migration concern of PostgreSQL and SQLite); own status done (lane) at line 113 | replaced-by: docs/definitions/choir-data-system-build-2026-10-30.md
 definition_version: 4
 
 # Station FP1 follow-up A1 of the launch first pass

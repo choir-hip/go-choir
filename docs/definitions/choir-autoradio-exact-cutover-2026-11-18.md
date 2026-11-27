@@ -393,6 +393,8 @@ receipts:
 
 # Autoradio: the cutover from Swift to Exact
 
+Standing: built | kind: happened | scope: in part | settled-by: Exact cutover train merged to main (83d5fe9e1, c5de9cfe6), shared-code moves 877b8b17d; the phone app is Exact per CLAUDE.md Product | note: file now.status is working (line 344), X3 to X12 still pending in the file; X0 device tests open
+
 The owner asked for an Android build on 2026-11-18 and found that the app
 had been built against Exact's grain: Exact pages over a Swift application.
 This file is the mission that moves the application into Exact. The rule is

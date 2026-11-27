@@ -180,6 +180,8 @@ receipts: []
 
 # FP10 · RES-08: share the base OS in guest RAM
 
+Standing: built | kind: happened | scope: in part | settled-by: design and DEC-05 threat analysis 134113c61 and the read-only page-cache probe landed (rounds through 6727d7bd2); file now.status is a checkpoint line 102 | note: the pmem and DAX shared base OS itself was not built; RES-08 unticked in the checklist
+
 The problem: [base-os-copied-into-every-guest-ram-2026-10-22.md](../problems/base-os-copied-into-every-guest-ram-2026-10-22.md).
 The design, threat analysis and measurement steps:
 [res-08-shared-base-os-pmem-dax-design-2026-10-22.md](../reports/res-08-shared-base-os-pmem-dax-design-2026-10-22.md).
