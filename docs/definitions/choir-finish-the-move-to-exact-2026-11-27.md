@@ -133,7 +133,7 @@ stations:
   class: orange
   review: one seat
   depends_on: [E1, E3]
-  carrier: '7abe41baf (SegmentTracker removed), 6d0ff7ed7 (the mail approval link and the Imported page ask Swift for nothing; Activity''s clock is Exact''s date) and 97dea4262 (test-only programme types removed; CI run 46025608432): 32 files, 3,127 lines; staging serves it; seat 1 accepted each at its last round. In review: lane bar-facts (the radio''s sentence and reader follow in shared code, to about 3,006 lines). Owed on a device: the mail approval link opens, Activity shows ages, a spoken entry speaks and the lock screen shows its title. The app version is still read from Swift.'
+  carrier: '7abe41baf (SegmentTracker removed), 6d0ff7ed7 (the mail approval link and the Imported page ask Swift for nothing; Activity''s clock is Exact''s date) and 97dea4262 (test-only programme types removed; CI run 46025608432): 32 files, 3,127 lines; staging serves it; seat 1 accepted each at its last round. Parked after four review rounds: origin/lane/bar-facts (the radio''s sentence follow in shared code, to 2,951 lines), see docs/evidence/bar-facts-lane-parked-2026-11-27.md. Owed on a device: the mail approval link opens, Activity shows ages, a spoken entry speaks and the lock screen shows its title. The app version is still read from Swift.'
   status: working
 - id: E6
   name: sign-out and the server client
@@ -214,7 +214,7 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: E1 prepared and waiting on the build tree; E5 on the present pin
+  slice: E6.3 (the order of sign-out, red) in its second review round; E1 waits on the build tree
   source_ref: origin/main 97dea4262
   deploy_identity: staging on 97dea4262
   candidate:
@@ -245,7 +245,7 @@ now:
     main_uncertainty: 'whether the owner counts the voice turn''s state as voice (it decides whether the gate can reach zero without rewriting the turn), and whether the build tree may move'
     next_observation: 'the contract build and bun test on the new pin, once the build tree may move'
   blocker_or_risk: 'the pin move can be verified only by moving the one Exact checkout, which lives in the build tree (lane qa-mac). That tree holds another session''s uncommitted Android work, 38 paths, among them its own edit of patch 0003. I have not moved it. The pin does not go to main unverified, because every lane checks its pin against the build tree.'
-  next_action: 'land bar-facts when review accepts it; then E6 needs a design before code (the server client and sign-out are red): write the failure list and the boundary from the unlanded commit 75f81d7e0 and lane account-boundary-l1 as inputs'
+  next_action: 'land E6.3 when two seats accept it; then the 19 dead RadioInfo fields alone from the parked lane; then E6.1, E6.2 and E6.4, which do not wait on the owner'
 receipts: []
 ---
 
