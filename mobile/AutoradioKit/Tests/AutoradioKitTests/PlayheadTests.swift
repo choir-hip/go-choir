@@ -194,19 +194,13 @@ final class RateAndPositionTests: XCTestCase {
         tr.positionSource = { box.value }
         let now = Date(timeIntervalSince1970: 5000)
         tr.setSpeed(1.5)
-        var info = tr.radioInfo(player: player, snapshot: snap, document: doc, route: "r", now: now)
-        XCTAssertEqual(info.blockProgress, 0.5, accuracy: 1e-9, "from the audio, not from wall time")
+        var info = tr.radioInfo(player: player, snapshot: snap, document: doc, now: now)
         XCTAssertEqual(info.sentenceIndex, 1)
-        let later = tr.radioInfo(player: player, snapshot: snap, document: doc, route: "r", now: now.addingTimeInterval(300))
-        XCTAssertEqual(later.blockProgress, 0.5, accuracy: 1e-9, "300 s of wall time moved nothing: the audio did not move")
         box.value = RenderPosition(index: 1, fraction: 0.95, seconds: 9.5, total: 10)
-        info = tr.radioInfo(player: player, snapshot: snap, document: doc, route: "r", now: now)
+        info = tr.radioInfo(player: player, snapshot: snap, document: doc, now: now)
         XCTAssertEqual(info.sentenceIndex, 2)
         box.value = RenderPosition(index: 0, fraction: 0.9, seconds: 1, total: 1)
-        info = tr.radioInfo(player: player, snapshot: snap, document: doc, route: "r", now: now)
-        XCTAssertEqual(info.blockProgress, 0, "the old block's position does not answer for the new one")
         box.value = nil
-        XCTAssertEqual(tr.radioInfo(player: player, snapshot: snap, document: doc, route: "r", now: now).blockProgress, 0)
         XCTAssertEqual(tr.blockFraction(snap, now: now), 0, "block 1 of 2 begun, nothing of it played (the bar adds the block index: bar.test.ts B7)")
     }
     final class PosBox: @unchecked Sendable { var value: RenderPosition? }

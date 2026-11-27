@@ -29,7 +29,7 @@ final class MicLevelTests: XCTestCase {
         let t = BarTracker()
         _ = t.feedMic(db: -20)
         var s = LabSnapshot(); s.blockCount = 0
-        let r = t.radioInfo(player: ChoirPlayerView(), snapshot: s, document: ProgrammeDocument(id: "d", title: "t", blocks: []), route: "")
+        let r = t.radioInfo(player: ChoirPlayerView(), snapshot: s, document: ProgrammeDocument(id: "d", title: "t", blocks: []))
         XCTAssertEqual(r.micLevel, 1, accuracy: 0.001)
     }
 }

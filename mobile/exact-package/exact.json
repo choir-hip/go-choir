@@ -38,29 +38,13 @@
     },
     "RadioInfo": {
       "title": "string",
-      "source": "string",
-      "position": "string",
-      "index": "number",
-      "count": "number",
       "playing": "bool",
-      "paused": "bool",
       "level": "string",
-      "speed": "string",
       "speedValue": "number",
-      "speedChoices": "string[]",
-      "mode": "string",
-      "micOpen": "bool",
-      "heard": "string",
-      "holding": "string",
-      "revised": "string",
       "progress": "number",
-      "blockProgress": "number",
       "sentenceIndex": "number",
       "sentences": "string[]",
-      "next": "string",
-      "micLevel": "number",
-      "kind": "string",
-      "sources": "string[]"
+      "micLevel": "number"
     },
     "BarFacts": {
       "at": "number",
@@ -705,34 +689,13 @@
       "substitute": {
         "default": {
           "title": "",
-          "source": "",
-          "position": "",
-          "index": 0,
-          "count": 0,
           "playing": false,
-          "paused": false,
           "level": "play",
-          "speed": "1",
           "speedValue": 1,
-          "speedChoices": [
-            "0.8",
-            "1",
-            "1.25",
-            "1.5"
-          ],
-          "mode": "",
-          "micOpen": false,
-          "heard": "",
-          "holding": "",
-          "revised": "",
           "progress": 0,
-          "blockProgress": 0,
           "sentenceIndex": 0,
           "sentences": [],
-          "next": "",
-          "micLevel": 0,
-          "kind": "",
-          "sources": []
+          "micLevel": 0
         }
       }
     },

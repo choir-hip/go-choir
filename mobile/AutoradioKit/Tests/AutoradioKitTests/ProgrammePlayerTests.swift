@@ -193,17 +193,14 @@ final class SegmentedDocumentTests: XCTestCase {
         var snap = LabSnapshot(); snap.blockIndex = 1; snap.blockCount = 3; snap.running = true
         var pv = ChoirPlayerView(); pv.signedIn = true; pv.playing = true
         let tr = BarTracker()
-        let r = tr.radioInfo(player: pv, snapshot: snap, document: d, route: "", nextTitle: "The next entry", now: Date())
-        XCTAssertEqual(r.title, "Title 0"); XCTAssertEqual(r.kind, "Story")
-        XCTAssertEqual(r.sources, ["The harbour story"])
-        XCTAssertEqual(r.position, "", "no \"N of M\": the bar shows what is on air and its progress"); XCTAssertEqual(r.count, 1); XCTAssertEqual(r.index, 0)
-        XCTAssertEqual(r.next, "The next entry", "the run sheet's next entry, never the next segment of a stretch")
+        let r = tr.radioInfo(player: pv, snapshot: snap, document: d, now: Date())
+        XCTAssertEqual(r.title, "Title 0")
         XCTAssertEqual(r.sentences, ["Two."], "the passage being read is still the block")
         XCTAssertFalse(String(data: try! JSONEncoder().encode(r), encoding: .utf8)!.contains("pub:"), "no raw ref reaches the screen")
         // one article: unchanged
         let plain = ProgrammeDocument(id: "choir:x", title: "A story", blocks: [.speech(text: "One."), .speech(text: "Two.")])
-        let p = tr.radioInfo(player: pv, snapshot: snap, document: plain, route: "/p/x", now: Date())
-        XCTAssertEqual(p.title, "A story"); XCTAssertEqual(p.kind, ""); XCTAssertEqual(p.sources, []); XCTAssertEqual(p.count, 2); XCTAssertEqual(p.position, "")
+        let p = tr.radioInfo(player: pv, snapshot: snap, document: plain, now: Date())
+        XCTAssertEqual(p.title, "A story")
     }
 }
 

@@ -63,7 +63,7 @@ extension AutoradioModule {
         handle("radioView") { [unowned self] _, reply in
             scheduleExpiry()
             let route = RadioBridge.shared.airAddress()
-            let info = MainActor.assumeIsolated { (tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: "")) }   // lane autoradio-queue
+            let info = MainActor.assumeIsolated { (tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document)) }   // lane autoradio-queue
             ReaderFeed.shared.feed(info, address: route)
             reply(json(info))
         }
@@ -74,8 +74,7 @@ extension AutoradioModule {
         handle("radioSpeed") { [unowned self] args, reply in
             if let v = Double(args["speed"] as? String ?? "") { tracker.setSpeed(v); SpeedStore.standard.save(tracker.speed) }
             touch(["radioView"])
-            let route = RadioBridge.shared.airAddress()
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document, route: route, nextTitle: "")))
+            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document)))
         }
     }
 }
@@ -115,8 +114,7 @@ extension AutoradioModule {
     /// each second while it is false (spine.contract `posKey`). A host that does not give it is taken as in front.
     @MainActor public func radioFacts(peek: Bool) -> [String: Any] {
         let s = runtime.snapshot(), tracker = BarTracker.shared, deck = Deck.shared
-        let route = RadioBridge.shared.airAddress()
-        let info = tracker.radioInfo(player: choir.playerView(), snapshot: s, document: runtime.player.document, route: route, nextTitle: "")
+        let info = tracker.radioInfo(player: choir.playerView(), snapshot: s, document: runtime.player.document)
         let pos = runtime.player.storyPosition()
         var o: [String: Any] = ["at": Date().timeIntervalSince1970 * 1000, "turnOpen": s.phase != "playing", "remainder": runtime.player.remainingText() ?? "",
                                 "position": ["block": pos.block, "seconds": pos.seconds], "wants": !runtime.player.userPaused, "foreground": !runtime.coordinator.isBackgrounded, "ready": OnboardingController.shared?.finished ?? false,

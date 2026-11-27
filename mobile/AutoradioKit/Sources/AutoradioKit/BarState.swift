@@ -15,35 +15,17 @@ import Foundation
 /// Everything the expanded player and the bar's extras need, in one source.
 public struct RadioInfo: Codable, Sendable, Equatable {
     public var title = ""
-    public var source = ""
-    public var position = ""
-    public var index = 0
-    public var count = 0
     public var playing = false
-    public var paused = false
     /// play | dip | pause: what the yield policy is doing to the programme right now.
     public var level = "play"
-    public var speed = "1"
-    /// The same speed as a number, for the slider (0.5 to 3).
+    /// The speed as a number, for the slider (0.5 to 3).
     public var speedValue = 1.0
-    public var speedChoices: [String] = ["0.8", "1", "1.25", "1.5"]
-    /// button | open | hybrid
-    public var mode = ""
-    public var micOpen = false
-    public var heard = ""
-    public var holding = ""
-    public var revised = ""
+    /// The sentence being said, for the reader's follow (`ReaderFeed`) and the `radioFacts` op.
     public var progress = 0.0
-    public var blockProgress = 0.0
     public var sentenceIndex = 0
     public var sentences: [String] = []
-    public var next = ""
     /// 0...1, the smoothed microphone level while the mic is open (the mark breathes with it); 0 when nothing is heard.
     public var micLevel = 0.0
-    /// What the segment now playing is ("Story", "Headlines", "Station break"); empty for a single article.
-    public var kind = ""
-    /// The labels of the segment's sources (chips). Never raw refs.
-    public var sources: [String] = []
     public init() {}
 }
 
@@ -188,48 +170,25 @@ public final class BarTracker: @unchecked Sendable {
         return sentences.count - 1
     }
 
-    public func radioInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, document d: ProgrammeDocument, route: String, nextTitle: String = "", now: Date = Date()) -> RadioInfo {
+    public func radioInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, document d: ProgrammeDocument, now: Date = Date()) -> RadioInfo {
         lock.lock(); defer { lock.unlock() }
         var r = RadioInfo()
         let bp = clockProgress(s, doc: d, now: now)
         let n = d.blocks.count
         let idx = n == 0 ? 0 : min(max(s.blockIndex, 0), n - 1)
-        r.title = d.title; r.source = route
-        r.index = idx; r.count = n
-        // No "N of M": the bar shows what is on air and its progress. The entry on air is one segment: its title, kind and sources head the player.
-        r.position = ""
-        let seg = n == 0 ? nil : d.segmentIndex(containingBlock: idx)
-        if let si = seg {
-            let np = ProgrammeNowPlaying.describe(document: d, blockIndex: idx)
-            r.title = np.title; r.kind = np.kind; r.sources = np.sources
-            r.index = 0; r.count = 1
-            // The station speaking between two entries: the line says what it is leading into.
-            if d.segments[si].kind == "transition", !nextTitle.isEmpty { r.kind = "Next: " + nextTitle }
-        }
-        r.playing = p.playing; r.paused = n > 0 && !p.playing
-        r.level = s.level; r.speed = Self.speedName(speed); r.speedValue = speed
-        r.mode = s.addressing
-        r.micOpen = s.micActive
+        r.title = d.title
+        // The entry on air is one segment: its title heads the player.
+        if n > 0, d.segmentIndex(containingBlock: idx) != nil { r.title = ProgrammeNowPlaying.describe(document: d, blockIndex: idx).title }
+        r.playing = p.playing
+        r.level = s.level; r.speedValue = speed
         r.micLevel = (level * 100).rounded() / 100
-        r.heard = s.phase == "playing" ? "" : s.transcript
-        r.holding = holdingLine
-        if let t = revisedAt, now.timeIntervalSince(t) < Self.revisedWindow { r.revised = revisedSummary }
-        r.blockProgress = bp
         r.progress = n == 0 ? 0 : min(1, (Double(idx) + bp) / Double(n))
         if n > 0 {
             let b = d.blocks[idx]
             let text = b.spokenText ?? b.summary
             r.sentences = Self.sentences(text)
             r.sentenceIndex = Self.sentenceIndex(r.sentences, progress: bp)
-            if seg != nil {
-                // The next is the run sheet's next entry, never the paper's neighbour.
-                r.next = nextTitle
-                return r
-            }
-            r.next = nextTitle
         }
         return r
     }
-
-    static func speedName(_ s: Double) -> String { PlaybackSpeed.name(s) }
 }
