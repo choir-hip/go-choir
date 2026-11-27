@@ -325,3 +325,8 @@ past instructions necessarily exist no matter what. indeed, the separation
 of lesson and trust was the whole idea i was ruminating on. its very deep.
 but trust gets miscalibrated and it stops learning. as trust governs your
 ways of perception"
+
+**Actually existing agents.** "'always read set' is implying more control
+over the agent and the harness than we can safely. need to recalibrate to
+actually existing agents, external agents like claude code, and the yaegi
+rlm repl design of choir desks"

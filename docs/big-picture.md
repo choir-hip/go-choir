@@ -251,9 +251,23 @@ This is a first reading of what each means for a document.
 
 So documents may accumulate (owner: "it should be fine that we accumulate
 docs, if we have the right way to filter them"). The docs are a log, and
-the always-read set is the view that trust selects from it; that view has
-to stay small enough to be read whole every session. The transform's work
-is the filter, not the moving of files.
+trust selects the view of it. The transform's work is the filter, not the
+moving of files.
+
+The filter has to fit the readers that exist (owner: "always read set" is
+"implying more control over the agent and the harness than we can
+safely"). There are three, and none can be made to read a set:
+
+| Reader | What we control |
+| --- | --- |
+| An outside harness (Claude Code, Codex, `agy`) | one file it loads itself; after that, what its searches return and what a file's name and first lines say. Its context is compacted and its subagents get only a brief. |
+| A review seat | the code and the prompt it is handed. |
+| A Choir desk | the functions its cells can call. It queries; it does not load. Here the filter can be a function. |
+
+So the filter lives in four places: the one loaded file, kept short; names
+and first lines, which are what a search shows; a query that returns
+documents by trust, callable from a shell and from a desk's cell; and the
+checks at landing, which are where outcomes are recorded.
 
 Trust can be miscalibrated, and then learning stops, because trust governs
 what is seen (owner). So the filter is itself checked: on a schedule, a
