@@ -222,8 +222,6 @@ describe('I11 to I13 reading, finding, placing and handing words to the player',
     expect(f.hits).toEqual([{ block: 2, section: 0, label: 'One', snippet: 'The harbour at dawn.' }]);
     expect((await I.importedFind(d.address, 'zebra', storage, net)).message).toBe('Nothing in this document matches “zebra”.');
     expect(await I.importedFind(d.address, '  ', storage, net)).toEqual({ query: '', hits: [], message: '' });
-    expect(await I.importedLocate(d.address, 4, storage, net)).toEqual({ address: d.address, block: 4, section: 1 });
-    expect((await I.importedLocate('', -1, storage, net)).section).toBe(0);
   });
   test('I12 a place is clamped; a section start is its first block; the store is wiped with the account', async () => {
     put('r.pdf', 1000, PDF);

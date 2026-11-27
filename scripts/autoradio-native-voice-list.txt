@@ -32,7 +32,6 @@ path mobile/AutoradioKit/Sources/AutoradioKit/VoiceSetup.swift voice setup: the 
 path mobile/AutoradioKit/Sources/AutoradioKit/TurnTimeline.swift the timing trace of a voice turn
 path mobile/AutoradioKit/Sources/AutoradioKit/RetrievalFacts.swift the voice turn's one ask for passages: it raises the ask and waits for shared code's answer with a deadline (Exact has no call from native into shared code); decides nothing
 path mobile/AutoradioKit/Sources/AutoradioKit/EmbedDevice.swift the on-device embedding model, Wi-Fi, Low Power Mode, thermal state and what the radio holds the processor for: three answers to shared code
-path mobile/exact-package/apple/AutoradioModule+Imported.swift says which block the player is reading (importedFollow): audio only; the pages, the list, the import and the search are shared code
 path mobile/AutoradioKit/Sources/AutoradioKit/KeptTurns.swift kept microphone turns
 path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurn.swift generated microphone-turn fixture for voice setup and the model proof
 path mobile/AutoradioKit/Sources/AutoradioKit/FixtureTurnAudio.swift the fixture utterance read by voice setup and the model proof
@@ -82,14 +81,12 @@ name retrievalAsk the voice turn's ask for passages, raised by the native turn e
 name voice* the voice cards and the speaker profile
 name choirTalkCancel cancels the open microphone turn
 name choirHandsFreeToggle opens and closes the microphone
-name importedFollow the block the player is reading now: only the player knows
 name deck* the deck: play, hold, pause, seek, acknowledge, and the state and journal it keeps (the audio session and the lock screen are native)
 
 # --- NOT on this list, so COUNTED against the ceiling (non-voice native code: debt, or a platform seam). Only the audio session, the microphone, speech and the on-device models are voice
 # (owner, CLAUDE.md: "only voice is native"). Each of these has its reason, and none of them is voice:
 #   Choir/MailSeal.swift            a platform cipher (CryptoKit AES-GCM; Exact's crypto.subtle refuses AES), key kept natively in the Keychain. Android owes it in Kotlin. Was on this list as an exception.
 #   Choir/ChoirSignIn.swift         only sign-out now (the local key goes, the revoke is sent); signing in is shared code (app-signin.ts, @exact/passkeys). The voice stages above read the key Exact's secret store keeps in the Keychain (KeychainKeyStore).
-#   AutoradioModule+Mail.swift      an in-app web view for the approval page (`mailOpenReview`).
 #   AutoradioModule+Platform.swift  the platform seam: the audio session owner (voice), the console log file the proof reads, the system's background time. The session owner is voice and could be split out.
 #   ProofKey.swift                  the simulator-only proof key (a test seam, compiled out of device builds).
 #   Conversation.swift              the turn engine's record of the question, the answers and their words (state of the voice turn; a candidate for the voice list when it is shown to be only that).

@@ -12,7 +12,7 @@
 // Logs carry ids and counts only: never a sender, a subject, an address or a word of a message.
 
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, accountGeneration, SignedOutError } from './api.ts';
+import { authedJSON, accountGeneration, SignedOutError, ORIGIN } from './api.ts';
 import * as M from './mail-model.ts';
 import { sanitized } from './mail-sanitize.ts';
 import * as C from './mail-store.ts';
@@ -424,6 +424,24 @@ export async function mailSync(address: string, env: C.Env): Promise<SyncView> {
   out.note = out.held === 0 ? '' : `${out.held} messages saved on this phone`;
   console.log(`mail: sync ${folder} ${out.status} fetched=${out.fetched} held=${out.held}`);
   return out;
+}
+
+// THE APPROVAL PAGE opens in the app's own web layer (the radio's `web.url`, which the bar and the content controls read), only on the paper's own origin over https, with no user name or password
+// in it: the server's `review_url` is the paper's page, and nothing else is opened from mail. (It was a native send, `mailOpenReview`, that checked the link and handed it straight back to this code.)
+export const REVIEW_REFUSED = "That link is not on your computer's address.";
+/** The link as it will be opened, or "" when it may not be. */
+export function reviewLink(url: string): string {
+  let u: URL, home: URL;
+  try { u = new URL(url); home = new URL(ORIGIN); } catch { return ''; }
+  if (u.protocol !== 'https:' || u.username !== '' || u.password !== '' || u.hostname.toLowerCase() !== home.hostname.toLowerCase() || u.port !== home.port) return '';
+  return u.href;
+}
+/** Open the approval page: a link that passes is handed to the shared web layer (`open`: app.ts gives the radio's queueAct "openWeb"); one that does not is refused with the words. */
+export async function mailReviewOpen(url: string, open: (u: string) => Promise<unknown>): Promise<{ status: string; message: string }> {
+  const u = reviewLink(url);
+  if (u === '') return { status: 'refused', message: REVIEW_REFUSED };
+  await open(u);
+  return { status: 'opened', message: '' };
 }
 
 /** The note under a message: the LAST action's own words (`last` is set by the action; the others' answers may still be held by their mutations and must not hide it). */

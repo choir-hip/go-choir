@@ -147,14 +147,6 @@
       "acked": "number",
       "journal": "DeckEvent[]"
     },
-    "ImportedFollow": {
-      "address": "string",
-      "block": "number"
-    },
-    "ImportedHanded": {
-      "ok": "bool",
-      "message": "string"
-    },
     "HearItRow": {
       "clipID": "string",
       "show": "string",
@@ -163,10 +155,6 @@
       "quote": "string",
       "story": "string",
       "episodeOnly": "bool"
-    },
-    "MailAck": {
-      "status": "string",
-      "message": "string"
     },
     "SetupRowView": {
       "stage": "string",
@@ -820,24 +808,6 @@
     {
       "send": "deckWipe",
       "answers": "DeckState"
-    },
-    {
-      "source": "importedFollow",
-      "live": true,
-      "answers": "ImportedFollow",
-      "substitute": {
-        "default": {
-          "address": "",
-          "block": -1
-        }
-      }
-    },
-    {
-      "send": "mailOpenReview",
-      "options": {
-        "url": "string"
-      },
-      "answers": "MailAck"
     },
     {
       "source": "voiceSetupFacts",

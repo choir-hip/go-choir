@@ -6,6 +6,11 @@
 shape MailNote
   text: string
 
+// Opening the approval page (mail.ts `mailReviewOpen`): opened, or refused with the words.
+shape MailAck
+  status: string
+  message: string
+
 shape MailRow
   id: string
   address: string

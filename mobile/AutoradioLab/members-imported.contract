@@ -1,9 +1,8 @@
 // Members file (imported documents): the imported documents place and one document's page, as if written in the root. The data and the acts run in app.ts (imported.ts;
-// shapes in imported-types.contract): a document is a file on the person's computer, listed, opened and imported through the Files client. Two names are the Swift package's, because
-// they are audio (interface/imported.json): `importedFollow` (the block the radio is reading now) and `importedHand` (hands the words to the player; the audio is native).
+// shapes in imported-types.contract): a document is a file on the person's computer, listed, opened and imported through the Files client. Reading aloud hands the words to the shared
+// radio (radioHandWords); no name here is the Swift package's.
 // Every name a child component injects is in the reader-documents band of the `provide` list in app.contract. Prefixes: lb = the place, ld = one document.
-use importedFollow, ImportedFollow, ImportedHanded from "@choir/autoradio"
-use ImportedList, ImportedDocInfo, ImportedSection, ImportedFind, ImportedLocate, ImportedAck from "./imported-types.contract"
+use ImportedList, ImportedDocInfo, ImportedSection, ImportedFind, ImportedAck, ImportedHanded from "./imported-types.contract"
 
 members Autoradio
   // ------------------------------------------------------------------ the imported documents place (imported:)
@@ -23,9 +22,6 @@ members Autoradio
   // The chapter or page on screen as blocks, and what the find box found: asked only once the document is known.
   resource ldChap = importedSection(ldInfo.id != "" ? pg.top : "", ldSec, acs.state) as shape ImportedSection else empty()
   resource ldFound = importedFind(ldInfo.id != "" ? pg.top : "", ldFind) as shape ImportedFind else empty()
-  // The block the radio is reading now (native: only the player knows), and the section it is in (shared: the document's own).
-  resource ldFollow = importedFollow() as shape ImportedFollow else empty()
-  resource ldFollowAt = importedLocate(ldFollow.address, ldFollow.block) as shape ImportedLocate else empty()
   // The answer of a place, a read aloud or a queue: a read aloud or queue answers the words, and the player is handed them.
   mutation ldAck as shape ImportedAck then ldAcked
   mutation ldHanded as shape ImportedHanded refreshes rpulse
@@ -47,8 +43,7 @@ members Autoradio
   state ldFindDraft = ""
   state ldFind = ""
   state ldSeen = ""
-  state ldFollowSeen = -1
-  // A block to bring into view once its chapter is on screen (a found passage, the place left off, the block being read); -1 for none.
+  // A block to bring into view once its chapter is on screen (a found passage, the place left off); -1 for none.
   state ldScrollTo = -1
   derive ldShowPages = ldInfo.kind == "pdf" and ldText == false and ldInfo.src != ""
 
@@ -63,17 +58,7 @@ members Autoradio
     ldToc = false
     ldFindDraft = ""
     ldFind = ""
-    ldFollowSeen = -1
     ldScrollTo = ldInfo.position > 0 ? ldInfo.position : -1
-  // The chapter or page follows the voice while the radio reads this document.
-  task ldFollowTask when ldFollow.address == pg.top and ldFollow.block != ldFollowSeen and ldFollowAt.address == ldFollow.address and ldFollowAt.block == ldFollow.block
-    after(10, ldFollowGo)
-  action ldFollowGo
-    ldFollowSeen = ldFollow.block
-    ldSec = ldFollowAt.section
-    ldScrollTo = ldFollow.block
-    // The place left off is where the voice is.
-    send ldAck = importedPlace(pg.top, ldFollowAt.section, ldFollow.block)
   task ldScrollTask when ldScrollTo >= 0 and ldChap.status == "ready" and ldScrollTo >= ldChap.start and ldScrollTo < ldChap.start + ldChap.blocks.length
     after(60, ldScrollGo)
   action ldScrollGo

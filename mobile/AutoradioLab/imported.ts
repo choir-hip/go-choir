@@ -5,8 +5,7 @@
 // The phone keeps only what it can fetch again (under app:/cache/files/<key>/: the text as blocks, and the original for the page view and the share sheet) and the
 // reading place of each document (app:/data/imported-places.json: small, per device).
 //
-// Native: only audio. `importedReadAloud` and `importedQueue` answer the words (one line per block from a block to the end) as data; the page hands them to the player
-// (the native send importedHand) and the player says which block it is reading (the native source importedFollow).
+// `importedReadAloud` and `importedQueue` answer the words (one line per block from a block to the end) as data; the page hands them to the shared radio (radioHandWords).
 //
 // Ways this can fail (each is a test in imported.test.ts):
 //  1. Nothing chosen, a name that is not a PDF or an e-book, a file over what the phone can send: refused with a sentence, nothing sent.
@@ -34,7 +33,6 @@ export type ImportedList = Result<'importedList'>;
 export type ImportedDocInfo = Result<'importedDoc'>;
 export type ImportedSection = Result<'importedSection'>;
 export type ImportedFind = Result<'importedFind'>;
-export type ImportedLocate = Result<'importedLocate'>;
 export type ImportedAck = Result<'importedPlace'>;
 
 export const PLACES_FILE = 'app:/data/imported-places.json';
@@ -281,12 +279,6 @@ export async function importedFind(address: string, query: string, storage?: Sto
   const t = h.d.text;
   const hits = M.search(await indexOf(h.d), q, 50).map((n) => ({ block: n, section: t.blocks[n].section, label: t.sections[t.blocks[n].section]?.title ?? '', snippet: M.snippet(t.blocks[n].text, q) }));
   return { query: q, hits, message: hits.length === 0 ? `Nothing in this document matches “${q}”.` : '' };
-}
-
-/** The section a block is in: the page follows the voice by it. */
-export async function importedLocate(address: string, block: number, storage?: Storage, net: F.Net = F.realNet): Promise<ImportedLocate> {
-  const h = address === '' || block < 0 ? null : await held(address, storage, net);
-  return { address, block, section: h ? M.sectionOf(h.d.text, block) : 0 };
 }
 
 /** The place left off. block < 0: the start of `section` (a chapter or page just opened). */

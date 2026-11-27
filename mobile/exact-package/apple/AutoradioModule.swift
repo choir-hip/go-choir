@@ -156,14 +156,12 @@ public final class AutoradioModule: ExactPackage {
         registerSpine()
         registerBar()
         registerReader()
-        registerMail()
         registerSettings()
         registerOnboarding()
         registerVoice()
         registerQueue()          // lane autoradio-queue
         registerDeck()           // the deck: shared code commands it and reads its journal (Deck.swift)
         registerTakes()          // takes: record, review, publish (station L7)
-        registerImported()
         registerTalk()
         registerRetrieval()     // the voice turn's ask for passages (shared code answers) and the embedding model's ops
         Task { [choir] in await choir?.refresh() }

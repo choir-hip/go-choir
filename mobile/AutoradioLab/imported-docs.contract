@@ -7,7 +7,7 @@
 // doc-prev, doc-next, doc-position, doc-close).
 // testIds here: reader-import, reader-list, reader-row-<id>, reader-empty, reader-error, reader-note, doc-block-<n>, doc-frame, doc-pages,
 // doc-prev-end, doc-next-end; page-title on the places and on a document that is opening or missing.
-use Theme, PageList, ImportedFollow from "@choir/autoradio"
+use Theme, PageList from "@choir/autoradio"
 use ImportedList, ImportedDocInfo, ImportedSection, ImportedBlock from "./imported-types.contract"
 use SkeletonBody from "./transitions.contract"
 use PageScroll, BarClear, Emerge, PageHeader, SectionHeader, RowRule, PlainList, LineRow, ChipFace, Btn, EmptyState, dyn from "./ui.contract"
@@ -48,18 +48,17 @@ component ImportedDocsPage
       // The system file picker (Add) opens this input; its copy lands under app:/tmp/picked.
       input type="file" id="lib-pick" change=lbPicked aria-label="Choose a PDF or an EPUB to import" width=1 height=1 opacity=0
 
-// One paragraph, heading, quote or list item. A tap chooses it (read aloud starts here); the block the radio reads is lit too. Choosing
+// One paragraph, heading, quote or list item. A tap chooses it (read aloud starts here); the block the radio reads is lit. Choosing
 // changes only the background colour: the padding is the same either way, so nothing moves.
 component DocBlockView
   inject
     th: Theme
     pg: PageList
     ldBlock: number
-    ldFollow: ImportedFollow
     ldPlace: action
   props
     b: ImportedBlock
-  derive lit = b.n == ldBlock or (ldFollow.address == pg.top and ldFollow.block == b.n)
+  derive lit = b.n == ldBlock
   derive isHead = b.kind == "heading"
   view
     button press=ldPlace(b.n) testId=`doc-block-${b.n}` appearance="none" width="100%"

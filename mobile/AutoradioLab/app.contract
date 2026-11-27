@@ -212,8 +212,6 @@ component Autoradio
     ldInfo
     ldChap
     ldFound
-    ldFollow
-    ldFollowAt
     ldHanded
     ldAcked
     ldAck

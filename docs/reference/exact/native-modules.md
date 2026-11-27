@@ -364,8 +364,8 @@ moves too.
 ## Mail on the phone: sealed in shared code (2026-11-19, lane `exact-mail`)
 
 The Mail pages, the signed-in requests to the listener's computer and the phone's copy of the mail are `mail.ts` and its siblings in `mobile/AutoradioLab`
-(`mail-model.ts` pure data, `mail-sanitize.ts` the allowlist HTML cleaner, `mail-seal.ts` the cipher, `mail-store.ts` the copy). Three sends stay native
-(`mailOpenReview`, `mailRead`, `mailAsk`: the in-app web view, the radio's voice, the Swift signal log).
+(`mail-model.ts` pure data, `mail-sanitize.ts` the allowlist HTML cleaner, `mail-seal.ts` the cipher, `mail-store.ts` the copy). The approval page opens in the radio's shared web layer
+(`mail.ts` `mailReviewOpen`; the native `mailOpenReview` is gone). Two sends stay native (`mailRead`, `mailAsk`: the radio's voice, the Swift signal log).
 
 - **At rest.** The cipher is the platform's: ONE native pair on the app module, `mailSeal` and `mailOpen` (`Choir/MailSeal.swift`, CryptoKit AES-256-GCM), with a key
   made and kept natively in the Keychain (its own item, this device only, after first unlock) and never returned to shared code; Exact's `crypto.subtle` has digests

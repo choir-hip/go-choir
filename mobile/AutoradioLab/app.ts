@@ -284,12 +284,11 @@ const sources: Sources = {
   editionToggle: ([label], _s, storage) => picks.toggle(storage, label),
   editionExpand: ([label], _s, storage) => picks.expand(storage, label),
   editionAdd: ([text], _s, storage) => picks.addTyped(storage, text),
-  // Imported documents (imported.ts): PDFs and e-books that are files on the listener's computer, read through the Files client. The audio is native (importedFollow, importedHand).
+  // Imported documents (imported.ts): PDFs and e-books that are files on the listener's computer, read through the Files client. Reading aloud is the shared radio's (radioHandWords).
   importedList: ([at, _acct], _s, storage) => imported.importedList(at, storage),
   importedDoc: ([address, _acct], _s, storage) => imported.importedDoc(address, storage),
   importedSection: ([address, index, _acct], _s, storage) => imported.importedSection(address, index, storage),
   importedFind: ([address, query], _s, storage) => imported.importedFind(address, query, storage),
-  importedLocate: ([address, block], _s, storage) => imported.importedLocate(address, block, storage),
   importedPlace: ([address, section, block], _s, storage) => imported.importedPlace({ address, section, block }, storage),
   importedReadAloud: ([address, section, block], _s, storage) => imported.importedReadAloud({ address, section, block }, storage),
   importedQueue: ([address, section, block], _s, storage) => imported.importedQueue({ address, section, block }, storage),
@@ -303,6 +302,8 @@ const sources: Sources = {
   mailCompose: ([address], _store, storage) => mail.mailCompose(address, { storage }),
   mailSaveDraft: ([address, to, subject, body]) => mail.mailSaveDraft(address, to, subject, body),
   mailApprovalEmail: ([address, draft]) => mail.mailApprovalEmail(address, draft),
+  // The approval page opens in the radio's shared web layer (the one the bar reads), only on the paper's origin (mail.ts reviewLink).
+  mailReviewOpen: ([url], _s, storage, native) => mail.mailReviewOpen(url, (u) => radioBridge.queueAct(storage as never, native as never, 'openWeb', u)),
   mailMarkUnread: ([address]) => mail.mailMarkUnread(address),
   mailNoteSelect: ([last, unreadMsg, askMsg, spoken, reviewMsg]) => ({ text: mail.noteOf(last, unreadMsg, askMsg, spoken, reviewMsg) }),
   // Retrieval (retrieval-live.ts): the voice turn's ask (native raises it, the answer goes back through one native op) and the launcher's paper-wide search.

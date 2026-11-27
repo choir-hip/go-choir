@@ -1,13 +1,13 @@
 // Lane members file (mail): this lane's states, derives, resources, mutations and actions, as if written in the root.
 // The sources are answered by app.ts (mail.ts), with positional arguments (named ones belong to a package's sources): the shapes are in mail-types.contract.
-// One name is still the Swift package's (mailOpenReview opens the approval page in the app's own web view); its shape, MailAck, stays in exact-package/interface/mail.json. "Read this to me" is shared code's radio (radioListen, radio-bridge.ts).
+// The approval page opens in the radio's shared web layer (mailReviewOpen, mail.ts). "Read this to me" is shared code's radio (radioListen, radio-bridge.ts).
 //
 // One resource per page family, each asked for the top page's address and answering "idle" at once for any other
 // address, so only the page in front does any work: mbx (a mailbox), mmsg (a message), mcmp (a compose page: a reply,
 // a new message, or an existing draft). The compose fields are local state that takes the resource's seed (the
 // reply's recipient, subject and quoted text) the first time the person edits; after that the person's words win.
-use mailOpenReview, choirAsk, MailAck, SettingsAck from "@choir/autoradio"
-use MailNote, MailBoxView, MailMessageView, MailComposeView, MailSyncView from "./mail-types.contract"
+use choirAsk, SettingsAck from "@choir/autoradio"
+use MailAck, MailNote, MailBoxView, MailMessageView, MailComposeView, MailSyncView from "./mail-types.contract"
 
 members Autoradio
   // The mailbox's tab is page state, not a page: tapping a tab changes `mboxSel` in the same action, so the frame (title, tabs, counts)
@@ -27,7 +27,7 @@ members Autoradio
   resource mcmp = mailCompose(pg.top) as shape MailComposeView else empty()
   mutation mdr as shape MailComposeView refreshes mbx
   mutation mak as shape MailAck
-  mutation mro as shape MailAck
+  mutation mro as shape MailAck refreshes qv, rpulse
   mutation mrd as shape SettingsAck refreshes rpulse
   // Marking unread asks the computer, then the mailbox and the message are read again (the message is not marked read a second time: mail.ts).
   mutation mun as shape MailAck refreshes mbx, mfr, mmsg
@@ -98,7 +98,7 @@ members Autoradio
   action openMailReview(url: string)
     mailNoteFor = pg.top
     mailNoteSrc = "review"
-    send mro = mailOpenReview(url=url)
+    send mro = mailReviewOpen(url)
 
   action toggleMailQuoted
     mailQuotedFor = mailQuotedFor == pg.top ? "" : pg.top
