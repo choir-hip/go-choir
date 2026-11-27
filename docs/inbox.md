@@ -332,3 +332,13 @@ ways of perception"
 over the agent and the harness than we can safely. need to recalibrate to
 actually existing agents, external agents like claude code, and the yaegi
 rlm repl design of choir desks"
+
+**Autopaper updates documents, not its model or its trust.** "with
+autopaper today we have updated versions of documents. but we dont have
+much updated model of the world (lesson) and trust-updating which shifts
+your attention map routing that weights source inclusions"
+
+**Musings find their place; the irrelevant fades.** "the idea being that
+all of my musings get updated into the right docs which naturally get
+hooked into their correct place in the campaign while plans, sources,
+topics, ideas, speakers no longer relevant fade out of attention"

@@ -163,6 +163,8 @@ it.
 | 1.2 | backups in a third place | host |
 | 1.3 | discovery: search, explore, podcast explore, the first recommender | phone and server |
 | 1.3 | monitoring as a desk, with public figures | server |
+| 1.3 | Autopaper's lesson and trust strokes: a kept model of the world that a settled claim adds to, and a per-source weight moved by outcomes that decides which sources enter the context (owner, 2026-11-27; start from docs/design/autopaper-learning-materiality-2026-11-04.md) | server |
+| 1.3 | the owner's statements routed from docs/inbox.md into the document that governs each subject, and each linked from the campaign row it bears on | docs |
 | 1.4 | service VMs; Node A as an independent host | host |
 | 1.4 | the transcription and pictures services | host |
 | 1.5 | the desktop app with computer use | desktop |
