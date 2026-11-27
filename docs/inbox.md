@@ -342,3 +342,28 @@ your attention map routing that weights source inclusions"
 all of my musings get updated into the right docs which naturally get
 hooked into their correct place in the campaign while plans, sources,
 topics, ideas, speakers no longer relevant fade out of attention"
+
+**The campaign is the world model, and it is a programmable REPL.** "the
+campaign is our world model. and the point isnt to mutate it with
+deterministic code, but to have the world model be a repl that is highly
+programmable, which enables arbitrary concurrency patterns and message
+passing. all sorts of deterministic rules and tools and algorithms and
+data structures then get used by agents over data. the programmability of
+it is essential. now, claude is getting code mode."
+
+**A mission is a forecast; execution scores it.** "the missions get
+predicted as goal docs, and execution scores the prediction. analysis of
+this yields a lesson. this is our world model update."
+
+**Scoring needs its own desk.** "we had an overloaded management desk that
+was doing all this scoring. but really that needs its own desk." (The
+design of 2026-11-24 says management "manages all scoring"; this is newer
+and differs.)
+
+**The rearchitecture the owner does not remember testing.** "now i
+remember that we recently did a big rearchitecture and i dont even
+remember testing it... i didnt even notice it, so maybe it wasnt landed
+meaningfully?!?!" (Answer on 2026-11-27, from
+docs/design/desks-and-engine-2026-11-24.md: it was designed and two of its
+six steps landed; the capture desk, the creation verb, the scoring move
+and the root as designed are not built.)
