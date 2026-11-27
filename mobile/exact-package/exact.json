@@ -27,7 +27,6 @@
       "message": "string"
     },
     "ChoirPlayer": {
-      "signedIn": "bool",
       "loading": "bool",
       "title": "string",
       "passage": "string",
@@ -54,7 +53,6 @@
       "blockCount": "number",
       "blockFraction": "number",
       "running": "bool",
-      "signedIn": "bool",
       "playing": "bool",
       "title": "string",
       "message": "string",
@@ -622,7 +620,6 @@
       "answers": "ChoirPlayer",
       "substitute": {
         "default": {
-          "signedIn": false,
           "loading": false,
           "title": "",
           "passage": "",
@@ -632,10 +629,6 @@
           "message": ""
         }
       }
-    },
-    {
-      "send": "choirRefresh",
-      "answers": "LabState"
     },
     {
       "send": "choirTalkCancel",
@@ -666,7 +659,6 @@
           "blockCount": 0,
           "blockFraction": 0,
           "running": false,
-          "signedIn": false,
           "playing": false,
           "title": "",
           "message": "",

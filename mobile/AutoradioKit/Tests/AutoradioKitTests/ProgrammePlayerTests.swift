@@ -191,7 +191,7 @@ final class SegmentedDocumentTests: XCTestCase {
         var d = segmentedDocument(["One.\n\nTwo.", "Three."], kinds: ["story", "headlines"])
         d.segments[0].cites = [ProgrammeCite(ref: "pub:harbour-1", role: "subject", label: "The harbour story"), ProgrammeCite(ref: "pub:no-label", role: "quoted", label: "")]
         var snap = LabSnapshot(); snap.blockIndex = 1; snap.blockCount = 3; snap.running = true
-        var pv = ChoirPlayerView(); pv.signedIn = true; pv.playing = true
+        var pv = ChoirPlayerView(); pv.playing = true
         let tr = BarTracker()
         let r = tr.radioInfo(player: pv, snapshot: snap, document: d, now: Date())
         XCTAssertEqual(r.title, "Title 0")

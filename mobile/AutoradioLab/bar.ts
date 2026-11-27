@@ -19,7 +19,7 @@ export const REVISED_WINDOW = 6;    // seconds a revision holds the bar
 export const PICK_A_STORY = 'Pick a story below.';
 
 export type BarInfo = {
-  state: string; text: string; playing: boolean; talking: boolean; signedIn: boolean; handsFree: boolean; progress: number;
+  state: string; text: string; playing: boolean; talking: boolean; handsFree: boolean; progress: number;
   question: string; answerId: string; answerText: string; answerLabel: string; answerState: string; answerNote: string; canRetry: boolean; answering: boolean;
   /** Seconds until a timed state ends (0: none), so the contract asks again then and not before. */
   until: number;
@@ -66,7 +66,7 @@ function plain(stage: string, message: string): string {
 export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): BarInfo {
   const f = obj(rawFacts);
   now = now ?? num(f.at);
-  const b: BarInfo = { state: 'idle', text: '', playing: bool(f.playing), talking: false, signedIn: bool(f.signedIn), handsFree: bool(f.handsFree), progress: 0, question: '', answerId: '', answerText: '', answerLabel: '', answerState: '', answerNote: '', canRetry: false, answering: false, until: 0 };
+  const b: BarInfo = { state: 'idle', text: '', playing: bool(f.playing), talking: false, handsFree: bool(f.handsFree), progress: 0, question: '', answerId: '', answerText: '', answerLabel: '', answerState: '', answerNote: '', canRetry: false, answering: false, until: 0 };
   const blockCount = Math.max(0, Math.floor(num(f.blockCount)));
   if (blockCount > 0) b.progress = Math.min(1, Math.max(0, (Math.max(0, num(f.blockIndex)) + Math.max(0, num(f.blockFraction))) / blockCount));
 

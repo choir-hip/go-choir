@@ -87,7 +87,7 @@ struct BarFacts: Codable {
     var phase = "playing", transcript = ""
     var blockIndex = 0, blockCount = 0
     var blockFraction = 0.0
-    var running = false, signedIn = false, playing = false
+    var running = false, playing = false
     var title = "", message = ""
     var handsFree = false
     var holding = ""
@@ -102,7 +102,7 @@ extension AutoradioModule {
         f.at = Date().timeIntervalSince1970
         f.phase = s.phase; f.transcript = s.transcript
         f.blockIndex = s.blockIndex; f.blockCount = s.blockCount; f.blockFraction = BarTracker.shared.blockFraction(s)
-        f.running = s.running; f.signedIn = p.signedIn; f.playing = p.playing; f.title = p.title; f.message = p.message
+        f.running = s.running; f.playing = p.playing; f.title = p.title; f.message = p.message
         f.handsFree = HandsFreeSwitch.shared.isOn
         f.holding = raw.holding; f.revisedAt = raw.revisedAt; f.errorAt = raw.errorAt; f.errorStage = raw.errorStage; f.errorMessage = raw.errorMessage
         return f

@@ -28,7 +28,6 @@ func registerChoirStages(_ r: StageRegistry) { StageRegistry.registerChoirStages
 // MARK: Views for the host (plain value types)
 
 public struct ChoirPlayerView: Codable, Sendable {
-    public var signedIn = false
     public var loading = false
     public var title = ""
     public var passage = ""
@@ -140,7 +139,6 @@ public final class ChoirApp: @unchecked Sendable {
 
     /// After launch or sign-in: the computer's connection is warmed. Nothing plays here, and the paper's story list is shared code's (radio-bridge.ts).
     public func refresh() async {
-        guard signIn.signedIn else { onChange?(); return }
         await ChoirEnvironment.shared.warm(baseURL: signIn.baseURL)
     }
 
@@ -232,7 +230,6 @@ public final class ChoirApp: @unchecked Sendable {
         let snap = runtime.snapshot()
         let p = runtime.player
         var v = ChoirPlayerView()
-        v.signedIn = signIn.signedIn
         lock.lock(); v.loading = loading; v.message = message; lock.unlock()
         let onAir = onMainThread { Deck.shared.current != nil || RadioBridge.shared.hasOnAir() }
         v.title = p.document.title

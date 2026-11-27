@@ -121,7 +121,6 @@ component Autoradio
     signedOutTick
     hc
     noNative
-    refreshRadio
     radioPlay
     playStory
     listen

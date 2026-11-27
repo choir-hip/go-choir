@@ -216,7 +216,6 @@ public final class AutoradioModule: ExactPackage {
         if let h = handlers[name] { h(args, reply); return }
         switch name {
         case "choirPlayer": reply(json(choir.playerView()))
-        case "choirRefresh": Task { [choir] in await choir?.refresh() }; reply(state())
         case "choirTalkCancel": runtime.cancelTalk(); reply(state())      // Cancel beside Send while listening: discard, call nothing
         default: reply(["error": "NotSupportedError"])
         }

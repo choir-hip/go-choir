@@ -12,9 +12,6 @@ public final class ChoirSignIn: @unchecked Sendable {
         self.env = env; self.baseURL = baseURL
     }
 
-    /// The voice code still reads the same Keychain item shared code keeps. The app's visible auth state is the shared `choirAuth` source.
-    public var signedIn: Bool { env.keys.get(KeyAccount.apiKey) != nil }
-
     /// Clear the phone at once: the key, then the account's state (AccountWipe); the server revoke is shared code's (account.ts `revokeDirect`, made after this with the key it read before).
     public func signOut() async {
         env.keys.delete(KeyAccount.apiKey); env.keys.delete(KeyAccount.keyID); env.keys.delete(KeyAccount.computerID)

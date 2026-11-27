@@ -20,7 +20,7 @@ import { nextGeneration } from './api.ts';
 
 const T0 = 1_000_000;
 const facts = (o: Record<string, unknown> = {}) => ({
-  phase: 'playing', transcript: '', blockIndex: 0, blockCount: 0, blockFraction: 0, running: false, signedIn: true, playing: false, title: '', message: '', handsFree: false,
+  phase: 'playing', transcript: '', blockIndex: 0, blockCount: 0, blockFraction: 0, running: false, playing: false, title: '', message: '', handsFree: false,
   holding: '', revisedAt: 0, errorAt: 0, errorStage: '', errorMessage: '', onAir: true, waiting: false, remote: false, remotePlaying: false, remoteTitle: '', remoteFraction: 0, ...o,
 });
 const play = (o: Record<string, unknown> = {}) => facts({ playing: true, title: 'Harbor strike ends', running: true, blockCount: 4, ...o });
@@ -128,8 +128,8 @@ describe('the bar state', () => {
     expect(barInfo(play({ phase: 'candidate', blockIndex: 1, blockFraction: 0.5 }), none, at()).progress).toBeCloseTo(0.375, 9);   // carried in every state
   });
   test('B7 the facts the bar passes on: signed in, playing, hands-free', () => {
-    expect(barInfo(play({ handsFree: true }), none, at())).toMatchObject({ signedIn: true, playing: true, handsFree: true });
-    expect(barInfo(facts({ signedIn: false }), none, at())).toMatchObject({ signedIn: false, playing: false, handsFree: false });
+    expect(barInfo(play({ handsFree: true }), none, at())).toMatchObject({ playing: true, handsFree: true });
+    expect(barInfo(facts({ playing: false }), none, at())).toMatchObject({ playing: false, handsFree: false });
   });
 });
 

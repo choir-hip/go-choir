@@ -10,7 +10,7 @@ shapes = {
                  "blockIndex": N, "blockCount": N, "blockText": S, "residentMB": N, "thermal": S, "message": S, "micActive": B},
     # Listener path (Choir client)
     "ChoirAuth": {"signedIn": B, "baseURL": S, "status": S, "message": S},
-    "ChoirPlayer": {"signedIn": B, "loading": B, "title": S, "passage": S, "playing": B, "talking": B,
+    "ChoirPlayer": {"loading": B, "title": S, "passage": S, "playing": B, "talking": B,
                     "heard": S, "message": S},
 }
 
@@ -30,9 +30,8 @@ empty_state = {"running": False, "paused": True, "phase": "playing", "level": "p
                "configName": "", "blockIndex": 0, "blockCount": 0, "blockText": "", "residentMB": 0, "thermal": "nominal",
                "message": "", "micActive": False}
 names = [
-    src("choirPlayer", "ChoirPlayer", default={"signedIn": False, "loading": False, "title": "", "passage": "",
+    src("choirPlayer", "ChoirPlayer", default={"loading": False, "title": "", "passage": "",
         "playing": False, "talking": False, "heard": "", "message": ""}),
-    snd("choirRefresh"),
     snd("choirTalkCancel"), snd("choirHandsFreeToggle"),
     snd("choirAsk", {"text": S, "aim": S}),
 ]

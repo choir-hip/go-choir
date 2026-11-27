@@ -1,7 +1,6 @@
 // The integrator's members of the root: the shared Choir sign-in state and the native player (the voice lab page, its stages, parameters, trace and
 // audio switch are gone: owner, 2026-11-19, "get rid of lab pages"). choirAuth is answered by app.ts; only its shape comes from the package.
 use choirPlayer from "@choir/autoradio"
-use choirRefresh from "@choir/autoradio"
 use ChoirAuth, ChoirPlayer from "@choir/autoradio"
 use LabState, SettingsAck from "@choir/autoradio"
 use SignOutResult, SignInView, SignInEnd from "./account-types.contract"
@@ -145,7 +144,6 @@ members Autoradio
     authEmail = ""
     authCode = ""
     send signedOpen = signInOpen()
-    send acct = choirRefresh()
   // Only a finished attempt puts the screen away: not while any sign-in call is still answering (a stale "done" before a new attempt starts must not close the new screen).
   task authDone when siv.phase == "done" and authOpen and not pending(siv) and not pending(signedRun) and not pending(revRun) and not pending(signedOpen) key=sivTick
     after(400, finishAuth)
@@ -166,8 +164,6 @@ members Autoradio
     // A signed-out phone starts the next sign-in from idle: the last attempt's done is not carried across.
     send signedOpen = signInOpen()
     sivTick = sivTick + 1
-  action refreshRadio
-    send acct = choirRefresh()
   action radioPlay
     send racct = radioPlayPause()
   // The page that names the story passes its title with the route: a story that is not in the radio's list still has a name on the lock screen.

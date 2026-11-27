@@ -13,7 +13,7 @@ const handle = (later: (r: { op: string }) => Promise<unknown>) => ({ available:
 
 describe('hostMode', () => {
   test('H1 a handle that answers the probe is native, and stays native', async () => {
-    adoptNative(handle(async () => ({ state: 'present' })), 'x');
+    adoptNative(handle(async () => ({ ok: true })), 'x');
     expect(await hostMode(20)).toBe('native');
     adoptNative(handle(async () => { throw new Error('NotSupported'); }), 'y');                     // never replaces a usable one; and the decision is kept
     expect(await hostMode(20)).toBe('native');
@@ -22,7 +22,7 @@ describe('hostMode', () => {
     expect(await hostMode(30)).toBe('none');
     resetHost(); resetSeam();
     const p = hostMode(200);
-    setTimeout(() => adoptNative(handle(async () => ({ state: 'absent' })), 'late'), 30);
+    setTimeout(() => adoptNative(handle(async () => ({ ok: true })), 'late'), 30);
     expect(await p).toBe('native');
   });
   test('H3 a handle that never answers, or throws NotSupported, is none', async () => {

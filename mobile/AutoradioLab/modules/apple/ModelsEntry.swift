@@ -4,10 +4,9 @@
 // The kit (package module ExactPkg_autoradio) finds AutoradioModelsRegistrar by name; see ExternalModels.swift there.
 import Foundation
 import ExactPkg_autoradio
-import Security
 
-// `keystate` (read only, no data returned): present | absent | unreadable for the sign-in key. Shared code (host.ts) uses it as the probe "is the app module here", and the sign-out reconcile does not (it reads the Exact
-// secret store). The key itself is kept by shared code as the Exact secrets choir.key, choir.key-id and choir.computer-id (AutoradioLab/app-signin.ts); the voice code reads the same Keychain items (KeychainKeyStore).
+// The key is kept by shared code as the Exact secrets choir.key, choir.key-id and choir.computer-id (AutoradioLab/app-signin.ts). Shared code is where pages learn "signed in" (choirAuth); this module has no reader of it:
+// the voice code reads the same Keychain items (KeychainKeyStore, TurnGate.keyPresent) and nothing else here does. Shared code (host.ts) probes "is the app module here" with `mailCan`, which reads no key.
 //
 // The mail cipher (Choir/MailSeal.swift): `mailSeal`, `mailOpen`, `mailForget`, a platform cipher shared code has none of; the key never leaves the Keychain.
 //
@@ -16,9 +15,7 @@ import Security
 // The second native call, `{op: "signOut"}` (later only), answers `{done: Bool}` once the native half of sign-out has finished. Sign-out is led
 // by shared code (AutoradioLab/account.ts); the reason it is native is that the Swift stores
 // (AccountWipe: the voice's and the pages not yet moved) are wiped by Swift, and the voice code deletes the Keychain items there. It goes with them when those stores move.
-// The sign-out reconcile (AutoradioLab/account.ts) needs the stored key as THREE answers, which the reader's `nil` cannot give: `keystate` -> present (the item is
-// there), absent (the Keychain answered item-not-found) or unreadable (locked before the first unlock, or any other status). Read only: no data is returned, nothing
-// is written, moved or re-keyed. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores and mail key go, the stored key stays.
+// The sign-out reconcile (AutoradioLab/account.ts) reads the stored key from the Exact secret store, not from here. `wipe` is the native half of an ACCOUNT CHANGE: the old account's Swift stores and mail key go, the stored key stays.
 //
 // The take recorder's ops (`takeState` ... `takeAudio`, AutoradioModule+Takes.swift `takeOp`): shared code (AutoradioLab/take-session.ts) leads the Takes section; the reason they are native is the
 // microphone, the radio's gate, the recogniser and the player (the voice), and the steer queue. Nothing is carried from earlier builds' files: they are never read.
@@ -26,10 +23,6 @@ import Security
 // The page in front, `{op: "pageText", address, title, dek, kind, blocks}` (later only): the shared reader hands the voice the page it is showing (HeldPages); nothing is read back. It goes when the voice's page text is its own.
 //
 final class ModelsModule: ExactModule {
-    static func keyState() -> String {
-        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: KeychainKeyStore.defaultService, kSecAttrAccount as String: KeyAccount.apiKey, kSecMatchLimit as String: kSecMatchLimitOne]
-        switch SecItemCopyMatching(q as CFDictionary, nil) { case errSecSuccess: return "present"; case errSecItemNotFound: return "absent"; default: return "unreadable" }
-    }
     override func call(_ request: [String: Any]) -> [String: Any] {
         #if targetEnvironment(simulator)
         // The real-data proof only (compiled out of device builds): the `proof-key` file is imported into the Keychain by the package module's init, which can run AFTER the first
@@ -37,7 +30,6 @@ final class ModelsModule: ExactModule {
         // here, before any read of the key, removes that race; the file is deleted by the import, so every later call finds none.
         if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first { ProofKey.importIfPresent(documents: docs, into: KeychainKeyStore()) }
         #endif
-        if (request["op"] as? String) == "keystate" { return ["state": Self.keyState()] }
         return MailSeal().reply(request) ?? [:]
     }
     override func later(_ request: [String: Any], reply plain: ExactReply) {

@@ -6,7 +6,6 @@ shape BarInfo
   text: string
   playing: bool
   talking: bool
-  signedIn: bool
   handsFree: bool
   progress: number
   question: string

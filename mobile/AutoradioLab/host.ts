@@ -13,8 +13,8 @@ const probe = async (probeMs: number): Promise<boolean> => {
   const later = nativeLater();
   if (!later) return false;
   try {
-    const r = await Promise.race([later({ op: 'keystate' }), new Promise<'timeout'>((res) => setTimeout(() => res('timeout'), probeMs))]);
-    return r !== 'timeout' && !!r && typeof (r as { state?: unknown }).state === 'string';
+    const r = await Promise.race([later({ op: 'mailCan' }), new Promise<'timeout'>((res) => setTimeout(() => res('timeout'), probeMs))]);
+    return r !== 'timeout' && !!r && (r as { ok?: unknown }).ok === true;      // `mailCan`: the app module's own answer (MailSeal.reply), no key is read; Android's module refuses the op
   } catch { return false; }
 };
 
