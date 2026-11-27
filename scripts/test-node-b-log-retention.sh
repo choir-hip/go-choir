@@ -115,7 +115,13 @@ json="$(nix eval --json '.#nixosConfigurations.go-choir-b.config' --apply 'c: {
 }' 2>"$root/eval.err")" || { echo "FAIL: nix eval: $(tail -3 "$root/eval.err")"; exit 1; }
 # The sweep script is a store path only a build realises; its text is read
 # from the evaluated derivation.
-sweep_text="$(nix eval --raw '.#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-disk-gc.serviceConfig.ExecStart.text' 2>/dev/null || true)"
+# --no-eval-cache: with the flake's evaluation cache nix tries to realise the
+# script's store path and fails on a machine that cannot build it (seen on the
+# Mac, 2026-11-27: "experimental Nix feature 'dynamic-derivations' is disabled"),
+# so the check passed or failed by the state of a cache. The error is kept and
+# shown, because a hidden one read as "the sweep does not trim the journal".
+sweep_text="$(nix eval --no-eval-cache --raw '.#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-disk-gc.serviceConfig.ExecStart.text' 2>"$root/sweep.err" || true)"
+[ -n "$sweep_text" ] || echo "note: the disk sweep text could not be evaluated: $(tail -2 "$root/sweep.err" 2>/dev/null | tr '\n' ' ')"
 
 if printf '%s' "$json" | SWEEP_TEXT="$sweep_text" python3 -c '
 import json, os, re, shlex, sys
