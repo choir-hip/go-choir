@@ -312,3 +312,16 @@ do big picture planning"
 to documents. literally. the learning engine is a function we approximate.
 thats the whole point, actually. thats what makes it amenable to in context
 meta learning"
+
+**Accumulate, and filter.** "thinking functionally, it should be fine that
+we accumulate docs, if we have the right way to filter them"
+
+**Forgetting and trust.** "forecast act score forget is essentially the
+same. maybe its even tighter. i say trust because thats the positive
+version, that it implies forgetting as loss of trust often leads to
+traumatic memories. a lesson is data. its adding on. even if it is a
+'deletion', its just an instruction for a deletion at some level. all the
+past instructions necessarily exist no matter what. indeed, the separation
+of lesson and trust was the whole idea i was ruminating on. its very deep.
+but trust gets miscalibrated and it stops learning. as trust governs your
+ways of perception"

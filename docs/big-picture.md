@@ -246,11 +246,19 @@ This is a first reading of what each means for a document.
 | --- | --- |
 | Forecast | A plan entry or a design says what it expects before the work, with a probability. |
 | Outcome | Something its author cannot write says what happened: a landing, a deployed proof, a count, the owner's verdict. |
-| Lesson | The most general thing learned is written into the small always-read set. The detail is then archived. This is where forgetting happens. |
-| Trust | A document's authority is earned by its forecasts settling true. A document does not make itself canonical by saying so. |
+| Lesson | The most general thing learned is written down. A lesson is data: it adds, even when what it says is "stop using that". Nothing earlier is erased. |
+| Trust | The filter over everything written: what is read first, what is read on demand, what is not read. It is earned by forecasts settling true, not declared. Forgetting is loss of trust, not deletion. |
 
-The always-read set is what the engine learns into, so it has to stay
-small enough to be read whole every session.
+So documents may accumulate (owner: "it should be fine that we accumulate
+docs, if we have the right way to filter them"). The docs are a log, and
+the always-read set is the view that trust selects from it; that view has
+to stay small enough to be read whole every session. The transform's work
+is the filter, not the moving of files.
+
+Trust can be miscalibrated, and then learning stops, because trust governs
+what is seen (owner). So the filter is itself checked: on a schedule, a
+sample of what it hides is read against outcomes. The deletion week is
+that check.
 
 ## Where this sits in the roadmap
 
