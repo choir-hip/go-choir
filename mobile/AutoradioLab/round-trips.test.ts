@@ -5,21 +5,47 @@
 //  C4 the names `mailOpenReview` and `importedFollow` are gone from the contracts, the interface and the Swift handlers, and the two module files with them.
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { reviewLink, mailReviewOpen, REVIEW_REFUSED } from './mail.ts';
+import { reviewLink, mailReviewOpen, REVIEW_REFUSED, REVIEW_FAILED } from './mail.ts';
+import { queueAct } from './radio-bridge.ts';
 import * as imported from './imported.ts';
 
+const OK = 'https://choir.news/mail/review/x';
 describe('the mail approval page', () => {
-  test('C1 only https on the paper\'s own origin, with no user name, opens', () => {
-    expect(reviewLink('https://choir.news/mail/review/x')).toBe('https://choir.news/mail/review/x');
-    expect(reviewLink('https://choir.news:443/mail/review/x')).toBe('https://choir.news/mail/review/x');
-    for (const bad of ['http://choir.news/mail/review/x', 'https://evil.example/mail/review/x', 'https://choir.news.evil.example/x', 'https://u:p@choir.news/x', 'https://choir.news:8443/x', 'javascript:alert(1)', '', 'not a url'])
+  test('C1 what opens: the paper\'s own origin over https, then / ? # or nothing', () => {
+    for (const good of [OK, 'https://choir.news', 'https://choir.news/', 'https://choir.news?a=1', 'https://choir.news#f', 'https://choir.news/a%20b/c?x=y@z#w']) expect(reviewLink(good)).toBe(good);
+    expect(reviewLink(OK)).toBe(OK);                                  // the string that was checked is the string that opens, never a re-serialised one
+  });
+  test('C1b whitespace, control characters and backslashes are refused (the Swift URL(string:) refused them; a parser would normalise them away)', () => {
+    for (const bad of [' ' + OK, OK + ' ', OK + '\n', 'https://choir\t.news/x', 'https://choir\n.news/x', 'https://choir\r.news/x', 'https://choir.news/a b', 'https:\\\\choir.news\\mail\\review\\x', 'https://choir.news\\@evil.example/x', 'https://choir.news/a\\b', 'https://choir.news/\u0000', 'https://choir.news/\u00e9'])
       expect(reviewLink(bad)).toBe('');
+  });
+  test('C1c a host written another way is refused: percent-encoded, full-width, IDNA-mapped, trailing dot, suffix, substring, userinfo', () => {
+    for (const bad of ['https://choir%2enews/x', 'https://%63hoir.news/x', 'https://\uff43\uff48\uff4f\uff49\uff52.\uff4e\uff45\uff57\uff53/x', 'https://choir\u3002news/x', 'https://choir.news./x', 'https://choir.news.evil.example/x', 'https://evilchoir.news/x', 'https://choir.newsx/x',
+      'https://u@choir.news/x', 'https://@choir.news/x', 'https://u:p@choir.news/x', 'https://choir.news@evil.example/x', 'https://evil.example@choir.news/x', 'https://choir.news:8443/x', 'https://choir.news:/x', 'https://evil.example/https://choir.news/x'])
+      expect(reviewLink(bad)).toBe('');
+  });
+  test('C1d other schemes and shapes are refused: http, relative, protocol-relative, javascript, data, empty, not a string; and (stricter than the Swift, which lower-cased) an upper-case scheme or host and an explicit :443', () => {
+    for (const bad of ['http://choir.news/x', '/x', '//choir.news/x', 'choir.news/x', 'javascript:alert(1)', 'data:text/html,x', 'mailto:a@choir.news', '', 'HTTPS://choir.news/x', 'https://CHOIR.news/x', 'https://choir.news:443/x'])
+      expect(reviewLink(bad)).toBe('');
+    for (const bad of [undefined, null, 1, {}, ['https://choir.news/x'], { toString: () => OK }]) expect(reviewLink(bad)).toBe('');
   });
   test('C2 a link that passes is handed to the shared web layer; a refused one is not', async () => {
     const opened: string[] = [];
-    expect(await mailReviewOpen('https://choir.news/mail/review/x', async (u) => { opened.push(u); })).toEqual({ status: 'opened', message: '' });
+    expect(await mailReviewOpen(OK, async (u) => { opened.push(u); })).toEqual({ status: 'opened', message: '' });
     expect(await mailReviewOpen('https://evil.example/x', async (u) => { opened.push(u); })).toEqual({ status: 'refused', message: REVIEW_REFUSED });
-    expect(opened).toEqual(['https://choir.news/mail/review/x']);
+    expect(await mailReviewOpen(' ' + OK, async (u) => { opened.push(u); })).toEqual({ status: 'refused', message: REVIEW_REFUSED });
+    expect(opened).toEqual([OK]);
+  });
+  test('C2b an opener that fails is a failure, not "opened": it throws, or answers a layer that is not showing the page', async () => {
+    expect(await mailReviewOpen(OK, async () => { throw new Error('x'); })).toEqual({ status: 'failed', message: REVIEW_FAILED });
+    expect(await mailReviewOpen(OK, async () => ({ webUrl: '' }))).toEqual({ status: 'failed', message: REVIEW_FAILED });
+    expect(await mailReviewOpen(OK, async () => ({ webUrl: 'https://other.example/', message: 'Closed.' }))).toEqual({ status: 'failed', message: 'Closed.' });
+    expect(await mailReviewOpen(OK, async () => ({ webUrl: OK }))).toEqual({ status: 'opened', message: '' });
+  });
+  test('C2c the real opener (the radio\'s openWeb) leaves the page in the web layer', async () => {
+    const r = await mailReviewOpen(OK, (u) => queueAct(undefined, undefined, 'openWeb', u));
+    expect(r).toEqual({ status: 'opened', message: '' });
+    expect((await queueAct(undefined, undefined, 'openWeb', OK)).webUrl).toBe(OK);
   });
 });
 

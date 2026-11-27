@@ -48,7 +48,7 @@ component ImportedDocsPage
       // The system file picker (Add) opens this input; its copy lands under app:/tmp/picked.
       input type="file" id="lib-pick" change=lbPicked aria-label="Choose a PDF or an EPUB to import" width=1 height=1 opacity=0
 
-// One paragraph, heading, quote or list item. A tap chooses it (read aloud starts here); the block the radio reads is lit. Choosing
+// One paragraph, heading, quote or list item. A tap chooses it (read aloud starts here) and lights it. Choosing
 // changes only the background colour: the padding is the same either way, so nothing moves.
 component DocBlockView
   inject

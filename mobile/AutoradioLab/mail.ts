@@ -429,18 +429,32 @@ export async function mailSync(address: string, env: C.Env): Promise<SyncView> {
 // THE APPROVAL PAGE opens in the app's own web layer (the radio's `web.url`, which the bar and the content controls read), only on the paper's own origin over https, with no user name or password
 // in it: the server's `review_url` is the paper's page, and nothing else is opened from mail. (It was a native send, `mailOpenReview`, that checked the link and handed it straight back to this code.)
 export const REVIEW_REFUSED = "That link is not on your computer's address.";
-/** The link as it will be opened, or "" when it may not be. */
-export function reviewLink(url: string): string {
-  let u: URL, home: URL;
-  try { u = new URL(url); home = new URL(ORIGIN); } catch { return ''; }
-  if (u.protocol !== 'https:' || u.username !== '' || u.password !== '' || u.hostname.toLowerCase() !== home.hostname.toLowerCase() || u.port !== home.port) return '';
-  return u.href;
+export const REVIEW_FAILED = 'The approval page could not be opened.';
+/** The link to open, or "" when it may not be. STRICT BY CONSTRUCTION: the RAW string is checked before anything parses it (a parser normalises what Swift's `URL(string:)` refused: whitespace, tabs and
+ * newlines, backslashes, percent-encoded and full-width hosts), and the string that is returned is the string that was checked. It must be printable ASCII with no space and no backslash, begin with the app's
+ * own origin LITERAL (`ORIGIN`, https and the exact host, lower case, no explicit port, no user-info, no trailing dot) and continue with `/`, `?`, `#` or nothing; the parsed origin must then equal the home origin.
+ * Stricter than the Swift (`RemoteHost.allows`, which lower-cased the scheme and host and took `:443` as the default port): an upper-case scheme or host and an explicit `:443` are refused. */
+export function reviewLink(url: unknown): string {
+  if (typeof url !== 'string' || !/^[\x21-\x7e]+$/.test(url) || url.includes('\\')) return '';
+  if (!url.startsWith(ORIGIN)) return '';
+  const rest = url.slice(ORIGIN.length);
+  if (rest !== '' && rest[0] !== '/' && rest[0] !== '?' && rest[0] !== '#') return '';
+  try {
+    const u = new URL(url);
+    if (u.origin !== new URL(ORIGIN).origin || u.username !== '' || u.password !== '') return '';
+  } catch { return ''; }
+  return url;
 }
-/** Open the approval page: a link that passes is handed to the shared web layer (`open`: app.ts gives the radio's queueAct "openWeb"); one that does not is refused with the words. */
-export async function mailReviewOpen(url: string, open: (u: string) => Promise<unknown>): Promise<{ status: string; message: string }> {
+/** What the opener answers: the shared web layer's state after the open (`webUrl`, as the radio's queue answer carries it) and an optional message. */
+export type ReviewOpened = { webUrl?: string; message?: string } | void | null;
+/** Open the approval page: a link that passes is handed to the shared web layer (`open`: app.ts gives the radio's queueAct "openWeb"); one that does not is refused with the words; an opener that throws, or
+ * answers that the layer is not showing this page, is a failure with its words (never "opened"). */
+export async function mailReviewOpen(url: unknown, open: (u: string) => Promise<ReviewOpened>): Promise<{ status: string; message: string }> {
   const u = reviewLink(url);
   if (u === '') return { status: 'refused', message: REVIEW_REFUSED };
-  await open(u);
+  let r: ReviewOpened;
+  try { r = await open(u); } catch { return { status: 'failed', message: REVIEW_FAILED }; }
+  if (r && typeof r === 'object' && typeof r.webUrl === 'string' && r.webUrl !== u) return { status: 'failed', message: r.message || REVIEW_FAILED };
   return { status: 'opened', message: '' };
 }
 
