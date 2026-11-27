@@ -38,14 +38,21 @@ grew from 12 files and 632 lines to 13 files and 908.
 
 ## What is not in doubt
 
-Reviewed three times and never faulted:
+Reviewed and not faulted since they were added:
 
-- the order: hands-free off, the turn cancelled, the microphone closed, a
-  bounded wait for shared code, then the key deleted;
 - the hands-free switch refusing under its own lock;
 - the enrolment microphone tap cleared at sign-out;
 - a take refusing to start while a sign-out runs;
 - a request carrying the epoch of the turn that made it.
+
+Correction, the same day: an earlier text of this list included the order of
+sign-out itself. Seat 1's third review, which arrived after this record was
+first written, faults it: when sign-out arrives during a take, the take's
+give-back is scheduled and not awaited, so the session move that follows still
+sees a recording, keeps the microphone open and reports success. The order is
+right; its test for "the microphone is closed" was the move's success and not
+the session's resulting state. That is fixed in the same build. Seat 1 found
+the stuck gate independently as well.
 
 ## The change of approach
 
