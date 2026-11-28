@@ -19,7 +19,7 @@ const PINNED: [string, string, string][] = [
   ["members-onboarding.contract", "task obOfferTask when au.signedIn or acs.state == \"signedOut\" key=acs.state", "runs the first-run offer when signed in or known signed out; does nothing for an unreadable key"],
   ["members-settings.contract", "resource acctInfo = settingsAccount(au.signedIn, acctTick) as shape SettingsAccount else empty()", "source argument; the answer itself asks the key state and words an unreadable key (settings.ts)"],
   ["members-settings.contract", "resource cmpt = settingsComputer(au.signedIn, acctTick) as shape SettingsComputer else empty()", "source argument: skips the computer fetch when false"],
-  ["members-settings.contract", "resource act = activityPage(sfacts, au.signedIn, actTick, cmpt.state, cmpt.updateAvailable, cmpt.checked, current(stime)) with stime.epochAtZero + performanceNow() as shape ActivityInfo else empty()", "source argument: skips the activity fetch when false"],
+  ["members-settings.contract", "resource act = activityPage(sfacts, au.signedIn, actTick, cmpt.state, cmpt.updateAvailable, cmpt.checked) when pg.top.startsWith(\"activity:\") as shape ActivityInfo else empty()", "source argument: skips the activity fetch when false"],
   ["members-settings.contract", "resource about = aboutPage(sfacts, au.signedIn) as shape AboutInfo else empty()", "source argument: the about page shows the flag"],
   ["members-settings.contract", "send cmm = computerAct(\"refresh\", au.signedIn)", "source argument: skips the request when false (no key to ask with)"],
   ["members-settings.contract", "send cmm = computerAct(\"wake\", au.signedIn)", "source argument: skips the request when false (no key to ask with)"],
