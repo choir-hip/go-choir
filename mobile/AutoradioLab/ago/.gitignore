@@ -1,3 +1,4 @@
 /target/
 /.exact/
 /dist/
+/node_modules/

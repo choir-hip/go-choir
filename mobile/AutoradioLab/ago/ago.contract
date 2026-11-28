@@ -1,4 +1,5 @@
 // How long ago a row was, from its own time and the page's date (`now`: Exact's `epochAtZero` plus the page's coarse clock, activity.contract). Its cases are in app.test.contract here
 // (`cd ago && bun exact.mjs test web`, also run by ../ago.test.ts). `known` is false until Exact's date has answered: nothing shows then, never an age from a placeholder.
-// A bad time shows nothing; a row older than a day, or ahead of the clock, shows its UTC stamp (made by the source from the row's own time).
-fn agoText(at: number, now: number, known: bool, stamp: string): string = (!known or at <= 86400000 ? "" : (now - at >= 0 and now - at < 3600000 ? (floor((now - at) / 60000) < 2 ? "a minute ago" : `${floor((now - at) / 60000)} minutes ago`) : (now - at >= 0 and now - at < 86400000 ? (floor((now - at) / 3600000) < 2 ? "an hour ago" : `${floor((now - at) / 3600000)} hours ago`) : stamp)))
+// A bad time shows nothing. A row up to a minute ahead of the clock (it arrived between two steps of the page clock) reads "a minute ago", as 0 s does; a row older than a day, or
+// further ahead, shows its UTC stamp (made by the source from the row's own time).
+fn agoText(at: number, now: number, known: bool, stamp: string): string = (!known or at <= 86400000 ? "" : (now - at > -60000 and now - at < 3600000 ? (floor((now - at) / 60000) < 2 ? "a minute ago" : `${floor((now - at) / 60000)} minutes ago`) : (now - at >= 0 and now - at < 86400000 ? (floor((now - at) / 3600000) < 2 ? "an hour ago" : `${floor((now - at) / 3600000)} hours ago`) : stamp)))

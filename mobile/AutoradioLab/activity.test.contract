@@ -3,7 +3,7 @@
 // exact-facts.test.ts H3 (no resource names the clock or a name that carries it; Activity is asked only with its page on top). agoText's cases are ago/app.test.contract.
 // The web host has no account, so no rows are fetched; what is shown here is the page and its clock (`actNow`: 0 until the page opens, set at open, on Refresh and every 30 s).
 //  A1 before the Activity page is on top its status line is not drawn and the clock is unset; once opened the status line and Refresh are drawn and the clock is set.
-//  A2 the clock does not move for a few seconds, and moves on at 30 s.
+//  A2 the clock stands still between steps (set at open, under a second; the same at +1 s and +29 s, so a per-frame clock fails) and moves on at 30 s.
 //  A3 Refresh moves the tick its source is asked for (`actTick`) and sets the clock again; the page stays answered. (The web host cannot show the source being asked: signed out it answers at once.)
 test "Activity: opens on press, and its clock is set at open and moves every 30 seconds"
   clock data
@@ -17,7 +17,13 @@ test "Activity: opens on press, and its clock is set at open and moves every 30 
   expect tree has "activity-status"
   expect tree has "activity-refresh"
   expect state actNow != 0
-  clock +31000
+  clock +1000
+  clock settle
+  expect state actNow <= 1000
+  clock +28000
+  clock settle
+  expect state actNow <= 1000
+  clock +2000
   clock settle
   expect state actNow >= 30000
   expect no failures

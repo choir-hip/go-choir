@@ -6,7 +6,8 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { activityInfo, activityPage, noFacts } from './activity.ts';
-import { contracts, clockInResources } from './contract-rules.ts';
+import { join } from 'node:path';
+import { clockLines, resourcesNaming, withFixtures } from './contract-rules.ts';
 
 describe('the clock', () => {
   const at = Date.UTC(2026, 10, 25, 12, 0, 0);
@@ -16,7 +17,7 @@ describe('the clock', () => {
     const b = await activityPage(noFacts(), true, 0, '', false, false, async () => body);
     expect(a.desk[0]).toMatchObject({ at, stamp: '25 Nov, 12:00' });
     expect(b).toEqual(a);
-    expect(JSON.stringify(a)).not.toMatch(/ago/);
+    for (const r of [...a.desk, ...a.computer, ...a.paper, ...a.radio, ...a.live]) expect('ago' in r).toBe(false);
     expect(Object.keys(noFacts())).toEqual(['appVersion', 'radio', 'turns']);
   });
   test('H2 the native facts have no clock', () => {
@@ -24,35 +25,35 @@ describe('the clock', () => {
     expect(Object.keys(iface.shapes.SettingsFacts).sort()).toEqual(['appVersion', 'radio', 'turns']);
     expect(readFileSync('../exact-package/apple/AutoradioModule+Settings.swift', 'utf8')).not.toContain('Date()');
   });
-  test('H3 the contract asks exactTime; no resource reads the clock after `with` or in its arguments; Activity waits for its page', () => {
-    const c = readFileSync('members-settings.contract', 'utf8');
+  // THE RULE: a clock value must never reach a resource's arguments, `with` or `when` (Exact asks a source again at every change of any of them; a clock changes every frame).
+  // Before adding a line below, or a name to CLOCK_NAMES, check where its value goes. This is a pin that forces a look, not an analyser: it cannot follow a value, so a person does.
+  const CLOCK_LINES = [
+    'activity.contract: text agoText(ev.at, stime.epochAtZero + actNow, stimeKnown and actNow > 0, ev.stamp) font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted font-variant-numeric="tabular-nums"', // the row's age, drawn from the page clock; reaches no resource
+    'members-mark.contract: let now = performanceNow()', // mkEntered: a local, into mkFrom and mkSince
+    'members-mark.contract: mkT = performanceNow()', // the mark's frame clock (mkStep); read by mkHot and the mark's derives, which no resource names
+    'members-settings.contract: actNow = performanceNow()', // the Activity page's clock, set at open, on Refresh and every 30 s; read only by activity.contract
+    'settings-types.contract: epochAtZero: number', // the shape of exactTime's answer
+    'spine.contract: mkCloseAt = performanceNow()', // when the launcher was closed; read by the mark
+    'spine.contract: mkPressAt = performanceNow()', // when the mark was pressed; read by the mark
+  ];
+  // The names that carry a clock (states, derives, locals): read from the lines above. No resource declaration names one.
+  const CLOCK_NAMES = ['actNow', 'mkT', 'mkSince', 'mkFrom', 'mkPressAt', 'mkCloseAt', 'mkHot', 'mkIdle', 'now'];
+  test('H3 the contract asks exactTime; Activity waits for its page; every line that reads the clock is pinned, and no resource names a clock or a name that carries one', () => {
+    const c = readFileSync(join(import.meta.dir, 'members-settings.contract'), 'utf8');
     expect(c).toContain('resource stime = exactTime()');
     expect(c).toContain('cmpt.checked) when pg.top.startsWith("activity:") as shape ActivityInfo');
-    expect(clockInResources(contracts())).toEqual([]);
+    expect(clockLines(withFixtures())).toEqual(CLOCK_LINES.map((l) => l.replace(/ \/\/.*$/, '').replace(/^(\S+?): /, '$1: ')).sort());
+    expect(resourcesNaming(withFixtures(), [...CLOCK_NAMES, 'performanceNow', 'epochAtZero'])).toEqual([]);
   });
-  test('H3b the guard catches every spelling of the defect (small contracts as strings), and the real contracts pass', () => {
-    const run = (src: string): string[] => clockInResources([{ name: 't.contract', lines: src.split('\n') }]);
-    const caught: Record<string, string> = {
-      'with and performanceNow': 'members A\n  resource r = src(a) with stime.epochAtZero + performanceNow() as shape S',
-      'spaces in the call': 'members A\n  resource r = src(a) with performanceNow ( ) as shape S',
-      'epochAtZero as an argument': 'members A\n  resource r = src(stime.epochAtZero) as shape S',
-      'a derive in the arguments': 'members A\n  derive nowMs = stime.epochAtZero + performanceNow()\n  resource r = src(nowMs) as shape S',
-      'a derive of a derive, in with': 'members A\n  derive a1 = performanceNow() / 1000\n  derive a2 = a1 + 1\n  resource r = src(x) with a2 as shape S',
-      'a fn that reads it, called in when': 'members A\n  fn stamp(): number = performanceNow()\n  resource r = src(x) when stamp() > 5 as shape S',
-      'a state assigned it in an action': 'members A\n  state at0 = 0\n  action step\n    at0 = performanceNow()\n  resource r = src(at0) as shape S',
-      'a state assigned it through a let': 'members A\n  state at0 = 0\n  action step\n    let v = performanceNow()\n    at0 = v\n  resource r = src(x) with at0 as shape S',
-      'a state assigned a derive of it': 'members A\n  derive nowMs = stime.epochAtZero\n  state at0 = 0\n  action step\n    at0 = nowMs + 1\n  resource r = src(at0) as shape S',
-      'a resource over several lines': 'members A\n  resource r = src(a,\n      b)\n    with performanceNow()\n    as shape S',
-      'the page clock actNow in a resource': 'members A\n  state actNow = 0\n  action stepActClock\n    actNow = performanceNow()\n  resource r = src(a) when actNow > 0 as shape S',
-    };
-    for (const [name, src] of Object.entries(caught)) { const r = run(src); expect([name, r.length]).toEqual([name, 1]); }
-    const fine = 'members A\n  state n = 0\n  action bump\n    let t = performanceNow()\n    n = n + 1\n  derive d = n + 1\n  resource r = src(d, n) as shape S\n  resource q = src(a, current(r)) with d as shape S\n  task go when n > 0\n    every(500, bump)';
-    expect(run(fine)).toEqual([]);
-    expect(clockInResources(contracts())).toEqual([]);
+  test('H3b the name check on small contracts: caught in arguments, with, when and over several lines; not for a string, a field or another resource', () => {
+    const run = (src: string): string[] => resourcesNaming([{ name: 't.contract', lines: src.split('\n') }], ['actNow', 'performanceNow']);
+    for (const src of ['  resource r = src(actNow) as shape S', '  resource r = src(a) with actNow as shape S', '  resource r = src(a) when actNow > 0 as shape S', '  resource r = src(a) with performanceNow() as shape S',
+      '  resource r = src(a,\n      b)\n    with actNow\n    as shape S', '  resource r = src(a) when\n      actNow > 5 as shape S']) expect([src, run(src).length]).toEqual([src, 1]);
+    for (const src of ['  resource r = src("actNow") as shape S', '  resource r = src(`actNow ${a}`) as shape S', '  resource r = src(a.actNow) as shape S', '  resource r = src(a) as shape S // actNow\n  state actNow = 0', '  resource r = src(a) as shape S\n  derive d = actNow + 1', '  resource r = src(actNowx) as shape S']) expect([src, run(src)]).toEqual([src, []]);
   });
   test('H4 the age is made where it is drawn, from the row\'s time and Exact\'s date, and not before the date is known', () => {
     const a = readFileSync('activity.contract', 'utf8');
-    expect(a).toContain('agoText(ev.at, stime.epochAtZero + actNow, stimeKnown and actNow > 0, ev.stamp)'); expect(a).not.toContain('performanceNow()');
+    expect(a).toContain('agoText(ev.at, stime.epochAtZero + actNow, stimeKnown and actNow > 0, ev.stamp)'); expect(a).not.toMatch(/performanceNow/);
     expect(readFileSync('ago/ago.contract', 'utf8')).toContain('fn agoText(at: number, now: number, known: bool, stamp: string): string = (!known or at <= 86400000 ? ""');
   });
 });
