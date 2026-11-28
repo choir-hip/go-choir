@@ -66,7 +66,7 @@ reset_state() {
       [ -d "$d" ] && printf '%s' '{"offered":true,"editionDone":true}' > "$d/onboarding.json"
     done
   fi
-  # The edition-picks drill (SEED_PICKS=1) seeds the OLD Swift file with one topic. This build never reads or deletes it: the drill asserts it is still there and nothing of it was adopted.
+  # The edition-picks drill (SEED_PICKS=1) seeds the OLD Swift file with one topic. Shared code never reads it and native removes it at launch: the drill asserts it is gone and nothing of it was adopted.
   if [ -n "${SEED_PICKS:-}" ]; then
     mkdir -p "$S"; printf '%s' '{"topics":["Zzdrillseed"]}' > "$S/edition-topics.json"
   fi
@@ -352,7 +352,7 @@ step logs
 run_drive tour light "" --touch platform
 
 # ---- 3f1. EDITION PICKS drive (shared code, edition-picks.ts; local writes only on the phone: nothing is written to the computer). The OLD Swift file is SEEDED with one topic and must come out
-# of the drive UNREAD and still there (the build never reads or deletes it; an upgraded phone starts with no picks). The topic screen is opened from My edition (the page, not an assumption, says which
+# of the drive UNREAD and gone (shared code never reads it, native removes it at launch; an upgraded phone starts with no picks). The topic screen is opened from My edition (the page, not an assumption, says which
 # control: with no picks it is "Choose topics"), three picks are made (a category, a subtopic under another, a typed one) and one is taken off. The stored file is copied out and read.
 SEED_PICKS=1; export SEED_PICKS
 step "clock data"; wait_ 6000
@@ -618,7 +618,9 @@ fixed "edition picks: the stored file holds the subtopic (Film)" '"Film"' "$SHOT
 fixed "edition picks: the stored file holds the typed topic (Zzdrillchess)" '"Zzdrillchess"' "$SHOTS/picks-stored.json"
 nofixed "edition picks: the category taken off (Science) is not stored" '"Science"' "$SHOTS/picks-stored.json"
 nofixed "edition picks: nothing of the seeded old file was adopted" 'Zzdrillseed' "$SHOTS/picks-stored.json"
-fixed "edition picks: the old Swift file is still there, unread and unchanged" 'Zzdrillseed' "$SHOTS/picks-old-file.json"
+# The old Swift file is removed by native code at every launch (AutoradioModule.swift calls AccountWipe.removeOldBuildFiles, since 096899556 of 2026-11-23) and at sign-out. Shared code never reads it:
+# the check that matters is the one above (nothing of it was adopted). This check used to expect the file still there; the first signed-in run after that commit (2026-11-28) showed it gone.
+if [ -e "$SHOTS/picks-old-file.json" ]; then echo "MISSING: edition picks: the old Swift file is removed at launch: it is still there"; FAILS="$FAILS [edition picks: the old Swift file is removed at launch]"; else echo "ok: edition picks: the old Swift file is removed at launch (native, unread)"; fi
 fixed "edition picks: with no picks the first My edition says to choose topics (nothing was seeded)" '[paper-choose-topics]' "$SHOTS/drive-picks.txt"
 fixed "edition picks: the topic screen listed the tree (Science in the viewport)" '[ob-topic-Science]' "$SHOTS/drive-picks.txt"
 fixed "edition picks: the subtopic row (Film) was in the viewport when tapped" '[ob-topic-Film]' "$SHOTS/drive-picks.txt"

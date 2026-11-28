@@ -8,7 +8,7 @@
 //    state as it is at write time (no lost update), and a change queued for an account that has moved on is skipped;
 //  - the native side keeps one in-memory copy (the DJ's edition text, the saved corpus and the edition writer read it): pushed after the file is written, emptied at a wipe;
 //  - the old Swift file (Application Support/Autoradio/edition-topics.json) is NEVER READ here and nothing deletes it here: it says nothing about whose it is, so an upgraded
-//    phone starts with no picks (the cost, in the reference page). The native sign-out wipe still removes it.
+//    phone starts with no picks (the cost, in the reference page). Native code removes it at every launch and at sign-out (AccountWipe.removeOldBuildFiles).
 //
 // Native calls, each with the reason only native code can meet (modules/apple/ModelsEntry.swift, `editionOp`): `editionMirror`/`editionMirrorReset` give the voice's native code
 // (the DJ request, the on-device retrieval) its copy; `editionHeard`/`editionSaid` carry the words the voice heard at the setup screen to shared code and its one-line answer back,
