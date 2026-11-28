@@ -210,6 +210,10 @@ decisions_for_the_owner:
   options: a list with a proposed verdict per entry, for one reading
   default: none is changed; T2 only stops a date from failing a run
 owner_rulings:
+- on: 2026-11-28
+  decision: superseded documents move to the archive
+  said: "We should move all superseded docs to docs archive. And I think we can delete the current docs archive first. Have we referenced any archived docs recently?"
+  reading: 'the move overrides this file''s rule that no document is moved; done in 20e3e0e1c (24 files; documents superseded only in part stay). The archive was not deleted: 726 files outside it cite it by path and 312 of its 598 files are cited by name, which was reported to the owner as the answer to the question'
 - on: 2026-11-27
   decision: scope
   said: "The problem record is somewhat useful if verbose, and probably could be improved upon rather than scrapped. While the key issue is I think that we have too many, and conflicting, theory, architecture, and planning docs, and should consolidate those. And also streamline the sdlc significantly."
