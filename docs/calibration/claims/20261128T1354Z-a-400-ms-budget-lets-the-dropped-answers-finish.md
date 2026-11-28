@@ -6,6 +6,10 @@ kind: experiment
 p: 0.7
 settle_by: 2026-11-28T22:00Z
 evidence_source: the count of "took N ms of its own (CPU) time" lines, and the marker check of the sign-out drill, in a signed-in run of mobile/scripts/proof-real.sh on lane turn-budget 7c7f85593 merged with main
-status: open
+status: settled
+settled: 2026-11-28T14:56Z
+outcome: true
+evidence: signed-in run of proof-real.sh on lane turn-budget 297fbdb12 merged with main, 2026-11-28 (the second run; the first, 7c7f85593, stopped at its 13th drive); 29 drives passed with no "took N ms of its own" line in any of them, and the sign-out drill printed "the wipe marker and the stamp are gone" with no "wipe failed" line; the run as a whole failed one unrelated check (one long story played through the background window, so one entry began where the check wants three)
+brier: 0.09
 ---
 With Exact's own `turnBudgets` set to 400 ms for radioHold, radioWrite and accountSignOut, a signed-in run of the real-data proof drops none of those three answers in any drive and the sign-out drill leaves no marker or stamp. The largest overrun seen so far is 261.5 ms, so 400 should hold if the cost is work and not a stall; the experiment's own clock-check loop adds an unknown amount to the first three holds. A second reading from the same run, not scored: whether `performance.now` moves inside a turn, and how much slower than Bun (10.6 ms for the same loop on this Mac) the app's engine is.
