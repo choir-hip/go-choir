@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { BEGIN_PATH, FINISH_PATH, SCHEDULED, deleteReset, deleteRun, deleteView, failureWords, plainDate, resetDelete, type DeleteEnv, type Reply, type SignOutAnswer } from './account-delete.ts';
+import { WORDS } from './words.ts';
+import { BEGIN_PATH, FINISH_PATH, SCHEDULED, deleteReset, deleteRun, deleteView, failureWords, keyAnswer, plainDate, resetDelete, type DeleteEnv, type Reply, type SignOutAnswer } from './account-delete.ts';
 
 // The failure list is the header of account-delete.ts (D1 to D8).
 
@@ -9,7 +10,7 @@ const ASSERTION = { id: 'cred', rawId: 'cred', type: 'public-key', response: { c
 const ACCEPT = { ok: true, job_id: 'del-1', requested_at: '2026-11-23T20:00:00Z', purge_after: '2026-11-26T20:00:00Z' };
 
 type Script = {
-  begin?: Reply; finish?: Reply; passkey?: () => Promise<unknown>; hasKey?: boolean; signOut?: () => Promise<SignOutAnswer>;
+  begin?: Reply; finish?: Reply; passkey?: () => Promise<unknown>; hasKey?: boolean | 'locked' | 'unknown'; signOut?: () => Promise<SignOutAnswer>;
 };
 function env(s: Script = {}) {
   const posts: { path: string; body: unknown }[] = [];
@@ -163,6 +164,34 @@ describe('D6: no key, no run', () => {
     expect(v.message).toContain('Sign in first');
     expect(t.posts.length).toBe(0);
     expect(t.counts()).toEqual({ screens: 0, signOuts: 0 });
+  });
+});
+
+describe('D6b: a key that could not be read is not "sign in"', () => {
+  for (const which of ['locked', 'unknown'] as const) {
+    test(`${which}: the unreadable words, no sign-in advice, nothing sent`, async () => {
+      const t = env({ hasKey: which });
+      const v = await deleteRun(t.e);
+      expect(v.phase).toBe('failed');
+      expect(v.message).toContain(which === 'locked' ? WORDS.locked : WORDS.unknown);
+      expect(v.message).toContain('Nothing was deleted');
+      expect(v.message).not.toMatch(/sign in/i);
+      expect(t.posts.length).toBe(0);
+      expect(t.counts()).toEqual({ screens: 0, signOuts: 0 });
+    });
+  }
+  test('absent keeps today\'s words', async () => {
+    const v = await deleteRun(env({ hasKey: false }).e);
+    expect(v.message).toBe(failureWords(401, 'begin')); expect(v.message).toContain('Sign in first');
+  });
+});
+
+describe('D6c: the key state as the delete run is told it', () => {
+  test('present is true, absent is false, unreadable is locked, an unreadable read that threw is unknown', () => {
+    expect(keyAnswer({ state: 'present' })).toBe(true);
+    expect(keyAnswer({ state: 'absent' })).toBe(false);
+    expect(keyAnswer({ state: 'unreadable' })).toBe('locked');
+    expect(keyAnswer({ state: 'unreadable', error: true })).toBe('unknown');
   });
 });
 

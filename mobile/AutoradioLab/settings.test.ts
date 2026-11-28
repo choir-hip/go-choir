@@ -1,4 +1,5 @@
 // The account source under bun test, `fetch` and the native key reader stubbed. Every value is made up (fixtures/settings).
+import { WORDS } from './words.ts';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { bindNative, resetSession, ORIGIN } from './api.ts';
 import { settingsAccount, parseWhoami, plainAccountError } from './settings.ts';
@@ -16,8 +17,16 @@ beforeEach(() => {
 
 describe('settingsAccount', () => {
   test('A3 signed out: the line, and nothing sent', async () => {
+    bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'keystate' ? { state: 'absent' } : { found: false }) } as never);
     const v = await settingsAccount({ signedIn: false, tick: 0 });
     expect(v.message).toBe('Not signed in.'); expect(v.signedIn).toBe(false); expect(v.status).toBe('idle'); expect(calls.length).toBe(0);
+  });
+  test('signed out because the key could not be read: the unreadable words, not "Not signed in."', async () => {
+    bindNative({ available: true, later: async (r: { op?: string }) => { if (r.op === 'keystate') return { state: 'unreadable' }; throw new Error('x'); } } as never);
+    expect((await settingsAccount({ signedIn: false, tick: 0 })).message).toBe(WORDS.locked);
+    bindNative({ available: true, later: async () => { throw new Error('x'); } } as never);
+    expect((await settingsAccount({ signedIn: false, tick: 0 })).message).toBe(WORDS.unknown);
+    expect(calls.length).toBe(0);
   });
   test('the real shape: handle, key label, scopes joined; the key never appears', async () => {
     const v = await settingsAccount({ signedIn: true, tick: 1 });

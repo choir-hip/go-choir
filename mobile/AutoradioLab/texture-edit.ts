@@ -120,6 +120,7 @@
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 import type { Storage } from './app.contract.d.ts';
+import { refusedHere } from './refused.ts';
 import { authedJSON, accountId, onSignOutBegin, sealingBlocked, segment, SignedOutError, isUnreadable, unreadableWords, HTTPError, type Reply } from './api.ts';
 import * as Body from './texture-body.ts';
 /** Two Markdown texts are the same text when the server would hold the same content for both (a trailing newline, marks and a continuation's indent are not a difference): the one rule that compares the field with the head. */
@@ -144,7 +145,7 @@ export function editableDoc(address: string): string | null {
   const rest = address.slice('texture:'.length);
   return rest === '' || rest.includes('@') ? null : rest;
 }
-const isLetGo = (e: unknown): boolean => e instanceof Error && /let go/i.test(e.message);
+export const isLetGo = (e: unknown): boolean => refusedHere(e) || (e instanceof Error && /let go/i.test(e.message));
 /** A key that could not be read is offline (the edit is kept and tried again), not a sign-in failure. */
 export const isOffline = (e: unknown): boolean => (e instanceof HTTPError ? e.status >= 500 || e.status === 404 || e.status === 429 : isUnreadable(e) || !(e instanceof SignedOutError));
 export const sentence = (e: unknown): string => (unreadableWords(e) ?? (e instanceof SignedOutError ? 'Sign in again to save.' : e instanceof HTTPError ? (e.status === 403 ? 'This device is not allowed to save here.' : `Could not save. ${e.message}`) : 'Something went wrong saving the document.'));

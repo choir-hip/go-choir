@@ -10,6 +10,8 @@ import { sentence as saveSentence, isOffline } from './texture-edit.ts';
 import { signInNotice } from './take-session.ts';
 import { programmeFailKind } from './radio-bridge.ts';
 import { plainWords } from './programme-model.ts';
+import { sendOne } from './steer.ts';
+import { keyAnswer } from './account-delete.ts';
 import { syncContent, forgetContent } from './content-run.ts';
 import { noFetchers } from './content.ts';
 import { Database } from 'bun:sqlite';
@@ -37,7 +39,8 @@ describe('every word site, every reason', () => {
       expect(f(err('locked'))).toBe(WORDS.locked);
       expect(f(err('unknown'))).toBe(WORDS.unknown);
       expect(SIGN.test(f(err('locked')) + f(err('unknown')))).toBe(false);
-      expect(SIGN.test(f(err('none'))) || SIGN.test(f(err('refused')))).toBe(true);
+      expect(SIGN.test(f(err('none')))).toBe(true);
+      expect(SIGN.test(f(err('refused')))).toBe(true);
     });
   }
   test('the shared function agrees', () => {
@@ -54,6 +57,17 @@ describe('every state site, every reason', () => {
   test('radio programme post: signedOut only for none and refused; transport (try again) otherwise', () => {
     for (const r of REASONS) expect(programmeFailKind(err(r))).toBe(r === 'locked' || r === 'unknown' ? 'transport' : 'signedOut');
     expect(plainWords({ kind: programmeFailKind(err('unknown')) })).not.toMatch(SIGN);
+  });
+  test('a cloned error (same name and reason, not an instance) is classed the same way', () => {
+    const clone = (reason: string) => Object.assign(new Error('x'), { name: 'SignedOutError', reason });
+    expect(programmeFailKind(clone('unknown'))).toBe('transport'); expect(programmeFailKind(clone('none'))).toBe('signedOut');
+    expect(signedOutStatus(clone('locked'))).toBe(503); expect(unreadableWords(clone('locked'))).toBe(WORDS.locked);
+  });
+  test('steer: every reason keeps the tap queued (offline), says nothing', async () => {
+    for (const r of REASONS) expect(await sendOne({ route: '/p/a' } as never, async () => { throw err(r); })).toBe('offline');
+  });
+  test('delete-account key answer: unreadable words, never 401 advice', () => {
+    expect(keyAnswer({ state: 'unreadable', noStore: true })).toBe('unknown');
   });
   test('texture-edit: an unreadable key is offline (kept, tried again); a refused one is a failure', () => {
     for (const r of REASONS) expect(isOffline(err(r))).toBe(r === 'locked' || r === 'unknown');

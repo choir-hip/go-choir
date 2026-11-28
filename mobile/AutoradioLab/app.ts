@@ -39,7 +39,7 @@ import { micPermission } from './micask.ts';
 import { modelsPage, modelsAct } from './models.ts';
 import { learnPage, learnAct } from './voicelearn.ts';
 import { credentials } from '@exact/passkeys';
-import { deleteReset, deleteRun, deleteView, type DeleteEnv } from './account-delete.ts';
+import { deleteReset, deleteRun, deleteView, keyAnswer, type DeleteEnv } from './account-delete.ts';
 import { reviewerRun, signInCancel, signInCancelDeletion, signInReset, signInRun, signInView, type SignInEnv } from './app-signin.ts';
 import { radioPlayClip } from './clip-play.ts';
 import { textureEditInfo, textureEditOpen, textureEdit, textureFlush, textureDiscard, textureOverwrite } from './texture-edit.ts';
@@ -147,7 +147,7 @@ const deleteEnv = (store: Store, storage: Storage | undefined, native: unknown, 
       return { status: 0, body: null };
     }
   },
-  hasKey: async () => (await keyState()).state === 'present',
+  hasKey: async () => keyAnswer(await keyState()),
   signOut: () => accountSignOut(storage, store as never, native as never, { platform }),
   log: (l) => console.log(l),
 });

@@ -10,6 +10,9 @@
 //  U7 B a refused read is not remembered: the next answer that can read gets the session (no stale "unreadable").
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { accountId, authedJSON, keptComputerId, bindNative, bindStore, beginSignOut, abortSignOut, credentialsAbsent, keyState, refreshSealBlock, resetSeam, sealingBlocked, SignedOutError } from './api.ts';
+import { settingsAccount } from './settings.ts';
+import { refusedHere } from './refused.ts';
+import { isLetGo } from './texture-edit.ts';
 import { reconcile, accountSignOut, STAMP_FILE, PENDING_FILE } from './account.ts';
 import { KEY_NAME } from './app-signin.ts';
 
@@ -17,13 +20,14 @@ const KEY = 'test-key-0001-not-real';
 let lines: string[] = [];
 let sent = 0;
 const realLog = console.log;
+const realFetch = globalThis.fetch;
 beforeEach(() => {
   resetSeam(); lines = []; sent = 0;
   console.log = (...a: unknown[]) => { lines.push(a.map(String).join(' ')); };
   globalThis.fetch = (async () => { sent++; return new Response('{}', { status: 200 }); }) as never;
 });
 const done = (): void => { console.log = realLog; };
-afterEach(() => { console.log = realLog; resetSeam(); });      // a bound store must not leak into the next test file (one process)
+afterEach(() => { console.log = realLog; globalThis.fetch = realFetch; resetSeam(); });      // a bound store must not leak into the next test file (one process)
 
 /** A reader whose `session` op is refused in the way `refuse` says; the other ops answer as `keystate` says. */
 const reader = (refuse: 'flag' | 'throw' | 'none', keystate: string = 'absent') => ({
@@ -38,13 +42,14 @@ const reader = (refuse: 'flag' | 'throw' | 'none', keystate: string = 'absent') 
 const reasonOf = async (): Promise<string> => { try { await authedJSON('/api/x'); return 'no error'; } catch (e) { return e instanceof SignedOutError ? e.reason : `other: ${String(e)}`; } };
 
 describe('U1 a refused session read is not "no key"', () => {
-  test('flagged unreadable, key state says absent: reason is unknown', async () => {
-    bindNative(reader('flag', 'absent') as never);
-    expect(await reasonOf()).toBe('unknown'); expect(sent).toBe(0); done();
+  test('flagged unreadable: the reason comes from that read (locked), whatever a second key-state read would say', async () => {
+    for (const ks of ['absent', 'present']) { bindNative(reader('flag', ks) as never); expect(await reasonOf()).toBe('locked'); }
+    expect(sent).toBe(0); done();
   });
-  test('flagged unreadable, key state says present: reason is unknown', async () => {
-    bindNative(reader('flag', 'present') as never);
-    expect(await reasonOf()).toBe('unknown'); expect(sent).toBe(0); done();
+  test('flagged unreadable with the no-store flag: unknown, and the error carries the flag', async () => {
+    bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'session' ? { found: false, unreadable: true, noStore: true } : { state: 'unreadable' }) } as never);
+    let caught: unknown; try { await authedJSON('/api/x'); } catch (e) { caught = e; }
+    expect(caught).toMatchObject({ reason: 'unknown', noStore: true }); done();
   });
   test('flagged unreadable, key state says unreadable: reason is locked (the existing meaning)', async () => {
     bindNative(reader('flag', 'unreadable') as never);
@@ -185,7 +190,7 @@ describe('U9 between answers is unknown, a store failure is locked', () => {
     let n = 0;
     bindStore({ get: () => { n += 1; if (n === 1) throw new Error('boom'); return null; }, set: () => undefined, forget: () => undefined });
     const why = await reasonOf(); done();
-    expect(why).toBe('unknown'); expect(sent).toBe(0);       // keystate then reads "absent", but a refused read is never "none"
+    expect(why).toBe('locked'); expect(sent).toBe(0);       // keystate would then read "absent", but the failing read decides and a refused read is never "none"
   });
   test('(b) every read throws: locked, nothing sent, reconcile wipes nothing', async () => {
     bindStore({ get: () => { throw new Error('boom'); }, set: () => undefined, forget: () => undefined });
@@ -210,9 +215,9 @@ describe('U10 an item read tells absent from unreadable', () => {
 });
 
 describe('U11 the computer id read throws', () => {
-  test('key readable, computer id refused: the whole session is refused, nothing is sent', async () => {
+  test('key readable, computer id refused: the whole session is refused (a store failure: locked), nothing is sent', async () => {
     bindStore({ get: (n: string) => { if (n === 'choir.computer-id') throw new Error('boom'); return n === KEY_NAME ? KEY : null; }, set: () => undefined, forget: () => undefined });
-    expect(await reasonOf()).toBe('unknown'); expect(sent).toBe(0); done();
+    expect(await reasonOf()).toBe('locked'); expect(sent).toBe(0); done();
   });
   test('accountId is null under a refused read', async () => {
     bindStore({ get: () => { throw new Error('boom'); }, set: () => undefined, forget: () => undefined });
@@ -227,5 +232,27 @@ describe('U12 pinned residual: a sign-out begun on an unreadable key', () => {
     await beginSignOut(); expect(sealingBlocked()).toBe(true);
     refuse = false; await refreshSealBlock(); done();
     expect(sealingBlocked()).toBe(false);
+  });
+});
+
+describe('U13 a refused read from a let-go answer stops quietly', () => {
+  test('the no-store refusal is a refusedHere error and a texture-edit let-go; a locked Keychain is neither', async () => {
+    bindStore({ get: () => { throw new Error(NO_STORE); }, set: () => undefined, forget: () => undefined });
+    let letGo: unknown; try { await authedJSON('/api/x'); } catch (e) { letGo = e; }
+    resetSeam(); bindStore({ get: () => { throw new Error('Keychain locked'); }, set: () => undefined, forget: () => undefined });
+    let locked: unknown; try { await authedJSON('/api/x'); } catch (e) { locked = e; }
+    done();
+    expect(refusedHere(letGo)).toBe(true); expect(isLetGo(letGo)).toBe(true);
+    expect(refusedHere(locked)).toBe(false); expect(isLetGo(locked)).toBe(false);
+    expect(isLetGo(new Error('the answer was let go before this fetch'))).toBe(true);     // the older refusals still match
+  });
+});
+
+describe('U14 the callers of an item read', () => {
+  test('settings: a refused computer id read leaves the account line without a computer id, and does not throw', async () => {
+    bindNative({ available: true, later: async (r: { op?: string }) => { if (r.op === 'session') return { found: true, value: KEY, computerId: '' }; if (r.op === 'get') throw new Error('x'); return {}; } } as never);
+    globalThis.fetch = (async () => new Response(JSON.stringify({ handle: 'h', key_id: 'k', scopes: ['a'] }), { status: 200 })) as never;
+    const v = await settingsAccount({ signedIn: true, tick: 1 }); done();
+    expect(v.computerID).toBe(''); expect(v.status).not.toBe('failed');
   });
 });

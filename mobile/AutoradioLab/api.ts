@@ -67,11 +67,15 @@ export async function getJSON(path: string, query: Query = {}): Promise<Reply> {
 export type SignedOutReason = 'none' | 'locked' | 'refused' | 'unknown';
 export class SignedOutError extends Error {
   reason: SignedOutReason;
-  constructor(message = 'not signed in', reason: SignedOutReason = 'none') { super(message); this.name = 'SignedOutError'; this.reason = reason; }
+  /** The refusal came from Exact's "no store here" (an answer that was let go, or background work): the work of that answer stops quietly (refused.ts `refusedHere`). */
+  noStore: boolean;
+  constructor(message = 'not signed in', reason: SignedOutReason = 'none', noStore = false) { super(message); this.name = 'SignedOutError'; this.reason = reason; this.noStore = noStore; }
 }
 
 /** True when the key could not be READ (`locked`, `unknown`): the listener may well be signed in. A page must not say sign in or sign out for it, and must not treat it as a 401. `none` and `refused` are the only reasons that mean signing in. */
-export const isUnreadable = (e: unknown): e is SignedOutError => e instanceof SignedOutError && (e.reason === 'locked' || e.reason === 'unknown');
+/** A SignedOutError by name, so an error that crossed a boundary as a copy (same name and reason) is classed as the original. The ONE test every site uses. */
+export const isSignedOut = (e: unknown): e is SignedOutError => !!e && typeof e === 'object' && (e as { name?: unknown }).name === 'SignedOutError';
+export const isUnreadable = (e: unknown): e is SignedOutError => isSignedOut(e) && (e.reason === 'locked' || e.reason === 'unknown');
 /** The words for a key that could not be read (`WORDS.locked` or `WORDS.unknown`), or null for any other failure: the ONE place a page learns what to say for it. Every `SignedOutError` site asks this first. */
 export const unreadableWords = (e: unknown): string | null => (isUnreadable(e) ? (e.reason === 'locked' ? WORDS.locked : WORDS.unknown) : null);
 /** The status a request seam reports for a SignedOutError: 401 only when signing in is the answer; 503 ("could not do this just now, try again") for a key that could not be read. */
@@ -215,16 +219,22 @@ let lastFlags = '';
 async function keptSession(): Promise<{ key: string; computerId: string } | null> {
   const source = credentials();
   if (!source || source.available === false) return null;
-  type Kept = { found?: boolean; value?: unknown; computerId?: unknown; unreadable?: unknown };
+  type Kept = { found?: boolean; value?: unknown; computerId?: unknown; unreadable?: unknown; noStore?: unknown };
   let r = null as Kept | null;
-  let refused = false, malformed = false;
-  try { r = (await source.later({ op: 'session' })) as Kept | null; } catch { refused = true; }
+  let refused = false, malformed = false, threw = false;
+  try { r = (await source.later({ op: 'session' })) as Kept | null; } catch { refused = true; threw = true; }
   if (!refused && r && typeof r === 'object' && r.unreadable === true) refused = true;
   if (!refused && (!r || typeof r !== 'object' || typeof r.found !== 'boolean' || (r.found === true && (typeof r.value !== 'string' || r.value === '')))) { refused = true; malformed = true; }      // malformed is unknown, not "no key": null means only found:false
   if (!refused && r && typeof r === 'object' && typeof r.found === 'boolean') nativeAnswered = true;
   const flags = `found=${String(refused ? undefined : r?.found)} key=${!refused && typeof r?.value === 'string' && r.value !== ''} computer=${!refused && typeof r?.computerId === 'string' && r.computerId !== ''} refused=${refused}`;   // flags only, never a value
   if (flags !== lastFlags) { lastFlags = flags; console.log(`api: session ${flags}`); }              // on change only: one line per request is volume
-  if (refused) throw new SignedOutError('the key could not be read', !malformed && (await noSessionReason()) === 'locked' ? 'locked' : 'unknown');
+  if (refused) {
+    // The reason comes from the failing read itself (one snapshot): no-store is `unknown` (and stops quietly), any other refusal the source reports is `locked`, a malformed answer is `unknown`.
+    // Only a source that threw with nothing to say asks the key state.
+    const noStore = !threw && !malformed && r?.noStore === true;
+    const reason: SignedOutReason = malformed || noStore ? 'unknown' : threw ? ((await noSessionReason()) === 'locked' ? 'locked' : 'unknown') : 'locked';
+    throw new SignedOutError('the key could not be read', reason, noStore);
+  }
   if (!r || r.found !== true) return null;
   return { key: r.value as string, computerId: typeof r.computerId === 'string' ? r.computerId : '' };
 }
@@ -440,18 +450,18 @@ export async function authedToFile(path: string, dest: string, storage: Storage 
 export type KeyState = 'present' | 'absent' | 'unreadable';
 /** The stored sign-in key as THREE answers (review 2026-11-19, auth round 2): `present` (with the SHA-256 of the key), `absent` (the Keychain answered item-not-found) or
  * `unreadable` (locked before the first unlock, any other status, no native module, a bridge error). Read only. `unreadable` is never "signed out". */
-export async function keyState(): Promise<{ state: KeyState; digest: string; error?: boolean }> {
+export async function keyState(): Promise<{ state: KeyState; digest: string; error?: boolean; noStore?: boolean }> {
   const none = { state: 'unreadable' as KeyState, digest: '' };
   const source = credentials();
   if (!source || source.available === false) return none;
   try {
-    const r = (await source.later({ op: 'keystate' })) as { state?: unknown; found?: unknown } | null;
+    const r = (await source.later({ op: 'keystate' })) as { state?: unknown; found?: unknown; noStore?: unknown } | null;
     if (r && typeof r.state === 'string') nativeAnswered = true;
     const st = r && (r.state === 'present' || r.state === 'absent' || r.state === 'unreadable') ? r.state : r && r.found === true ? 'present' : 'unreadable';
-    if (st !== 'present') return { state: st, digest: '' };
+    if (st !== 'present') return { state: st, digest: '', ...(r?.noStore === true ? { noStore: true } : {}) };
     const sess = await keptSession();
     return sess ? { state: 'present', digest: await digestOf(sess.key) } : none;
-  } catch { return { ...none, error: true }; }
+  } catch (e) { return { ...none, error: true, ...(isSignedOut(e) && e.noStore ? { noStore: true } : {}) }; }
 }
 
 /** For tests: forget what was discovered. */

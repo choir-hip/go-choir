@@ -14,7 +14,7 @@ const view = (state: string, message: string, action: string): AccountView => ({
 /** The former Apple package source, now shared: read the Exact secret store through api.ts and keep the same four-field shape. An unreadable key is not signed in here; accountState below says "locked" and wipes nothing. */
 export async function choirAuthState(): Promise<ChoirAuthState> {
   const k = await keyState();
-  return { signedIn: k.state === 'present', baseURL: ORIGIN, status: k.state === 'unreadable' ? 'locked' : 'idle', message: '' };
+  return { signedIn: k.state === 'present', baseURL: ORIGIN, status: k.state === 'unreadable' && !k.noStore && !k.error ? 'locked' : 'idle', message: '' };
 }
 
 /** `_tick`: changes when something that can change the answer happened (a sign-in or sign-out, a page change, the app returning to the front, a request the server refused). `host`: the host fact
@@ -23,7 +23,7 @@ export async function choirAuthState(): Promise<ChoirAuthState> {
 export async function accountState(_tick: string, top = '', host = '', platform = '', appId = APP_ID): Promise<AccountView> {
   if (!hasCredentialSource()) return host === 'none' ? view('noSignIn', WORDS.noSignIn, '') : view('unknown', '', '');
   const k = await keyState();
-  if (k.error) return view('unknown', '', '');
+  if (k.error || (k.state === 'unreadable' && k.noStore)) return view('unknown', '', '');      // a refusal for want of a store is not a locked phone
   // A build that cannot make a passkey says so, plainly, instead of offering a sign-in that fails: `platform` is exactPage().platform, `appId` this build's id (app-id.ts).
   const support = passkeySupport(appId, platform);
   const noPasskey = (): AccountView => view('noPasskey', support === 'android' ? WORDS.noPasskeyAndroid : WORDS.noPasskeyApp, '');

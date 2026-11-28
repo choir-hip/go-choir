@@ -10,7 +10,8 @@
 //  A6 an owner-wide key answers `computer_id: ""`: the Keychain's stored computer id fills it (the computer the phone found); a bound id wins.
 // Dropped: the "loading" status and the generation guard (A3 in Swift): a source answers once per ask, so a late answer cannot land.
 
-import { authedJSON, HTTPError, keptComputerId, ORIGIN, SignedOutError, unreadableWords } from './api.ts';
+import { WORDS } from './words.ts';
+import { authedJSON, HTTPError, keyState, keptComputerId, ORIGIN, SignedOutError, unreadableWords } from './api.ts';
 
 export type SettingsAccount = {
   status: string; signedIn: boolean; handle: string; keyID: string; keyLabel: string; scopes: string; computerID: string; message: string; baseURL: string;
@@ -46,7 +47,12 @@ export function plainAccountError(e: unknown): string {
 
 export async function settingsAccount(args: AccountArgs): Promise<SettingsAccount> {
   const base = empty();
-  if (!args.signedIn) return { ...base, message: 'Not signed in.' };
+  if (!args.signedIn) {
+    // `signedIn` is a bool: false is also what a key that could not be read gives (account-state.ts). Ask which, and say so.
+    const k = await keyState();
+    const words = k.state === 'unreadable' ? (k.error || k.noStore ? WORDS.unknown : WORDS.locked) : null;
+    return { ...base, message: words ?? 'Not signed in.' };
+  }
   try {
     const r = await authedJSON(WHOAMI_PATH);
     const w = parseWhoami(r.body);

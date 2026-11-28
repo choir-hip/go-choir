@@ -3,6 +3,7 @@
 // begun outside an answer, from background work or after the answer's storage wait failed ("... it was never run", js/src/fetch.js, js/src/prelude.js, js/src/storage.js). Such a call says nothing
 // about the server, the disk or the deck: it is never counted as their failure (docs/reference/exact/answers-let-go.md). refused.test.ts holds the strings against the pinned source.
 export function refusedHere(e: unknown): boolean {
+  if ((e as { noStore?: unknown } | null)?.noStore === true) return true;      // a key read refused for want of a store (api.ts SignedOutError): this answer was let go
   const m = String((e as { message?: unknown } | null)?.message ?? e ?? '');
   return /the answer was let go|it was never run|the answer's storage wait failed/.test(m);
 }

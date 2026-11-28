@@ -61,8 +61,8 @@ Deletion uses the same `credentials.get` with options from `POST /auth/account/d
   the Texture editor; the notebook) calls the server itself and reads the same Keychain items through `KeychainKeyStore` (service = bundle id, the names above). That is why the Swift stays: the voice's
   calls cannot be handed a key by shared code per call without a rewrite of the turn engine, and the item is already where Swift can read it. Swift **writes** the key at no time any more.
 - **The store lives only while an answer runs** [src]. The `store` an answer is handed is one JS object made once (`js/src/prelude.js:504`, `var store = global.__exact_store(storeEnv)`), shared by every answer. It has an
-  executor behind it only during a turn. Between answers (for example in the continuation of an answer Exact has let go) `store.get`, `set` and `forget` throw a message that starts "no store here, in background
-  work or the continuation of an answer that was let go" (`no_store`, raised at `js/src/door.rs:52`, `60` and `68`; defined at `door.rs:420`). One case is NOT closed: when there is no store and Exact is not
+  executor behind it only during a turn. Between answers (for example in the continuation of an answer Exact has let go) `store.get`, `set` and `forget` throw a message that contains "no store here, in background
+  work or the continuation of an answer that was let go" (it begins `store.get: no store here, ...`, `door.rs:421`) (`no_store`, raised at `js/src/door.rs:52`, `60` and `68`; defined at `door.rs:420`). One case is NOT closed: when there is no store and Exact is not
   between answers, `store.get` returns null (`door.rs:53`, `None => Ok(None)`), which reads as "absent". `api.ts` answers `unreadable` for a `session` or `get` read that throws and tells a "no store here" refusal
   (reason `unknown`) from any other store failure (a locked Keychain: reason `locked`) with one flag set in `storeSource`; a page never gets `none` for a failed read, and the log line `api: session` carries
   `refused=true`. The larger fix, not made: pass the key into the request as a value read in the answer that starts it, so no continuation reads the store at all.

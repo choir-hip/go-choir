@@ -10,12 +10,12 @@ import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radi
 import { Writer, ASK_DEADLINE_MS, phoneOpening, PROGRAMME_PATH, frontFill } from './radio-writer.ts';
 import { applyTurnOps, resetTurnLog, turnQueueJSON } from './voice-queue.ts';
 import { routePoster, signedInRequester } from './runsheet-store.ts';
-import { authedJSON, isUnreadable } from './api.ts';
+import { authedJSON, isSignedOut, isUnreadable } from './api.ts';
 
 /** The `kind` a failed programme post carries (radio-writer.ts). A key that could not be read is `transport` ("the desk can't be reached right now", asked again), never `signedOut` ("Sign in to hear the desk"). */
 export const programmeFailKind = (e: unknown): 'signedOut' | 'transport' | 'other' => {
   const s = (e as { status?: number } | null)?.status;
-  return (e as Error | null)?.name === 'SignedOutError' && !isUnreadable(e) ? 'signedOut' : s === undefined ? 'transport' : 'other';
+  return isSignedOut(e) && !isUnreadable(e) ? 'signedOut' : s === undefined ? 'transport' : 'other';
 };
 import { audioSpec, audio as audioEntry, book as bookEntry, filesAudio, mintId, paperStory, readAloud, webPage, estimateSeconds, heldStory, forgetLongURLs } from './runsheet-entries.ts';
 import { offlineStories } from './content-run.ts';

@@ -18,6 +18,7 @@
 //  D6 a phone with no key starts a run (there is nothing to prove the account with); it says to sign in.
 //  D7 a refusal (403 protected account) or an outage (503, offline) is worded as the same thing; each says what is true.
 //  D8 the words say "deleted" while the account is only scheduled, or give no date for the purge, or promise a cancel that is not there.
+import { WORDS } from './words.ts';
 import { CeremonyError, platformError, type Passkeys } from './passkey-ceremony.ts';
 
 export const BEGIN_PATH = '/auth/account/delete/begin';
@@ -44,7 +45,7 @@ export type DeleteEnv = {
   /** A POST with the app's key. `status` 0 is "no answer"; 401 is "the key is not accepted". Never throws. */
   post(path: string, body: unknown): Promise<Reply>;
   /** Is there a key to ask with? */
-  hasKey(): boolean | Promise<boolean>;
+  hasKey(): boolean | 'locked' | 'unknown' | Promise<boolean | 'locked' | 'unknown'>;
   /** The Account page's sign-out (account.ts): the native half, then every shared store. */
   signOut(): Promise<SignOutAnswer>;
   log(line: string): void;
@@ -81,6 +82,11 @@ export const REVIEWER_DELETE_WORDS =
   '(Create account, your email, the 8-digit code we send, then the passkey), and delete that account here.';
 
 /** The words for a refusal, an outage or a failure of the first two steps (D7). */
+/** The key state as the delete run is told it: present (true), absent (false), or could not be read (`locked`, or `unknown` for a read that threw or was refused for want of a store). */
+export function keyAnswer(k: { state: string; error?: boolean; noStore?: boolean }): boolean | 'locked' | 'unknown' {
+  return k.state === 'present' ? true : k.state === 'unreadable' ? (k.error || k.noStore ? 'unknown' : 'locked') : false;
+}
+
 export function failureWords(status: number, step: 'begin' | 'finish'): string {
   if (status === 0) return 'No connection. Nothing was deleted. Check the network and try again.';
   if (status === 401) return 'This phone is not signed in, so it cannot delete the account. Sign in first. Nothing was deleted.';
@@ -98,7 +104,9 @@ export async function deleteRun(env: DeleteEnv): Promise<DeleteView> {
   signedOut = false; purgeOn = '';
   set('working');
   try {
-    if (!(await env.hasKey())) { set('failed', failureWords(401, 'begin')); return deleteView(); }          // D6
+    const key = await env.hasKey();
+    if (key === 'locked' || key === 'unknown') { set('failed', `${key === 'locked' ? WORDS.locked : WORDS.unknown} Nothing was deleted.`); return deleteView(); }      // could not read the key: not "sign in", and nothing is sent
+    if (!key) { set('failed', failureWords(401, 'begin')); return deleteView(); }          // D6
     const begin = await env.post(BEGIN_PATH, undefined);
     if (begin.status !== 200) { set('failed', failureWords(begin.status, 'begin')); env.log(`delete: begin ${begin.status}`); return deleteView(); }
     const publicKey = field(begin.body, 'publicKey');
