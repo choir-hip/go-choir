@@ -5,9 +5,6 @@
    "playing": "bool",
    "level": "string",
    "speedValue": "number",
-   "progress": "number",
-   "sentenceIndex": "number",
-   "sentences": "string[]",
    "micLevel": "number"
   },
   "BarFacts": {
@@ -71,9 +68,6 @@
      "playing": false,
      "level": "play",
      "speedValue": 1,
-     "progress": 0,
-     "sentenceIndex": 0,
-     "sentences": [],
      "micLevel": 0
     }
    }

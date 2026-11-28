@@ -20,10 +20,10 @@ public struct RadioInfo: Codable, Sendable, Equatable {
     public var level = "play"
     /// The speed as a number, for the slider (0.5 to 3).
     public var speedValue = 1.0
-    public var progress = 0.0   // 0...1 along the whole programme: (block index + the audio's fraction of the block) / block count
-    public var sentenceIndex = 0, sentences: [String] = []   // the sentence being said and the block's sentences, for `ReaderFeed` and the `radioFacts` op
+    public var progress = 0.0, sentenceIndex = 0, sentences: [String] = []   // native only, not on the wire (CodingKeys): the progress and the sentence, for `ReaderFeed` and the `radioFacts` op
     /// 0...1, the smoothed microphone level while the mic is open (the mark breathes with it); 0 when nothing is heard.
     public var micLevel = 0.0
+    private enum CodingKeys: String, CodingKey { case title, playing, level, speedValue, micLevel }
     public init() {}
 }
 
