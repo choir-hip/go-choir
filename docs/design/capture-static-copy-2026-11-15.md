@@ -4,7 +4,7 @@ Date: 2026-11-15. Stage one of the lane `lane/capture-static-copy`: no
 production code. Class: red (section 4). Origin: item 2 of
 `docs/problems/restore-bases-design-three-review-rounds-structural-assessment-2026-11-15.md`.
 The set-aside package design
-(`docs/design/restore-bases-store-once-2026-11-15.md`, "Landing 2") is read
+(`docs/archive/design/restore-bases-store-once-2026-11-15.md`, "Landing 2") is read
 here as a hypothesis; every claim about code below was read from the code, with
 file and line. A claim marked *(inferred)* was not read or measured.
 

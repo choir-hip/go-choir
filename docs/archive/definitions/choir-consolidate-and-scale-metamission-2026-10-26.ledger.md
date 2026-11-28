@@ -1,9 +1,9 @@
 # Ledger: consolidate and scale (2026-10-26)
 
-Standing: superseded | kind: wanted | settled-by: the ledger of choir-consolidate-and-scale-metamission-2026-10-26.md, now.status superseded at line 246; docs/ACTIVE.md:439 heads it Superseded | replaced-by: docs/definitions/choir-data-architecture-selection-2026-10-28.md
+Standing: superseded | kind: wanted | settled-by: the ledger of choir-consolidate-and-scale-metamission-2026-10-26.md, now.status superseded at line 246; docs/ACTIVE.md:439 heads it Superseded | replaced-by: docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md
 
 Append-only move history for
-[choir-consolidate-and-scale-metamission-2026-10-26.md](choir-consolidate-and-scale-metamission-2026-10-26.md).
+[choir-consolidate-and-scale-metamission-2026-10-26.md](../../definitions/choir-consolidate-and-scale-metamission-2026-10-26.md).
 Entries before 12:1x on 2026-10-26 are in
 [choir-selfdev-readiness-metamission-2026-10-24.ledger.md](choir-selfdev-readiness-metamission-2026-10-24.ledger.md).
 

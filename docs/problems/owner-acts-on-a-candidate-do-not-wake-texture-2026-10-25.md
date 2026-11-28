@@ -8,7 +8,7 @@ stays the only writer of the document.
 
 ## Evidence
 
-Ledger, docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md,
+Ledger, docs/archive/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md,
 entry 2026-10-25 07:1x: selfdev-de06563b was approved and applied on b@c
 (applied 07:02:59). reader-4's head text still said "the Reader is not
 verified or accepted": no Texture turn followed the approval or the apply.

@@ -2,7 +2,7 @@
 
 Standing: superseded | kind: wanted | settled-by: the ledger of choir-data-architecture-selection-2026-10-28.md, headed Superseded at docs/ACTIVE.md line 427 | replaced-by: docs/definitions/choir-data-system-build-2026-10-30.md
 
-Companion to docs/definitions/choir-data-architecture-selection-2026-10-28.md.
+Companion to docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md.
 It is the ledger for that goal and, as they are authored, for the goals the
 program splits off (byte deletions, tape schema v2, the hypervisor bake-off,
 progressive delivery, the optimization pass); each of those adds its own

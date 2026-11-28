@@ -106,7 +106,7 @@ now:
     delta_o: a per-query bytes-read figure on the guest (SQLite page reads per statement)
     scope_if_supported: the guest SQLite store
     status: supported  # synthetic rung (S0): split reads 3-40x less than today and than body-last on every header read; body reads unchanged
-    evidence_refs: [docs/evidence/store-layout-reads-2026-11-01.md, docs/definitions/choir-guest-isolation-2026-11-01.ledger.md (2026-11-01 reread entries)]
+    evidence_refs: [docs/evidence/store-layout-reads-2026-11-01.md, docs/archive/definitions/choir-guest-isolation-2026-11-01.ledger.md (2026-11-01 reread entries)]
   decision:
     what: split og_objects and choir_events into header and body tables (direction ratified; body-last is measured as the control in S0)
     kind: architecture
@@ -159,7 +159,7 @@ phase exists to avoid bodies.
 ## Supersedes
 
 This mission supersedes the guest isolation goal
-([`choir-guest-isolation-2026-11-01.md`](choir-guest-isolation-2026-11-01.md)),
+([`choir-guest-isolation-2026-11-01.md`](../archive/definitions/choir-guest-isolation-2026-11-01.md)),
 owner 2026-11-01. Its stations I1 to I6 landed; its I0 closing report is
 folded in here as the baseline: the memory meter on the paper from
 2026-11-01T19:32Z, summarized in

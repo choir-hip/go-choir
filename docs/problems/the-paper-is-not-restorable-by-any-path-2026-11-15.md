@@ -1,7 +1,7 @@
 # The paper is not restorable by any path
 
 Date: 2026-11-15. Found by the designer of
-docs/design/restore-bases-store-once-2026-11-15.md and both review seats of
+docs/archive/design/restore-bases-store-once-2026-11-15.md and both review seats of
 its second round; read from code and from the paper's console log. Not
 observed by attempting a restore (nothing acts on the paper).
 

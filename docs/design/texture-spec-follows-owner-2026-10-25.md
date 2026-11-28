@@ -2,7 +2,7 @@
 
 Problem record: docs/evidence/selfdev-trace-reviews-2026-10-25.md, Round 2
 section 3, and the ledger 03:1x entry in
-docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md.
+docs/archive/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md.
 Mutation class: red (the input to Texture's canonical writes). Tier 1
 review: additive, behind a computer setting, one-act rollback.
 

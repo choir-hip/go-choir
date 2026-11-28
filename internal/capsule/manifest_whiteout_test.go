@@ -1,7 +1,7 @@
 package capsule
 
 // A capsule cannot delete a platform file
-// (docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md,
+// (docs/archive/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md,
 // entry 22:4x; operation selfdev-48ce01b9 failed before freeze with
 // "capsule source patch reads workspace/platform/frontend/src/lib/EpubApp.svelte:
 // no such file or directory").

@@ -1,7 +1,7 @@
 package platform
 
 // Vectors in pgvector (docs/reference/EMBEDDINGGEMMA.md "The server",
-// station V2 of docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md).
+// station V2 of docs/archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md).
 //
 // Two tables in corpusd's graph database beside the capture projection:
 //

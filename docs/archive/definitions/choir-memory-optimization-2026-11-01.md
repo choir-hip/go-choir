@@ -1,6 +1,6 @@
 # Choir memory optimization: the backup, the paper, and Node B (2026-11-01)
 
-Standing: superseded | kind: wanted | settled-by: owner 2026-11-01, this file's now.superseded_by (line 72); docs/ACTIVE.md says guest isolation supersedes it | replaced-by: docs/definitions/choir-guest-isolation-2026-11-01.md
+Standing: superseded | kind: wanted | settled-by: owner 2026-11-01, this file's now.superseded_by (line 72); docs/ACTIVE.md says guest isolation supersedes it | replaced-by: docs/archive/definitions/choir-guest-isolation-2026-11-01.md
 
 The owner set this goal on 2026-11-01: "optimize memory usage for backup
 and the paper computer and in general without major cost in compute or
@@ -69,7 +69,7 @@ boundaries:
     - no content is read
 now:
   status: superseded
-  superseded_by: docs/definitions/choir-guest-isolation-2026-11-01.md (owner, 2026-11-01: "We should make this the next mission actually ... I'll drop the current goal"); its open items (the paper under the elastic ceiling, the closing numbers report) are station I0 there
+  superseded_by: docs/archive/definitions/choir-guest-isolation-2026-11-01.md (owner, 2026-11-01: "We should make this the next mission actually ... I'll drop the current goal"); its open items (the paper under the elastic ceiling, the closing numbers report) are station I0 there
   slice: >-
     Backup done. 10,858,631 loose tape files copied into segments, verified
     and deleted (24.3 GB freed; 3,850 left by rule). The backup runs unsharded

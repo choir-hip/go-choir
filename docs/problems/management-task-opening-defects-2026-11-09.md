@@ -3,7 +3,7 @@
 Status: open until the repair lands. Mutation class of this doc: green.
 Evidence: review of commit `09884e328` (branch `integrate-1109`), recorded in
 `docs/design/autopaper-next-mission-handoff-2026-11-09.md` section 8 and in
-`docs/definitions/choir-autopaper-improvement-2026-11-09.ledger.md` ("Prompt
+`docs/archive/definitions/choir-autopaper-improvement-2026-11-09.ledger.md` ("Prompt
 cuts: review 1 REPAIR, all four findings on the management task opening").
 
 The change hands a management task its records and the newest page of the story

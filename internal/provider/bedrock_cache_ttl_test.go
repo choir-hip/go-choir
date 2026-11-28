@@ -8,7 +8,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/deskmanifest"
 )
 
-// Mixed cache lifetimes on Bedrock (docs/definitions/choir-autopaper-improvement-2026-11-09.ledger.md).
+// Mixed cache lifetimes on Bedrock (docs/archive/definitions/choir-autopaper-improvement-2026-11-09.ledger.md).
 //
 // Failure modes pinned here:
 //   - a 5-minute breakpoint before a 1-hour one (Bedrock answers 400);

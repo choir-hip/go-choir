@@ -2,7 +2,7 @@
 
 Mutation class of the fix: orange. Found in the live paper computer's log on
 build 94c3609ab, on every occurrence of both lines. Listed as defects (a) and
-(b) in `docs/definitions/choir-autopaper-improvement-2026-11-09.ledger.md`.
+(b) in `docs/archive/definitions/choir-autopaper-improvement-2026-11-09.ledger.md`.
 
 ## Problem (a): the served model of a Jev call is never recorded
 

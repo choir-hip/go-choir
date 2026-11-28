@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """status-vectors: how far the vector index has got (station V2 of
-docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md).
+docs/archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md).
 
 Read only against Node B: one ssh reads corpusd's journal; nothing is written
 there and no database is queried. Fetching and computing are separate: fetch()

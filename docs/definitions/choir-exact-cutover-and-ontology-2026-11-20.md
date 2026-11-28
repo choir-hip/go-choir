@@ -1,7 +1,7 @@
 ---
 definition_version: 7
 readiness: executable
-supersedes: docs/definitions/choir-exact-search-entities-2026-11-20.md
+supersedes: docs/archive/definitions/choir-exact-search-entities-2026-11-20.md
 authority: 'the owner, 2026-11-20 about 22:40Z: "we need to be aggressive with the cutover from Swift to exact, and aggressive with the ontology work for search events and entities, with the right design for the REPL to be queried so that we are more efficiently using our external search provider credits. And I think we should write a new throughline goal mission, and then I''ll set thread so that we''re using it."'
 review:
   reviewer: none (the owner's statement is the authority; each station names its own review tier)
@@ -422,7 +422,7 @@ operating_notes:
 - 'Before a landing that touches a non-Go file (a prompt overlay, YAML, JSON, a contract): find every test that depends on it by any route (grep the basename over test files; for a prompt, the size and byte-stability tests in internal/agentcore and the role tests in internal/yaegikernel) and run those packages. d8367e2c8 and its first repair each landed red this way (2026-11-21).'
 - Waits use a file's content or age, never pgrep -f (it matches its own command line). State times only after date -u.
 receipts:
-- 'previous goal: docs/definitions/choir-exact-search-entities-2026-11-20.md (superseded by this file; its landed_this_thread list is the record of what landed on 2026-11-20)'
+- 'previous goal: docs/archive/definitions/choir-exact-search-entities-2026-11-20.md (superseded by this file; its landed_this_thread list is the record of what landed on 2026-11-20)'
 - 'evidence of 2026-11-20: semantic-layer-as-built, semantic-layer-prior-art, research-runs-with-nothing-new, event-join-rate-hand-read, who-sends-the-web-searches (docs/evidence)'
 - 'letters: docs/reports/overnight-exact-search-entities-2026-11-20.md'
 ---

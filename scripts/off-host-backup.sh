@@ -321,7 +321,7 @@ select_images() { # fills IMAGES (data.img paths), IMAGE_MISSING, IMAGE_ERR, IMA
 #
 # Since 2026-11-01 there is nothing to shard: taperepack copied the 10.86M
 # loose tape files into the per-computer segments and deleted them
-# (docs/definitions/choir-memory-optimization-2026-11-01.ledger.md), and new
+# (docs/archive/definitions/choir-memory-optimization-2026-11-01.ledger.md), and new
 # pins write segments. The default is no shards; one restic run walks
 # everything. OFFHOST_BIG_DIRS still takes "dir:n ..." if a flat directory
 # grows back. The first sharded night (2026-11-01, eight shard snapshots) is

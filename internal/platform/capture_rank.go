@@ -1,7 +1,7 @@
 package platform
 
 // The one ranked corpus-search answer (station V4 of
-// docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md; the rule
+// docs/archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md; the rule
 // is the measured one of docs/design/corpus-first-retrieval-and-research-2026-11-18.md
 // "Fusion and windows").
 //

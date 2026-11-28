@@ -2,7 +2,7 @@
 definition_version: 4
 
 # Station FP4, ARCH-03 red slice: an app package carries its app desk.
-# Spine: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md
+# Spine: docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md
 # (FP4). Design: docs/design/app-package-carries-app-desk-2026-10-21.md.
 # Base: FP2's desk manifest (ARCH-02, lane/b3-desk-boundary-b1fix 27d39057d).
 readiness: drafted

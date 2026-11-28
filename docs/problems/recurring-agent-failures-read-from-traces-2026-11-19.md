@@ -1,7 +1,7 @@
 # Recurring agent failures read from traces, and a clustering assessment (2026-11-19)
 
 Station L1 of
-[the night's goal file](../definitions/choir-night-exact-vectors-learning-2026-11-19.md).
+[the night's goal file](../archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md).
 Read-only; nothing was changed. The owner, 2026-11-19: "we need to review the
 traces and investigate all the problems eg the 3090 read loop. where we have
 repeated problems there may be solutions. but note that if the problems are at

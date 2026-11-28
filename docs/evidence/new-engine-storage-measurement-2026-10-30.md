@@ -2,7 +2,7 @@
 
 Status: measurement only, mutation class green (docs). No production data or
 service was changed. Settles round 0f (R0f-02 to R0f-07) of
-[the data-architecture precommit](../definitions/choir-data-architecture-selection-2026-10-28.precommit.md)
+[the data-architecture precommit](../archive/definitions/choir-data-architecture-selection-2026-10-28.precommit.md)
 by the settler the records name: load the census-frozen keep set into each
 engine on a scratch host directory, measure `pg_total_relation_size` and the
 SQLite file after `VACUUM`. No record was edited. Inputs:

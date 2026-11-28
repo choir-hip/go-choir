@@ -2,7 +2,7 @@
 definition_version: 4
 
 # FP3 groups 2 and 3: the host floor. A station section of the launch first
-# pass (docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md,
+# pass (docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md,
 # station FP3), built on lane/host-b4-b5 while another worker repairs
 # group 1 on lane/host-vmctl-g1-r3. Authority: the metamission's
 # now.slice and FP0's assignment of 2026-10-21 (the items below, from

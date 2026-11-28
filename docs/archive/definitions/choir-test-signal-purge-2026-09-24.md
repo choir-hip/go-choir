@@ -19,7 +19,7 @@ start:
     mission: choir-ontology-kernel-2026-09-24 (K)
     disposition: in flight - dispatcher Stop deadlock + kernel-mode test
       delivery fixes pushed (42eee113); CI pending. R1.5 sequences before R2.
-    evidence_ref: docs/world-wire-mission-stack-2026-09-22.md
+    evidence_ref: docs/archive/world-wire-mission-stack-2026-09-22.md
   observed_artifact:
     - claim: 'The repo carries 408 *_test.go files / ~3395 test functions.
         A large fraction are low-signal unit tests that pin implementation

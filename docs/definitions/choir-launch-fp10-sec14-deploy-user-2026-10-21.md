@@ -3,7 +3,7 @@ definition_version: 4
 
 # FP10, SDC SEC-14 second half: CI deploys to Node B through a dedicated
 # user whose key runs only a host-side gate. Station of
-# docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md.
+# docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md.
 readiness: executable
 
 review:

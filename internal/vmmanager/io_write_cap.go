@@ -13,7 +13,7 @@ import (
 )
 
 // Per-guest write bandwidth bound (guest isolation, "a write storm halves a
-// co-reader"; docs/definitions/choir-guest-isolation-2026-11-01.ledger.md).
+// co-reader"; docs/archive/definitions/choir-guest-isolation-2026-11-01.ledger.md).
 //
 // The measured cause is the disk, not the weights. A guest flooding its data
 // drive keeps both NVMe members of the state mirror busy with writes, and an

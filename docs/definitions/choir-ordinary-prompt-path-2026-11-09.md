@@ -132,7 +132,7 @@ now:
   believed_state: "Stations L1-L9 landed and deployed (L3.5 phase 1 eviction; tool packages are its next station). The conjecture test passed on d@e at eaf66a1aa: \"What's latest in ai?\" reached a cited v2 in 78 s (baseline 202 s) and its last revision in 126 s (L4 crouton 296 s), 24 cite marks. The owner's added features landed and were proved on staging: appearance flow; account switcher (deployed proof passed); restart to update (b@c current, owner-act refusal, d@e refreshed while busy at 15:45Z); sandbox pause (drill passed on d@e at 1f2493123, 16:14-16:17Z: the owner update answered 409 pausing, then 201, and capsule-aadf2f61 resumed after the platform update with its upper of 25 files, 104040 bytes, and kept working)."
   main_uncertainty: "whether the speedup holds across prompt kinds (one run, one prompt); pause is proved for one capsule on one release change"
   next_observation: "none for this mission; the Autopaper improvement mission is next"
-  next_action: "mission complete; the live station is docs/definitions/choir-autopaper-improvement-2026-11-09.md, then Autoradio"
+  next_action: "mission complete; the live station is docs/archive/definitions/choir-autopaper-improvement-2026-11-09.md, then Autoradio"
   ledger: docs/definitions/choir-ordinary-prompt-path-2026-11-09.ledger.md
 ---
 

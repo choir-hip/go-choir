@@ -15,7 +15,7 @@ At 21:4x on 2026-10-22 the owner asked to "make chatgpt (gpt-6-luna) the
 sole model for the paper". FP0 wrote the paper's `System/model-policy.toml`
 to name chatgpt/gpt-6-luna for the defaults and for every role, marked
 `# owner-edited`
-(`docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md:875`).
+(`docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md:875`).
 
 Owner ruling R2, 2026-10-23: "I'd rather them fail than fallback. We are
 still pre-launch."

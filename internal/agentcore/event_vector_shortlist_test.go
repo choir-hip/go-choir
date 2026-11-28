@@ -1,6 +1,6 @@
 package agentcore
 
-// Station V5 (docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md;
+// Station V5 (docs/archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md;
 // design docs/design/corpus-first-retrieval-and-research-2026-11-18.md, "The
 // graph", station S7): every captured page reaches the event layer, research's
 // reads included, and each capture's shortlist adds the events whose member

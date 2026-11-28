@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """corpus-search-recall: recall at ten of the corpus search on a fixed question set
-(station V4 of docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md,
+(station V4 of docs/archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md,
 conjecture N1, ledger claim C144; the design is docs/design/corpus-first-retrieval-and-research-2026-11-18.md).
 
   corpus-search-recall --set FILE --url URL --owner ID --computer ID

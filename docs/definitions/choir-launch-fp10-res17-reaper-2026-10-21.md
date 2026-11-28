@@ -2,7 +2,7 @@
 definition_version: 4
 readiness: executable
 # Authority to execute: the launch first pass metamission, station FP10
-# (docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md), item
+# (docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md), item
 # RES-17 of docs/security-density-architecture-checklist-2026-10-21.md.
 ---
 

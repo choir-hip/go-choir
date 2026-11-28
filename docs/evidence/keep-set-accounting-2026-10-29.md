@@ -4,7 +4,7 @@ Status 2026-10-30: the Dolt and Store B (port 13307) references describe stores 
 
 Status: read-only investigation, mutation class green (docs). Nothing on Node B
 was written, deleted, restarted or reconfigured. Input to the object-storage
-design and the engine design ([selection](../definitions/choir-data-architecture-selection-2026-10-28.md)
+design and the engine design ([selection](../archive/definitions/choir-data-architecture-selection-2026-10-28.md)
 owner direction 2026-10-29 ~22:30).
 
 Labels: **[V]** verified by a command today (UTC ~23:25-23:30, host load 3);

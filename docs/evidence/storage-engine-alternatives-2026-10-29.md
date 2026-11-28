@@ -8,7 +8,7 @@ goal's acceptance gates. The owner requested that alternatives stay open:
 "a bit more setup at first is fine if it improves resource utilization or
 stability longterm."
 
-This extends the [selection mission](../definitions/choir-data-architecture-selection-2026-10-28.md),
+This extends the [selection mission](../archive/definitions/choir-data-architecture-selection-2026-10-28.md),
 [initial direction](../archive/design/data-rearchitecture-2026-10-28.md),
 [previous consensus](data-architecture-consensus-2026-10-28.md), and
 [portability inventory](portability-inventory-and-verification-2026-10-28.md).

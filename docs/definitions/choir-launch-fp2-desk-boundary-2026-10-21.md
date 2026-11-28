@@ -3,7 +3,7 @@ definition_version: 4
 
 # Station FP2 of the launch first pass (batch B3, red): the guest desk
 # boundary. Run as `/goal docs/definitions/choir-launch-fp2-desk-boundary-2026-10-21.md`.
-# Spine: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md.
+# Spine: docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md.
 # Items: SDC ARCH-02 (the desk manifest, launch item L1-04), ARCH-05, ARCH-07,
 # SEC-01, SEC-02, SEC-13, SEC-15, RES-01, RES-02, RES-03, RES-04
 # (docs/security-density-architecture-checklist-2026-10-21.md).

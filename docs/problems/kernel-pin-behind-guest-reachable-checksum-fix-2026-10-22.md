@@ -89,7 +89,7 @@ against `http://127.0.0.1:8083`):
    this procedure unholds automatically. vmctl keeps no record of an
    unhold, so FP0 writes each act (hold, unhold, refresh request and its
    answer) to the metamission ledger
-   (`docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`,
+   (`docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`,
    through FP0's ledger draft) with the time, the canary state and the
    paper's state.
    Unhold only clears the hold. After it, a running paper stays on the
