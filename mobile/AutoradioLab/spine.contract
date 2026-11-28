@@ -11,20 +11,24 @@ use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 // A URL typed into the bar (this was Swift's `BarURL.detect`; bar-url.test.contract and bar-url.test.ts are its tests). The address to open, or "" for an ordinary sentence: http or https with a host, as typed;
 // or one bare word with a dot and a known-looking host ("choir.news", "example.com/path"), to which https is put in front. A question ("what is choir.news?") has spaces, so it is not an address.
 // Exact has no regular expressions, so the letters are named: ASCII letters, digits and the hyphen, and any character outside printable ASCII (an accented or non-Latin letter: "cafe.de" with an accent is a host).
-// A top-level label is two or more characters, each a lower-case ASCII letter or a non-ASCII character that has no upper-case form other than itself. Characters a URL cannot hold (`^ { } | \\`) refuse the text.
+// A top-level label is two or more ASCII lower-case letters, or begins `xn--` (punycode: letters, digits, hyphens); so a bare non-ASCII top level ("choir.中国") is refused and the person types the scheme, as is a sentence ending in a fullwidth mark, an ellipsis or an emoji. A bare port is one to five digits. Unicode spaces (U+2000 to U+200A, U+202F, U+205F, U+3000, U+00A0, U+1680) are spaces. Characters a URL cannot hold (`^ { } | \\`) refuse the text.
 fn barAt(xs: string[], i: number, d: string): string = match xs.at(i) { case some(v) => v, case none => d }
 fn barAscii(c: string): bool = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-".includes(c)
 fn barPunct(c: string): bool = " !\"#$%&'()*+,./:;<=>?@[\\]^_`{|}~".includes(c)
-fn barHasSpace(t: string): bool = [" ", "\t", "\n", "\u000D", "\u000B", "\u000C", "\u0085", "\u00A0", "\u2028", "\u2029", "\u3000"].filter(c => t.includes(c)).length > 0
+fn barHasSpace(t: string): bool = [" ", "\t", "\n", "\u000D", "\u000B", "\u000C", "\u0085", "\u00A0", "\u1680", "\u2000", "\u2001", "\u2002", "\u2003", "\u2004", "\u2005", "\u2006", "\u2007", "\u2008", "\u2009", "\u200A", "\u2028", "\u2029", "\u202F", "\u205F", "\u3000"].filter(c => t.includes(c)).length > 0
 fn barUnholdable(t: string): bool = ["^", "{", "}", "|", "\\"].filter(c => t.includes(c)).length > 0
 fn barLabel(l: string): bool = l != "" and l.split("").filter(c => not (barAscii(c) or not barPunct(c))).length == 0
-fn barTld(l: string): bool = l.length >= 2 and l.split("").filter(c => not ("abcdefghijklmnopqrstuvwxyz".includes(c) or (not barAscii(c) and not barPunct(c) and c == c.toLowerCase()))).length == 0
+fn barLower(c: string): bool = "abcdefghijklmnopqrstuvwxyz".includes(c)
+fn barTld(l: string): bool = l.length >= 2 and (l.split("").filter(c => not barLower(c)).length == 0 or (l.startsWith("xn--") and l.length > 4 and l.split("").filter(c => not barAscii(c)).length == 0))
+fn barPort(p: string): bool = p.length >= 1 and p.length <= 5 and p.split("").filter(c => not "0123456789".includes(c)).length == 0
 fn barAuthority(rest: string): string = barAt(barAt(barAt(rest.split("#"), 0, "").split("?"), 0, "").split("/"), 0, "")
 fn barHostPart(auth: string): string = barAt(auth.split("@"), auth.split("@").length - 1, "")
 fn barWebOk(t: string): bool = barAt(barHostPart(barAuthority(t.slice(t.indexOf("://") + 3))).split(":"), 0, "") != ""
 fn barLabelsOk(ls: string[]): bool = ls.length >= 2 and ls.filter(l => not barLabel(l)).length == 0 and barTld(barAt(ls, ls.length - 1, ""))
-fn barBareHost(t: string): string = barAt(barAt(t.split("/"), 0, t).split(":").filter(p => p != ""), 0, barAt(t.split("/"), 0, t))
-fn barBareOk(t: string): bool = not t.includes("://") and not t.endsWith("?") and not t.endsWith("!") and not t.endsWith(",") and barLabelsOk(barBareHost(t).split("."))
+fn barBareAuth(t: string): string[] = barAt(t.split("/"), 0, t).split(":")
+fn barBareHost(t: string): string = barAt(barBareAuth(t), 0, "")
+fn barBarePort(t: string): bool = barBareAuth(t).length == 1 or (barBareAuth(t).length == 2 and barPort(barAt(barBareAuth(t), 1, "")))
+fn barBareOk(t: string): bool = not t.includes("://") and not t.endsWith("?") and not t.endsWith("!") and not t.endsWith(",") and barBarePort(t) and barLabelsOk(barBareHost(t).split("."))
 fn barUrlOf(raw: string): string = barUrlText(raw.replaceAll("\u0085", " ").trim())
 fn barUrlText(t: string): string = t == "" or barHasSpace(t) or barUnholdable(t) ? "" : (t.toLowerCase().startsWith("http://") or t.toLowerCase().startsWith("https://") ? (barWebOk(t) ? t : "") : (t.includes("@") ? "" : (barBareOk(t) ? `https://${t}` : "")))
 
