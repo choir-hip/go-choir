@@ -163,6 +163,12 @@ fresh; out=$(sk 'trap proof_key_cleanup EXIT; proof_mint; proof_seed "$CONT"; ex
 grep -q '^REVOKE key-123$' "$T/curl.log" && ok "trap: the exit trap revokes the minted key by id" || no "trap: no revoke: $out"
 [ ! -e "$SECDIR/choir.key" ] && [ ! -e "$SECDIR/choir.key-id" ] && ok "trap: the seeded files are removed at exit" || no "trap: files left"
 fresh; out=$(sk 'proof_mint; proof_seed "$CONT"; proof_key_cleanup; proof_key_cleanup'); [ "$(grep -c '^REVOKE' "$T/curl.log")" = 1 ] && ok "trap: cleanup run twice revokes once" || no "trap: revoked twice"
+# a killed proof still cleans up: the proof's own first two trap lines (EXIT, then the signals), a TERM while a step sleeps
+sed -n '/^trap .* EXIT$/{p;q;}' "$HERE/proof-real.sh" > "$T/traps.sh"; sed -n "/^trap 'exit 143' TERM INT HUP/p" "$HERE/proof-real.sh" >> "$T/traps.sh"
+fresh; ( sk '. "$T/traps.sh"; proof_mint; proof_seed "$CONT"; echo $(exec sh -c "echo \$PPID") > "$T/pid"; sleep 20 & wait' > "$T/term.out" ) & tw=$!
+i=0; while [ ! -s "$T/pid" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+[ -s "$T/pid" ] && kill -TERM "$(cat "$T/pid")" 2>/dev/null; wait $tw 2>/dev/null
+grep -q '^REVOKE key-123$' "$T/curl.log" 2>/dev/null && [ ! -e "$T/sc" ] && ok "signal: a TERM runs the exit trap (the key is revoked, the scratch folder with the QA header is gone)" || no "signal: a killed proof left the key live: $(cat "$T/term.out" 2>/dev/null)"
 fresh; out=$(sk 'proof_key_cleanup; echo "status=$?"'); echo "$out" | grep -q 'status=0' && ! grep -q REVOKE "$T/curl.log" 2>/dev/null && ok "trap: cleanup with no key minted does nothing" || no "cleanup with no key: $out"
 # a revoke that failed is said loudly with the id, not the key; a revoke that finds the key gone (404) is fine
 fresh; out=$(FAKE_REVOKE_CODE=500 sk 'proof_mint; proof_seed "$CONT"; proof_key_cleanup; echo "status=$?"')

@@ -17,6 +17,7 @@ rm -f "$SHOTS"/real-*.png      # a reused PROOF_SHOTS must not satisfy the scree
 . "$HERE/proof-common.sh"
 . "$HERE/proof-key.sh"
 trap 'rc=$?; proof_key_cleanup || rc=1; rm -rf "$SCRATCH"; exit $rc' EXIT
+trap 'exit 143' TERM INT HUP   # a killed proof (a time limit) still runs the EXIT trap: without this the shell dies with the minted key live and the QA key's header file left in $SCRATCH (the run of 2026-11-28)
 KEYFILE="${REAL_KEY_FILE:-$HOME/.config/choir-qa/keys/d-e.key}"
 [ -r "$KEYFILE" ] || fail "key file" "cannot read the test key file"
 echo "screenshots: $SHOTS"
