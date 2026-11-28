@@ -219,9 +219,9 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: 'E5: the bar URL rule (d61b266cf), the reader''s aim (ddb2d0f5c), the sentence follow (1e9788486) and the bar''s facts (4eebdd26d) are shared code, so the sentence follow plan is built; non-voice native is 2,777 lines, 30 files; what remains waits on owner decisions D2, D4, D6, D7 or is Android voice'
-  source_ref: origin/main 4eebdd26d
-  deploy_identity: staging on 4eebdd26d
+  slice: 'E5 is at its floor without the owner: the sentence follow plan is built (4eebdd26d) and a control is offered only where the platform''s module answers it (cfc01ebdb); non-voice native is 2,777 lines in 30 files, of which the survey (docs/evidence/non-voice-native-code-2026-11-28.md) reads 1,833 as voice or native-only reports, 929 as blocked on D6 and D4, and 15 as movable now'
+  source_ref: origin/main cfc01ebdb
+  deploy_identity: staging on cfc01ebdb
   candidate:
     id: none
     state: none
@@ -250,7 +250,7 @@ now:
     main_uncertainty: 'whether the owner counts the voice turn''s state as voice (it decides whether the gate can reach zero without rewriting the turn), and whether the build tree may move'
     next_observation: 'the contract build and bun test on the new pin, once the build tree may move'
   blocker_or_risk: 'The app-side Swift has no compile check that runs without a person: main did not compile as an iPhone app from ce79438a8 until e25afe05f, 31 hours (docs/problems/main-broke-the-iphone-app-build-for-a-day-and-no-check-saw-it-2026-11-28.md); the owner is asked which check closes it. The build tree was moved to main on 2026-11-28 on the owner''s word to land the Android work (its old state is on branch deck-build 4b46ca522); D5 is answered by that. Nothing of K3 has run on a device or a simulator.'
-  next_action: 'the bar and radio page offer three controls that do nothing on Android (speed, hands-free toggle, typed question): hide them there or have Kotlin answer, an owner choice with hiding as the default; survey what non-voice Swift is left without an owner decision; device checks are owed for everything landed'
+  next_action: 'the two small moves the survey ranks (contentBusy, SpeedStore); then the owner: the voice list for the 23 files the survey reads as voice, and D6, D4, D2, D7; device checks are owed for everything landed'
 receipts: []
 ---
 
