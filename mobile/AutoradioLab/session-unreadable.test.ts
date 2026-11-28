@@ -186,7 +186,7 @@ describe('U9 between answers is unknown, a store failure is locked', () => {
     bindStore({ get: () => { throw new Error('InvalidAccessError: the Keychain is locked'); }, set: () => undefined, forget: () => undefined });
     expect(await reasonOf()).toBe('locked'); expect(sent).toBe(0); done();
   });
-  test('(a) only the session read throws: unreadable through the real storeSource, then unknown', async () => {
+  test('(a) only the session read throws: unreadable through the real storeSource, reason locked (the failing read decides)', async () => {
     let n = 0;
     bindStore({ get: () => { n += 1; if (n === 1) throw new Error('boom'); return null; }, set: () => undefined, forget: () => undefined });
     const why = await reasonOf(); done();
@@ -254,5 +254,24 @@ describe('U14 the callers of an item read', () => {
     globalThis.fetch = (async () => new Response(JSON.stringify({ handle: 'h', key_id: 'k', scopes: ['a'] }), { status: 200 })) as never;
     const v = await settingsAccount({ signedIn: true, tick: 1 }); done();
     expect(v.computerID).toBe(''); expect(v.status).not.toBe('failed');
+  });
+});
+
+describe('U15 the no-store message is read one way', () => {
+  test('a store that throws a plain object with the message (not an Error) is still a no-store refusal', async () => {
+    bindStore({ get: () => { throw { message: NO_STORE }; }, set: () => undefined, forget: () => undefined });
+    let caught: unknown; try { await authedJSON('/api/x'); } catch (e) { caught = e; }
+    done(); expect(caught).toMatchObject({ reason: 'unknown', noStore: true });
+  });
+  test('a source that throws the no-store message directly is unknown with the flag, without a second read', async () => {
+    const asked: string[] = [];
+    bindNative({ available: true, later: async (r: { op?: string }) => { asked.push(String(r.op)); throw new Error(NO_STORE); } } as never);
+    let caught: unknown; try { await authedJSON('/api/x'); } catch (e) { caught = e; }
+    done(); expect(caught).toMatchObject({ reason: 'unknown', noStore: true }); expect(asked).toEqual(['session']);
+  });
+  test('a source that throws anything else falls back to the key state', async () => {
+    const asked: string[] = [];
+    bindNative({ available: true, later: async (r: { op?: string }) => { asked.push(String(r.op)); if (r.op === 'session') throw new Error('bridge'); return { state: 'unreadable' }; } } as never);
+    expect(await reasonOf()).toBe('locked'); done(); expect(asked).toEqual(['session', 'keystate']);
   });
 });

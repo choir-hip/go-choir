@@ -115,7 +115,7 @@ describe('a control is offered only when its op is answered', () => {
   test('K5 a question nothing answers stays in the field and is not sent', () => {
     const i = spine.indexOf('  action sendAsk'); const j = spine.indexOf('\n  //', i);
     const send = spine.slice(i, j);
-    expect(send).toContain('if au.signedIn == false and (canAsk or askUrl != "")\n      gate = "signin"');
+    expect(send).toContain('if offerSignIn and (canAsk or askUrl != "")\n      gate = "signin"');
     expect(send).toContain('if au.signedIn and askUrl != ""\n      send qm = queueAct("openWeb", askUrl)\n      ask = ""');
     expect(send).toContain('if au.signedIn and askUrl == "" and canAsk\n      send acct = choirAsk(text=ask, aim=pg.top)\n      ask = ""');
     expect(send.match(/ask = ""/g)?.length).toBe(2);

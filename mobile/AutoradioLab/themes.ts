@@ -22,7 +22,7 @@
 //  F10 A chosen theme that has only one scheme meets a mode control that asks for the other: the control shows the one scheme and refuses the other; the "default" id clears the choice.
 //  F11 The lens is a style (A native glass, B no material with a wash, C ultra-thin) and a wash of the page colour: a theme without a "lens" key shows the native glass; an unknown style or a wash outside 0...1 is refused.
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, HTTPError, SignedOutError, type Reply } from './api.ts';
+import { authedJSON, HTTPError, type Reply, isSignedOut } from './api.ts';
 import { WORDS } from './words.ts';
 import { BUNDLED } from './themes-bundled.ts';
 
@@ -604,7 +604,7 @@ export async function themeFromTexture(docId: string, storage: Storage | undefin
     return say(true, `Added ${checked.name} from the Texture` + (t.ignored.length === 0 ? '.' : ` (the phone ignored: ${t.ignored.join(', ')}).`));
   } catch (e) {
     if (e instanceof HTTPError) return say(false, e.status === 404 ? 'No theme Texture with that id.' : e.status === 422 ? `That Texture is not a usable theme: ${e.message.replace(/^HTTP 422: ?/, '').slice(0, 120)}` : `The server refused (${e.status}).`);
-    if (e instanceof SignedOutError) return say(false, e.reason === 'refused' ? WORDS.rejected : e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : 'Sign in to add a theme from a Texture.');
+    if (isSignedOut(e)) return say(false, e.reason === 'refused' ? WORDS.rejected : e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : 'Sign in to add a theme from a Texture.');
     return say(false, (e instanceof Error ? e.message : String(e)).slice(0, 160));
   }
 }

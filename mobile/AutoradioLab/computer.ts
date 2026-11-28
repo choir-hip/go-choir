@@ -16,7 +16,7 @@
 // Nothing here reads a clock or sets a timer: the poll is the page's `task`, and "Restart to update" sends an idempotency key made from a counter and the
 // computer's epoch, not from a random number (a data source may not call `Math.random`).
 
-import { accountGeneration, authedJSON, HTTPError, segment, SignedOutError, unreadableWords } from './api.ts';
+import { accountGeneration, authedJSON, HTTPError, segment, unreadableWords, isSignedOut } from './api.ts';
 
 export type ComputerView = { id: string; state: string; target: string; phase: string; updateAvailable: boolean; message: string; epoch: number; checked: boolean };
 export const POLLS = 40;
@@ -53,7 +53,7 @@ export async function snapshot(call: Call): Promise<Snapshot> {
 /** C5: the words for a failure. */
 export function plain(e: unknown): string {
   const unread = unreadableWords(e); if (unread) return unread;
-  if (e instanceof SignedOutError) return 'Not signed in.';
+  if (isSignedOut(e)) return 'Not signed in.';
   if (e instanceof NoComputer) return e.message;
   if (e instanceof HTTPError && e.status === 401) return "This phone's sign-in is no longer accepted.";
   if (e instanceof HTTPError && e.status === 403) return "This phone's key may not restart your computer.";
@@ -108,7 +108,7 @@ export class Computer {
         const why = e.message.replace(/^HTTP 409:?\s*/, '');                                                               // api.ts check(): "HTTP 409: <the server's error string>"
         this.v = { ...this.v, phase: 'paused', message: why === '' ? 'Your computer is busy and will update when it is idle.' : `Your computer is busy (${[...why].slice(0, 80).join('')}) and will update when it is idle.` };
       } else if (e instanceof HTTPError && (e.status === 502 || e.status === 504)) { this.polls = POLLS; }                  // C3: the act does not stop
-      else if (e instanceof SignedOutError || (e instanceof HTTPError && (e.status === 401 || e.status === 429 || e.status < 500))) this.v = { ...this.v, phase: 'failed', message: plain(e) };
+      else if (isSignedOut(e) || (e instanceof HTTPError && (e.status === 401 || e.status === 429 || e.status < 500))) this.v = { ...this.v, phase: 'failed', message: plain(e) };
       else this.polls = POLLS;                                                                                              // a dropped connection or a timeout (C3)
     }
     return this.view();

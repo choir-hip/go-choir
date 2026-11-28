@@ -14,7 +14,7 @@ const view = (state: string, message: string, action: string): AccountView => ({
 /** The former Apple package source, now shared: read the Exact secret store through api.ts and keep the same four-field shape. An unreadable key is not signed in here; accountState below says "locked" and wipes nothing. */
 export async function choirAuthState(): Promise<ChoirAuthState> {
   const k = await keyState();
-  return { signedIn: k.state === 'present', baseURL: ORIGIN, status: k.state === 'unreadable' && !k.noStore && !k.error ? 'locked' : 'idle', message: '' };
+  return { signedIn: k.state === 'present', baseURL: ORIGIN, status: k.state !== 'unreadable' ? 'idle' : k.noStore || k.error ? 'unknown' : 'locked', message: '' };
 }
 
 /** `_tick`: changes when something that can change the answer happened (a sign-in or sign-out, a page change, the app returning to the front, a request the server refused). `host`: the host fact

@@ -8,7 +8,7 @@
 // The one native fact: `{op: 'contentBusy'}` on the app module (AutoradioModule+Notebook.swift `notebookOp`): whether remote audio is on air. The player is native; a sync does not take the network from it.
 import type { Storage } from './app.contract.d.ts';
 import { ContentStore, CONTENT_DB, syncAll, liveFetchers, toDoc, type Db, type Fetchers, type StoredItem } from './content.ts';
-import { accountGeneration, getJSON, isUnreadable, nativeLater, SignedOutError, unreadableWords } from './api.ts';
+import { accountGeneration, getJSON, isUnreadable, nativeLater, unreadableWords, isSignedOut } from './api.ts';
 import { cut } from './takes.ts';
 import type { Doc } from './search.ts';
 
@@ -77,8 +77,8 @@ async function run(storage: Storage | undefined, env: Env): Promise<SyncInfo> {
   // syncAll turns a failing list into an "error" report; a refusal for want of a session is told apart here.
   let signedOut = false, unread: unknown = null;       // a key that could not be read is not "signed out": the sync is offline (not remembered, asked again) and says so
   const watched = Object.fromEntries(Object.entries(base).map(([k, fn]) => [k, (...a: unknown[]) => {
-    try { const r = (fn as (...x: unknown[]) => unknown)(...a); return r instanceof Promise ? r.catch((e) => { if (isUnreadable(e)) unread = e; else if (e instanceof SignedOutError) signedOut = true; throw e; }) : r; }
-    catch (e) { if (isUnreadable(e)) unread = e; else if (e instanceof SignedOutError) signedOut = true; throw e; }
+    try { const r = (fn as (...x: unknown[]) => unknown)(...a); return r instanceof Promise ? r.catch((e) => { if (isUnreadable(e)) unread = e; else if (isSignedOut(e)) signedOut = true; throw e; }) : r; }
+    catch (e) { if (isUnreadable(e)) unread = e; else if (isSignedOut(e)) signedOut = true; throw e; }
   }])) as unknown as Fetchers;
   const f: Fetchers = { ...watched, audioBusy: env.busy ?? nativeBusy };
   try {
@@ -90,7 +90,7 @@ async function run(storage: Storage | undefined, env: Env): Promise<SyncInfo> {
     return { state: 'done', line: reports.map((r) => `${r.fetched} ${r.kind === 'story' ? 'stories' : r.kind + 's'}`).join(', ') + (stopped ? `; stopped: ${stopped.stoppedBy}` : '') };
   } catch (e) {
     if (isUnreadable(e)) return { state: 'offline', line: unreadableWords(e) ?? '' };
-    if (e instanceof SignedOutError) return { state: 'signedout', line: 'Signed out: nothing synced.' };
+    if (isSignedOut(e)) return { state: 'signedout', line: 'Signed out: nothing synced.' };
     return { state: 'offline', line: 'The computer could not be reached.' };
   }
 }

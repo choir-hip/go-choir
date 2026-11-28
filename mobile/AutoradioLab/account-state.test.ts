@@ -5,7 +5,7 @@
 //  X4 a bridge error is not signed out (nothing is shown that could be wrong).
 //  X6 the words are the app's one list (the page words say "Sign in", not "Sign in again", unless the app knows a key existed).
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { accountState, WORDS } from './account-state.ts';
+import { accountState, choirAuthState, WORDS } from './account-state.ts';
 import { resetHost, hostMode } from './host.ts';
 import { adoptNative, resetSeam, authedJSON } from './api.ts';
 import { settleAccount, resetSettled, STAMP_FILE } from './account.ts';
@@ -177,5 +177,23 @@ describe('follow-up 2 (seat 2 on d237ff989)', () => {
     globalThis.fetch = (async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })) as never;
     await authedJSON('/x');
     expect((await accountState('b', 'mail:', 'native')).state).toBe('signedIn');
+  });
+});
+
+describe('choirAuthState and the action of every state: "could not read" is not "no key"', () => {
+  const noStoreHandle = (state: string) => ({ available: true, later: async (r: { op: string }) => (r.op === 'keystate' ? { state, noStore: true } : { found: false, unreadable: true, noStore: true }) }) as never;
+  test('present: signedIn, idle', async () => { reply = { state: 'present' }; expect(await choirAuthState()).toMatchObject({ signedIn: true, status: 'idle' }); });
+  test('absent: not signed in, idle', async () => { reply = { state: 'absent' }; expect(await choirAuthState()).toMatchObject({ signedIn: false, status: 'idle' }); });
+  test('locked (a Keychain that cannot be read): not signed in, status locked', async () => { reply = { state: 'unreadable' }; expect(await choirAuthState()).toMatchObject({ signedIn: false, status: 'locked' }); });
+  test('no store here, or a bridge that throws: not signed in, status unknown (not idle)', async () => {
+    resetSeam(); adoptNative(noStoreHandle('unreadable'), 'x'); expect(await choirAuthState()).toMatchObject({ signedIn: false, status: 'unknown' });
+    resetSeam(); reply = { state: 'present', throws: true }; adoptNative(handle(), 'x'); expect(await choirAuthState()).toMatchObject({ signedIn: false, status: 'unknown' });
+  });
+  test('the sign-in action is offered only for signed out and rejected; never for locked, unknown or no key store', async () => {
+    reply = { state: 'absent' }; expect((await accountState('', '', 'native', 'ios', 'news.choir.autoradio.lab.one')).action).toBe('signIn');
+    reply = { state: 'unreadable' }; expect(await accountState('')).toMatchObject({ state: 'locked', action: '' });
+    resetSeam(); adoptNative(noStoreHandle('unreadable'), 'x'); expect(await accountState('')).toMatchObject({ state: 'unknown', action: '' });
+    resetSeam(); reply = { state: 'present', throws: true }; adoptNative(handle(), 'x'); expect(await accountState('')).toMatchObject({ state: 'unknown', action: '' });
+    resetSeam(); resetHost(); expect((await accountState('', '', 'none')).action).toBe('');
   });
 });

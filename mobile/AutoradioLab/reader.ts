@@ -5,7 +5,7 @@
 // Held in memory for the session (never on disk: nothing here is stored, so nothing here needs a wipe beyond forgetting); keyed on the account generation, so another account never sees a held
 // document and an answer that began under an older generation is never held. A story and a revision never change, so they are held; a document's head changes (an edit, the desk's revision),
 // so it is asked for again each time and the held copy only stands in when the ask fails. Logs carry counts only, never a title.
-import { accountGeneration, authedJSON, getJSON, HTTPError, nativeLater, segment, SignedOutError, type Authed, type Query, type Reply } from './api.ts';
+import { accountGeneration, authedJSON, getJSON, HTTPError, nativeLater, segment, type Authed, type Query, type Reply, isSignedOut } from './api.ts';
 import { lapYield } from './lap.ts';
 import { blankDoc, parseAddress, parseBundleAsync, parseRelated, parseRevision, splitRoute, type ReaderDoc } from './reader-parse.ts';
 import { WORDS } from './words.ts';
@@ -50,7 +50,7 @@ function why(e: unknown): string {
   return 'Check the connection and try again.';
 }
 function failDoc(address: string, e: unknown): ReaderDoc {
-  if (e instanceof SignedOutError) {
+  if (isSignedOut(e)) {
     const m = e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : e.reason === 'refused' ? 'Sign in again to open your documents.' : 'Sign in to open your documents.';
     return blankDoc(address, 'error', m);
   }
@@ -117,7 +117,7 @@ async function ask(address: string, net: Net, prefetch = false): Promise<ReaderD
     try { d = await fetchDoc(address, net); }
     catch (e) {
       if (gen !== accountGeneration()) return blankDoc(address, 'loading');
-      return !(e instanceof SignedOutError) && held.get(address) ? held.get(address)! : failDoc(address, e);
+      return !(isSignedOut(e)) && held.get(address) ? held.get(address)! : failDoc(address, e);
     }
     if (gen !== accountGeneration()) return blankDoc(address, 'loading');           // another account began while this was on its way: neither held nor shown
     if (d.status === 'ready' && inflight.get(key) === self) { put(d); if (prefetch) unseen.add(address); else unseen.delete(address); }

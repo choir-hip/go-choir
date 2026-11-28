@@ -18,7 +18,7 @@
 
 import type { Storage } from './app.contract.d.ts';
 import { WORDS } from './words.ts';
-import { authedJSON, HTTPError, SignedOutError, writeCurrent, accountGeneration } from './api.ts';
+import { authedJSON, HTTPError, writeCurrent, accountGeneration, isSignedOut } from './api.ts';
 import { textureSource } from './content.ts';
 import { cut } from './takes.ts';
 
@@ -199,7 +199,7 @@ export async function readLearning(get: Get, limit = 200): Promise<Load> {
     const read = parseLearning(await get('/api/autoradio/learning', { limit: Math.min(Math.max(limit, 1), 200) }));
     return read ? { state: 'ready', read } : { state: 'notyet' };
   } catch (e) {
-    if (e instanceof SignedOutError) return { state: 'signedout', reason: e.reason };
+    if (isSignedOut(e)) return { state: 'signedout', reason: e.reason };
     if (e instanceof HTTPError && (e.status === 404 || e.status === 501)) return { state: 'notyet' };
     return { state: 'offline' };
   }

@@ -116,7 +116,7 @@ members Autoradio
     mailNoteFor = pg.top
     mailNoteSrc = "ask"
     send mak = mailAsk(pg.top, q)
-    if au.signedIn == false
+    if offerSignIn
       gate = "signin"
     if au.signedIn
       send acct = choirAsk(text=q, aim=pg.top)

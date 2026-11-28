@@ -140,7 +140,7 @@ members Autoradio
   // same step as the send: nothing is waited for, nothing can be overwritten by a second Send, and the field is cleared once the chosen send is issued (as it was before the rule moved from Swift).
   derive askUrl = barUrlOf(ask)
   action sendAsk
-    if au.signedIn == false and (canAsk or askUrl != "")
+    if offerSignIn and (canAsk or askUrl != "")
       gate = "signin"
     if au.signedIn and askUrl != ""
       send qm = queueAct("openWeb", askUrl)
@@ -159,7 +159,7 @@ members Autoradio
   action micTap
     if micOn or (askGate == "" and dl.hearingReady and micperm.gate == "")
       send up = choirHandsFreeToggle()
-    if micOn == false and askGate != ""
+    if micOn == false and askGate != "" and offerSignIn
       gate = askGate
     // Signed in but the hearing models are not on the phone: voice is offered as ready only once they are (owner, 2026-11-23), so Voice and models opens with every model, its size and its Download; the microphone is not asked.
     if micOn == false and askGate == "" and dl.hearingReady == false

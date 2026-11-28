@@ -328,6 +328,7 @@ component OnboardingPage
   inject
     th: Theme
     au: ChoirAuth
+    acs: AccountView
     dl: ModelsView
     ob: Onboarding
     openPage: action
@@ -366,7 +367,7 @@ component OnboardingPage
 
       // ---- welcome (and skipped): what is about to happen, plainly
       // Signed out, radio playback needs no setup. The built-in voice is native Tiny Voca; no fallback to Apple's speech synthesizer.
-      if (ob.step == "welcome" or ob.step == "skipped") and au.signedIn == false
+      if (ob.step == "welcome" or ob.step == "skipped") and au.signedIn == false and acs.state != "locked" and acs.state != "unknown"
         Card(level=1, testId="ob-welcome-voice", minHeight=0)
           column padding=18 gap=12
             text "The radio reads the paper to you. Tiny Voca, included with Autoradio, is its voice. It reads on this phone even offline." font-size="-exact-body" line-height=1.45 font-family=th.fontText

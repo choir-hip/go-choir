@@ -11,7 +11,7 @@
 // Dropped: the "loading" status and the generation guard (A3 in Swift): a source answers once per ask, so a late answer cannot land.
 
 import { WORDS } from './words.ts';
-import { authedJSON, HTTPError, keyState, keptComputerId, ORIGIN, SignedOutError, unreadableWords } from './api.ts';
+import { authedJSON, HTTPError, keyState, keptComputerId, ORIGIN, unreadableWords, isSignedOut } from './api.ts';
 
 export type SettingsAccount = {
   status: string; signedIn: boolean; handle: string; keyID: string; keyLabel: string; scopes: string; computerID: string; message: string; baseURL: string;
@@ -39,7 +39,7 @@ export function parseWhoami(body: unknown): Omit<SettingsAccount, 'signedIn' | '
 /** What the page says for a failure, in plain words (A2). */
 export function plainAccountError(e: unknown): string {
   const unread = unreadableWords(e); if (unread) return unread;
-  if (e instanceof SignedOutError) return "This phone's sign-in is no longer accepted. Sign out and sign in again.";
+  if (isSignedOut(e)) return "This phone's sign-in is no longer accepted. Sign out and sign in again.";
   if (e instanceof HTTPError && e.status === 404) return 'This server cannot say which account a key is yet.';
   if (e instanceof Error && /not JSON/.test(e.message)) return "The server's answer was not what was expected.";
   return 'Could not reach choir.news.';

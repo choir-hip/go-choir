@@ -8,7 +8,7 @@
 // S4 400 resends bare; a second 400 drops it. S5 a 5xx or a transport error keeps it. S6 signed out keeps it. S7 a sign-out during a flush leaves no file.
 // S8 two flushes at once send each tap once. S9 the story routes of a tap lose their version and are unique, at most 12.
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, authedJSON, HTTPError, SignedOutError, writeCurrent } from './api.ts';
+import { accountGeneration, authedJSON, HTTPError, writeCurrent, isSignedOut } from './api.ts';
 import { onAirEntry, type Entry, type Sheet } from './runsheet-model.ts';
 
 export const STEER_FILE = 'app:/data/steer-queue.json';
@@ -70,7 +70,7 @@ const KEEP = new Set([401, 403, 408, 409, 429]);
 export async function sendOne(t: SteerTap, post: Post = realPost): Promise<SteerSend> {
   const status = (e: unknown): number => (e instanceof HTTPError ? e.status : 0);
   try { await post(body(t, false)); return 'sent'; } catch (e) {
-    if (e instanceof SignedOutError) return 'offline';
+    if (isSignedOut(e)) return 'offline';
     const s = status(e);
     if (s === 404 || s === 501) return 'notYet';
     if (s === 400 || s === 422) {

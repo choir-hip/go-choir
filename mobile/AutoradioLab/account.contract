@@ -45,6 +45,9 @@ members Autoradio
   // sheet, the launcher, the bar's field or any keyboard (exactViewport: the one general keyboard fact), the content controls, the reader's aim row or a web layer.
   derive bannerOn = acs.message != "" and not authOpen and not siv.pending and layer == "" and barFocused == false and ctlUp == false and spVp.keyboardHeight < 120 and (raim.address == "" or raim.address != pg.top) and webUrl == "" and (sheet == "" or sheetFor != pg.top)
   resource acs = accountState(`${au.signedIn}|${siv.phase}|${siv.message}|${signedOutTick}|${hpg.visibilityState}|${hpg.hasFocus}|${lockTick}|${hc.mode}|${hpg.platform}`, pg.top, hc.mode, hpg.platform) as shape AccountView else empty()
+  // The ONE decision "may a sign-in be offered": the account's own answer says so (account-state.ts: `action` is "signIn" for signed out and for a refused key, never for locked, unknown or a host with no sign-in).
+  // Every place that opens the sign-in sheet reads this, never the plain signed-in flag: that is false for a key that could not be read too, and a sheet opened then would write a new key over a signed-in account.
+  derive offerSignIn = acs.action == "signIn"
   mutation acct as shape LabState
   mutation racct as shape SettingsAck refreshes rpulse
   // Sign-out is led by shared code (account.ts): Apple's native voice stores sign out first; Android's explicitly unavailable app module uses the shared-only path; then every shared store is wiped.

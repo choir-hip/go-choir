@@ -26,7 +26,7 @@
 // 10. Time is never read (`Date.now()` is refused): "now" is the Date header of the last answer any server gave, kept in the library file.
 
 import type { Result, Storage } from './app.contract.d.ts';
-import { authedJSON, SignedOutError, getJSON, TIMEOUT_MS, writeCurrent, accountGeneration } from './api.ts';
+import { authedJSON, getJSON, TIMEOUT_MS, writeCurrent, accountGeneration, isSignedOut } from './api.ts';
 import { NotAFeed, parseFeed } from './podcast-feed.ts';
 import {
   HOME, TOP_URL, clock, decodeChartNews, decodePopular, decodeSearch, decodeSubscriptions, decodeTranscript, durationLabel, durationsAgree, episodeAddress,
@@ -265,7 +265,7 @@ async function syncIfDue(storage: Storage | undefined, l: Library): Promise<void
   const gen = generation;                                                    // the answer of an account that was signed out meanwhile is dropped
   let list: Show[];
   try { list = decodeSubscriptions((await authedJSON('/api/podcast/subscriptions', { query: { limit: 200 } })).body); }
-  catch (e) { if (gen !== generation) return; syncNote = e instanceof SignedOutError ? '' : "Not in step with your computer's podcasts yet: it did not answer. Subscriptions here are kept on this phone."; return; }
+  catch (e) { if (gen !== generation) return; syncNote = isSignedOut(e) ? '' : "Not in step with your computer's podcasts yet: it did not answer. Subscriptions here are kept on this phone."; return; }
   if (gen !== generation) return;
   const removed = new Set(l.removed.map(feedKey));
   const added: Show[] = [];

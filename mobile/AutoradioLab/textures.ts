@@ -2,7 +2,7 @@
 // from GET /api/texture/documents, with the edition pinned first, and the server's own answer to "which document is my edition" (GET /api/texture/edition) applied to it.
 // Nothing here is native: the signed-in client (api.ts) is the whole platform need, and the words for "no key", "locked" and "refused" are the app's one list (words.ts).
 // Opening a document (`texture:<id>`) is the shared reader (reader.ts).
-import { authedJSON, accountGeneration, SignedOutError, HTTPError, type Reply } from './api.ts';
+import { authedJSON, accountGeneration, HTTPError, type Reply, isSignedOut } from './api.ts';
 import { WORDS } from './words.ts';
 
 export type TextureRow = { address: string; title: string; updated: string; meta: string; edition: boolean };
@@ -69,7 +69,7 @@ export function applyEdition(l: TextureList, ed: EditionAnswer | null): TextureL
 
 /** The words for a failure. Sign in is said only when signing in is the answer (no key); a locked phone is told to unlock, a refused key to sign in again (the Swift said "Sign in" for all). */
 function failure(e: unknown): TextureList {
-  if (e instanceof SignedOutError) {
+  if (isSignedOut(e)) {
     const m = e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : e.reason === 'refused' ? 'Sign in again to see your documents.' : 'Sign in to see your documents.';
     return list('error', m);
   }
@@ -100,7 +100,7 @@ export async function createTexture(net: CreateNet = { post: (path, body) => aut
     if (id === '') return madeFailed('The computer did not make the document. Try again.');
     return { status: 'ok', address: `texture:${id}`, title: NEW_TITLE, message: '' };
   } catch (e) {
-    if (e instanceof SignedOutError) return madeFailed(e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : 'Sign in to make a document.');
+    if (isSignedOut(e)) return madeFailed(e.reason === 'locked' ? WORDS.locked : e.reason === 'unknown' ? WORDS.unknown : 'Sign in to make a document.');
     return madeFailed(`Could not make the document. ${e instanceof Error && e.message !== '' ? e.message : 'the computer did not answer'}`);
   }
 }

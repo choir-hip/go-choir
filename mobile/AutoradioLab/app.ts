@@ -3,7 +3,7 @@ import { paperFront } from './paper.ts';
 import { podcastEpisode, podcastHome, podcastPlay, podcastPlayhead, podcastQueue, podcastShow, podcastSubscribe, podcastUnsubscribe } from './podcast.ts';
 import { clipAct, showClips, storyClips } from './clips.ts';
 import { fileList, fileOpen, fileResolve, fileMkdir, fileDelete, fileRename, fileUpload } from './files.ts';
-import { adoptNative, authedJSON, bindStore, HTTPError, keyState, nativeLater, segment, SignedOutError, signedOutStatus } from './api.ts';
+import { adoptNative, authedJSON, bindStore, HTTPError, keyState, nativeLater, segment, signedOutStatus, isSignedOut } from './api.ts';
 import { settingsAccount, aboutPage } from './settings.ts';
 import { settingsComputer, computerAct } from './computer.ts';
 import { activityPage } from './activity.ts';
@@ -142,7 +142,7 @@ const deleteEnv = (store: Store, storage: Storage | undefined, native: unknown, 
   post: async (path, body) => {
     try { const r = await authedJSON(path, { method: 'POST', ...(body === undefined ? {} : { body }) }); return { status: 200, body: r.body }; }
     catch (e) {
-      if (e instanceof SignedOutError) return { status: signedOutStatus(e), body: null };      // 503 for a key that could not be read: "try again", never "not signed in"
+      if (isSignedOut(e)) return { status: signedOutStatus(e), body: null };      // 503 for a key that could not be read: "try again", never "not signed in"
       if (e instanceof HTTPError) return { status: e.status, body: null };
       return { status: 0, body: null };
     }

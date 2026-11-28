@@ -195,6 +195,18 @@ describe('flush', () => {
     const i = await e.flush(A);
     expect(i.status).toBe('dirty'); expect(journal().d1.text).toBe('Hello world. a');
   });
+  test('T14b a key read refused for want of a store (a let-go answer): quiet, the journal is kept, no failed label', async () => {
+    const e = mk(); await e.edit(A, 'Hello world. a', 'Hello world.'); failNext = () => new SignedOutError('the key could not be read', 'unknown', true);
+    const i = await e.flush(A);
+    expect(i.status).toBe('dirty'); expect(i.label).not.toContain('Not saved'); expect(journal().d1.text).toBe('Hello world. a');
+  });
+  test('T14c a key that could not be read for another reason: offline, kept, and the offline label still appears for a real offline', async () => {
+    const e = mk(); await e.edit(A, 'Hello world. a', 'Hello world.'); failNext = () => new SignedOutError('the key could not be read', 'locked');
+    const i = await e.flush(A);
+    expect(i.status).toBe('offline'); expect(i.label).toContain('kept on this phone'); expect(journal().d1.text).toBe('Hello world. a');
+    failNext = () => new TypeError('network down');
+    expect((await e.flush(A)).status).toBe('offline');
+  });
   test('T15 signed out (401): failed with the sign-in sentence, text kept', async () => {
     const e = mk(); await e.edit(A, 'Hello world. a', 'Hello world.'); failNext = () => new SignedOutError('refused', 'refused');
     const i = await e.flush(A);

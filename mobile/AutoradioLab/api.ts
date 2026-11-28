@@ -72,6 +72,8 @@ export class SignedOutError extends Error {
   constructor(message = 'not signed in', reason: SignedOutReason = 'none', noStore = false) { super(message); this.name = 'SignedOutError'; this.reason = reason; this.noStore = noStore; }
 }
 
+/** Exact's refusal of a store read between answers: its message contains "no store here" (door.rs `no_store`). The ONE place the message is read; everything else carries the flag. Works on a copy that is not an Error. */
+export const isNoStore = (e: unknown): boolean => /no store here/.test(String((e && typeof e === 'object' ? (e as { message?: unknown }).message : e) ?? ''));
 /** True when the key could not be READ (`locked`, `unknown`): the listener may well be signed in. A page must not say sign in or sign out for it, and must not treat it as a 401. `none` and `refused` are the only reasons that mean signing in. */
 /** A SignedOutError by name, so an error that crossed a boundary as a copy (same name and reason) is classed as the original. The ONE test every site uses. */
 export const isSignedOut = (e: unknown): e is SignedOutError => !!e && typeof e === 'object' && (e as { name?: unknown }).name === 'SignedOutError';
@@ -132,7 +134,7 @@ function storeSource(store: SecretStore): NativeReader {
         return { found: false };
       } catch (e) {
         // Exact refuses a read between answers with a message that says "no store here" (door.rs `no_store`, LLP 1146 D3); a Keychain failure carries its own error name. The distinction is made HERE, once, and travels as a flag.
-        const noStore = e instanceof Error && /no store here/.test(e.message);
+        const noStore = isNoStore(e);
         return r.op === 'keystate' ? { state: 'unreadable', noStore } : { found: false, unreadable: true, noStore };       // session and get alike: a refused read is never "absent"
       }
     },
@@ -221,8 +223,8 @@ async function keptSession(): Promise<{ key: string; computerId: string } | null
   if (!source || source.available === false) return null;
   type Kept = { found?: boolean; value?: unknown; computerId?: unknown; unreadable?: unknown; noStore?: unknown };
   let r = null as Kept | null;
-  let refused = false, malformed = false, threw = false;
-  try { r = (await source.later({ op: 'session' })) as Kept | null; } catch { refused = true; threw = true; }
+  let refused = false, malformed = false, threw = false, thrownNoStore = false;
+  try { r = (await source.later({ op: 'session' })) as Kept | null; } catch (e) { refused = true; threw = true; thrownNoStore = isNoStore(e); }
   if (!refused && r && typeof r === 'object' && r.unreadable === true) refused = true;
   if (!refused && (!r || typeof r !== 'object' || typeof r.found !== 'boolean' || (r.found === true && (typeof r.value !== 'string' || r.value === '')))) { refused = true; malformed = true; }      // malformed is unknown, not "no key": null means only found:false
   if (!refused && r && typeof r === 'object' && typeof r.found === 'boolean') nativeAnswered = true;
@@ -231,7 +233,7 @@ async function keptSession(): Promise<{ key: string; computerId: string } | null
   if (refused) {
     // The reason comes from the failing read itself (one snapshot): no-store is `unknown` (and stops quietly), any other refusal the source reports is `locked`, a malformed answer is `unknown`.
     // Only a source that threw with nothing to say asks the key state.
-    const noStore = !threw && !malformed && r?.noStore === true;
+    const noStore = thrownNoStore || (!threw && !malformed && r?.noStore === true);
     const reason: SignedOutReason = malformed || noStore ? 'unknown' : threw ? ((await noSessionReason()) === 'locked' ? 'locked' : 'unknown') : 'locked';
     throw new SignedOutError('the key could not be read', reason, noStore);
   }
@@ -461,7 +463,7 @@ export async function keyState(): Promise<{ state: KeyState; digest: string; err
     if (st !== 'present') return { state: st, digest: '', ...(r?.noStore === true ? { noStore: true } : {}) };
     const sess = await keptSession();
     return sess ? { state: 'present', digest: await digestOf(sess.key) } : none;
-  } catch (e) { return { ...none, error: true, ...(isSignedOut(e) && e.noStore ? { noStore: true } : {}) }; }
+  } catch (e) { return { ...none, error: true, ...((isSignedOut(e) && e.noStore) || isNoStore(e) ? { noStore: true } : {}) }; }
 }
 
 /** For tests: forget what was discovered. */
