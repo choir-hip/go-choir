@@ -14,7 +14,7 @@
 //  V6 a route that is an absolute URL or has a scheme is never opened: only a path starting with "/" without ":" becomes `pub:<route>`
 // Each row carries its own time (`at`, epoch milliseconds) and a UTC stamp; "5 minutes ago" is made at render in activity.contract from Exact's date.
 
-import { authedJSON, HTTPError, SignedOutError } from './api.ts';
+import { authedJSON, HTTPError, SignedOutError, unreadableWords } from './api.ts';
 import { parseDate } from './paper-model.ts';
 
 export type Item = { id: string; kind: string; label: string; detail: string; group: string; stamp: string; target: string; title: string; at: number; unseen: boolean };
@@ -62,8 +62,8 @@ export function items(body: unknown): Item[] {
 }
 
 export const plain = (e: unknown): string =>
-  e instanceof SignedOutError ? 'Not signed in.' : e instanceof HTTPError && e.status === 401 ? "This phone's sign-in is no longer accepted."
-    : e instanceof HTTPError && e.status === 404 ? 'This server has no activity feed yet.' : 'Could not load your computer\'s activity.';
+  unreadableWords(e) ?? (e instanceof SignedOutError ? 'Not signed in.' : e instanceof HTTPError && e.status === 401 ? "This phone's sign-in is no longer accepted."
+    : e instanceof HTTPError && e.status === 404 ? 'This server has no activity feed yet.' : 'Could not load your computer\'s activity.');
 
 export function view(events: Item[], status: string, message: string, radio: Item[], live: Item[]): View {
   const r = radio.slice(0, 12);

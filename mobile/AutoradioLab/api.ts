@@ -9,6 +9,7 @@
 import { ORIGIN } from './app.ts';
 import { COMPUTER_ID_NAME, KEY_ID_NAME, KEY_NAME } from './app-signin.ts';
 import type { Storage } from './app.contract.d.ts';
+import { WORDS } from './words.ts';
 
 export { ORIGIN };
 
@@ -69,6 +70,13 @@ export class SignedOutError extends Error {
   constructor(message = 'not signed in', reason: SignedOutReason = 'none') { super(message); this.name = 'SignedOutError'; this.reason = reason; }
 }
 
+/** True when the key could not be READ (`locked`, `unknown`): the listener may well be signed in. A page must not say sign in or sign out for it, and must not treat it as a 401. `none` and `refused` are the only reasons that mean signing in. */
+export const isUnreadable = (e: unknown): e is SignedOutError => e instanceof SignedOutError && (e.reason === 'locked' || e.reason === 'unknown');
+/** The words for a key that could not be read (`WORDS.locked` or `WORDS.unknown`), or null for any other failure: the ONE place a page learns what to say for it. Every `SignedOutError` site asks this first. */
+export const unreadableWords = (e: unknown): string | null => (isUnreadable(e) ? (e.reason === 'locked' ? WORDS.locked : WORDS.unknown) : null);
+/** The status a request seam reports for a SignedOutError: 401 only when signing in is the answer; 503 ("could not do this just now, try again") for a key that could not be read. */
+export const signedOutStatus = (e: unknown): number => (isUnreadable(e) ? 503 : 401);
+
 /** The server answered a status outside 200 to 299 (other than 401). `message` is only the server's own short `error` string. */
 export class HTTPError extends Error {
   status: number;
@@ -118,7 +126,11 @@ function storeSource(store: SecretStore): NativeReader {
         if (r.op === 'session') { const k = read(KEY_NAME); return k === null ? { found: false } : { found: true, value: k, computerId: read(COMPUTER_ID_NAME) ?? '' }; }   // a read outside an answer throws (Exact door.rs:45-53); the catch says so
         if (r.op === 'get' && r.account && r.account in SECRET_OF) { const v = read(SECRET_OF[r.account]); return v === null ? { found: false } : { found: true, value: v }; }
         return { found: false };
-      } catch { return r.op === 'keystate' ? { state: 'unreadable' } : { found: false, unreadable: true }; }       // session and get alike: a refused read is never "absent"
+      } catch (e) {
+        // Exact refuses a read between answers with a message that says "no store here" (door.rs `no_store`, LLP 1146 D3); a Keychain failure carries its own error name. The distinction is made HERE, once, and travels as a flag.
+        const noStore = e instanceof Error && /no store here/.test(e.message);
+        return r.op === 'keystate' ? { state: 'unreadable', noStore } : { found: false, unreadable: true, noStore };       // session and get alike: a refused read is never "absent"
+      }
     },
   };
 }
@@ -176,18 +188,24 @@ export async function announceGeneration(): Promise<void> {
   finally { if (timer !== undefined) clearTimeout(timer); }
 }
 
+/** One kept item. `null` only when the source answered `found: false`. A refusal, a throw or an answer that is not a clear yes or no is a SignedOutError `unknown`: a failed read is not "absent". Display-only callers (keptComputerId) catch it. */
 async function keptItem(account: Account): Promise<string | null> {
   const source = credentials();
   if (!source || source.available === false) return null;
-  const r = (await source.later({ op: 'get', account })) as { found?: boolean; value?: unknown } | null;
-  return r && r.found === true && typeof r.value === 'string' && r.value !== '' ? r.value : null;
+  type Item = { found?: unknown; value?: unknown; unreadable?: unknown };
+  let r = null as Item | null;
+  try { r = (await source.later({ op: 'get', account })) as Item | null; } catch { throw new SignedOutError('the item could not be read', 'unknown'); }
+  if (!r || typeof r !== 'object' || r.unreadable === true || typeof r.found !== 'boolean') throw new SignedOutError('the item could not be read', 'unknown');
+  if (r.found === false) return null;
+  if (typeof r.value !== 'string' || r.value === '') throw new SignedOutError('the item could not be read', 'unknown');
+  return r.value;
 }
 
 /** No session: is the key absent, or only unreadable (locked)? One read-only native question. */
 async function noSessionReason(): Promise<SignedOutReason> {
   const source = credentials();
   if (!source) return 'none';                                // no source at all: the host has no key store; the page says there is nothing signed in (the card says whether signing in exists)
-  try { const r = (await source.later({ op: 'keystate' })) as { state?: unknown } | null | undefined; return r && r.state === 'unreadable' ? 'locked' : r && r.state === 'absent' ? 'none' : 'unknown'; } catch { return 'unknown'; }       // a bridge that throws or says nothing: say so, never "sign in"
+  try { const r = (await source.later({ op: 'keystate' })) as { state?: unknown; noStore?: unknown } | null | undefined; return r && r.state === 'unreadable' ? (r.noStore === true ? 'unknown' : 'locked') : r && r.state === 'absent' ? 'none' : 'unknown'; } catch { return 'unknown'; }       // a bridge that throws or says nothing: say so, never "sign in"
 }
 
 /** The key and the computer id in ONE native read: a sign-out or a new sign-in between two reads cannot pair an old key with a new computer.
@@ -199,15 +217,16 @@ async function keptSession(): Promise<{ key: string; computerId: string } | null
   if (!source || source.available === false) return null;
   type Kept = { found?: boolean; value?: unknown; computerId?: unknown; unreadable?: unknown };
   let r = null as Kept | null;
-  let refused = false;
+  let refused = false, malformed = false;
   try { r = (await source.later({ op: 'session' })) as Kept | null; } catch { refused = true; }
-  if (!refused && r && r.unreadable === true) refused = true;
+  if (!refused && r && typeof r === 'object' && r.unreadable === true) refused = true;
+  if (!refused && (!r || typeof r !== 'object' || typeof r.found !== 'boolean' || (r.found === true && (typeof r.value !== 'string' || r.value === '')))) { refused = true; malformed = true; }      // malformed is unknown, not "no key": null means only found:false
   if (!refused && r && typeof r === 'object' && typeof r.found === 'boolean') nativeAnswered = true;
   const flags = `found=${String(refused ? undefined : r?.found)} key=${!refused && typeof r?.value === 'string' && r.value !== ''} computer=${!refused && typeof r?.computerId === 'string' && r.computerId !== ''} refused=${refused}`;   // flags only, never a value
   if (flags !== lastFlags) { lastFlags = flags; console.log(`api: session ${flags}`); }              // on change only: one line per request is volume
-  if (refused) throw new SignedOutError('the key could not be read', (await noSessionReason()) === 'locked' ? 'locked' : 'unknown');
-  if (!r || r.found !== true || typeof r.value !== 'string' || r.value === '') return null;
-  return { key: r.value, computerId: typeof r.computerId === 'string' ? r.computerId : '' };
+  if (refused) throw new SignedOutError('the key could not be read', !malformed && (await noSessionReason()) === 'locked' ? 'locked' : 'unknown');
+  if (!r || r.found !== true) return null;
+  return { key: r.value as string, computerId: typeof r.computerId === 'string' ? r.computerId : '' };
 }
 
 
@@ -438,7 +457,7 @@ export async function keyState(): Promise<{ state: KeyState; digest: string; err
 /** For tests: forget what was discovered. */
 export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: the generation and the rest as a fresh process has them. */
-export function resetSeam(): void { resetSession(); bootSent = null; uncertainAbort = false; generation = 0; reader = undefined; secrets = undefined; blockedDigest = null; lastNative = ''; nativeAnswered = false; rejected = ''; }
+export function resetSeam(): void { resetSession(); bootSent = null; uncertainAbort = false; generation = 0; reader = undefined; secrets = undefined; blockedDigest = null; lastNative = ''; lastFlags = ''; nativeAnswered = false; rejected = ''; }
 
 /** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }

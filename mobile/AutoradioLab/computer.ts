@@ -16,7 +16,7 @@
 // Nothing here reads a clock or sets a timer: the poll is the page's `task`, and "Restart to update" sends an idempotency key made from a counter and the
 // computer's epoch, not from a random number (a data source may not call `Math.random`).
 
-import { accountGeneration, authedJSON, HTTPError, segment, SignedOutError } from './api.ts';
+import { accountGeneration, authedJSON, HTTPError, segment, SignedOutError, unreadableWords } from './api.ts';
 
 export type ComputerView = { id: string; state: string; target: string; phase: string; updateAvailable: boolean; message: string; epoch: number; checked: boolean };
 export const POLLS = 40;
@@ -52,6 +52,7 @@ export async function snapshot(call: Call): Promise<Snapshot> {
 
 /** C5: the words for a failure. */
 export function plain(e: unknown): string {
+  const unread = unreadableWords(e); if (unread) return unread;
   if (e instanceof SignedOutError) return 'Not signed in.';
   if (e instanceof NoComputer) return e.message;
   if (e instanceof HTTPError && e.status === 401) return "This phone's sign-in is no longer accepted.";

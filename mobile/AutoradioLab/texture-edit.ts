@@ -120,7 +120,7 @@
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 import type { Storage } from './app.contract.d.ts';
-import { authedJSON, accountId, onSignOutBegin, sealingBlocked, segment, SignedOutError, HTTPError, type Reply } from './api.ts';
+import { authedJSON, accountId, onSignOutBegin, sealingBlocked, segment, SignedOutError, isUnreadable, unreadableWords, HTTPError, type Reply } from './api.ts';
 import * as Body from './texture-body.ts';
 /** Two Markdown texts are the same text when the server would hold the same content for both (a trailing newline, marks and a continuation's indent are not a difference): the one rule that compares the field with the head. */
 const same = (a: string, b: string): boolean => a === b || Body.canon(a) === Body.canon(b);
@@ -145,8 +145,9 @@ export function editableDoc(address: string): string | null {
   return rest === '' || rest.includes('@') ? null : rest;
 }
 const isLetGo = (e: unknown): boolean => e instanceof Error && /let go/i.test(e.message);
-const isOffline = (e: unknown): boolean => (e instanceof HTTPError ? e.status >= 500 || e.status === 404 || e.status === 429 : !(e instanceof SignedOutError));
-const sentence = (e: unknown): string => (e instanceof SignedOutError ? 'Sign in again to save.' : e instanceof HTTPError ? (e.status === 403 ? 'This device is not allowed to save here.' : `Could not save. ${e.message}`) : 'Something went wrong saving the document.');
+/** A key that could not be read is offline (the edit is kept and tried again), not a sign-in failure. */
+export const isOffline = (e: unknown): boolean => (e instanceof HTTPError ? e.status >= 500 || e.status === 404 || e.status === 429 : isUnreadable(e) || !(e instanceof SignedOutError));
+export const sentence = (e: unknown): string => (unreadableWords(e) ?? (e instanceof SignedOutError ? 'Sign in again to save.' : e instanceof HTTPError ? (e.status === 403 ? 'This device is not allowed to save here.' : `Could not save. ${e.message}`) : 'Something went wrong saving the document.'));
 /** An error that says "there is no such file" (the kept file is not there yet), against one that says it could not be read. */
 const isAbsent = (e: unknown): boolean => { const c = (e as { code?: unknown } | null)?.code; return c === 'ENOENT' || /no such file|not found|does not exist|ENOENT/i.test(e instanceof Error ? e.message : ''); };
 

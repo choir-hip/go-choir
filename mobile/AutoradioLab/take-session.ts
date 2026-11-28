@@ -10,7 +10,10 @@
 // Nothing is carried from the pre-release build: the old Swift files (takes-own.json, takes-muted.json) are never read here (docs/reference/AUTORADIO-TAKES.md)
 // A take in review belongs to the recorder, not to this module: a restart of the shared code finds it (`takeState`) and can publish it; a failed publish never drops it.
 import type { Storage } from './app.contract.d.ts';
-import { accountGeneration, nativeLater, SignedOutError } from './api.ts';
+import { accountGeneration, nativeLater, SignedOutError, unreadableWords } from './api.ts';
+
+/** What a take's publish or delete says when the key was refused: the unreadable words for a key that could not be read, else the sign-in line. */
+export const signInNotice = (e: SignedOutError, what: 'publish a take' | 'delete a take'): string => unreadableWords(e) ?? `Sign in to ${what}.`;
 import { enqueue as steerEnqueue, flush as steerFlush, mute as steerTap } from './steer.ts';
 import {
   BOUNDS, addOwn, client, cut, loadKept, mp4Seconds, mute as muteIn, page, removeOwn, saveKept, seamNet, sha256Hex, unmute as unmuteIn, validHandle,
@@ -232,7 +235,7 @@ async function publish(env: Env, o: Overlay): Promise<void> {
     catch (e) {
       // The recording is kept (the recorder still holds it): nothing is lost when the server is not there yet or refuses.
       if (!same()) return;                       // and what it says is not the next account's page's business
-      if (e instanceof SignedOutError) o.notice = 'Sign in to publish a take.';
+      if (e instanceof SignedOutError) o.notice = signInNotice(e, 'publish a take');
       else if (e instanceof TakesUnavailable) o.notice = 'Takes are not available yet. Your recording is kept; publish it again later.';
       else if (e instanceof TakesRefused) o.notice = `${e.message} Your recording is kept.`;
       else o.notice = `Could not publish: ${why(e)}. Your recording is kept; try again.`;
@@ -263,7 +266,7 @@ async function del(env: Env, o: Overlay, id: string): Promise<void> {
     await mutate(env, o, (k) => ({ kept: removeOwn(k, id), out: undefined }), undefined);
     if (!same()) return;
     o.mine = o.mine.filter((t) => t.takeID !== id); o.notice = '';
-  } catch (e) { if (same()) o.notice = e instanceof SignedOutError ? 'Sign in to delete a take.' : `Could not delete: ${why(e)}.`; }
+  } catch (e) { if (same()) o.notice = e instanceof SignedOutError ? signInNotice(e, 'delete a take') : `Could not delete: ${why(e)}.`; }
 }
 
 const RECORDER_OPS = new Set(['record', 'rerecord', 'stop', 'preview', 'discard']);

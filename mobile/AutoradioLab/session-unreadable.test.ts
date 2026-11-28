@@ -9,7 +9,7 @@
 //  U6 G sign-out in a shared-only host does not report success while the Exact secrets cannot be read back.
 //  U7 B a refused read is not remembered: the next answer that can read gets the session (no stale "unreadable").
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { authedJSON, bindNative, bindStore, beginSignOut, abortSignOut, credentialsAbsent, keyState, refreshSealBlock, resetSeam, sealingBlocked, SignedOutError } from './api.ts';
+import { accountId, authedJSON, keptComputerId, bindNative, bindStore, beginSignOut, abortSignOut, credentialsAbsent, keyState, refreshSealBlock, resetSeam, sealingBlocked, SignedOutError } from './api.ts';
 import { reconcile, accountSignOut, STAMP_FILE, PENDING_FILE } from './account.ts';
 import { KEY_NAME } from './app-signin.ts';
 
@@ -56,8 +56,7 @@ describe('U1 a refused session read is not "no key"', () => {
   });
   test('a secret store that throws on every read: never reason none, nothing sent', async () => {
     bindStore({ get: () => { throw new Error('no turn is running'); }, set: () => undefined, forget: () => undefined });
-    const why = await reasonOf();
-    expect(['unknown', 'locked']).toContain(why); expect(sent).toBe(0); done();
+    expect(await reasonOf()).toBe('locked'); expect(sent).toBe(0); done();
   });
   test('a store with no key at all is still "none" (absent is not unreadable)', async () => {
     bindStore({ get: () => null, set: () => undefined, forget: () => undefined });
@@ -153,5 +152,80 @@ describe('U7 a refusal is not remembered', () => {
     expect(await reasonOf()).not.toBe('no error');
     refuse = false;
     expect(await reasonOf()).toBe('no error'); expect(sent).toBe(1); done();
+  });
+});
+
+const NO_STORE = 'store.get: no store here, in background work or the continuation of an answer that was let go.';
+describe('U8 a malformed session answer is unknown', () => {
+  test.each([['null', null], ['empty object', {}], ['found not a boolean', { found: 'yes', value: KEY }], ['found with no value', { found: true, value: '' }], ['found with a number', { found: true, value: 7 }]] as const)('%s', async (_n, answer) => {
+    bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'session' ? answer : { state: 'absent' }) } as never);
+    expect(await reasonOf()).toBe('unknown'); expect(sent).toBe(0);
+    const flagged = lines.filter((l) => l.startsWith('api: session')).join('|'); done();
+    expect(flagged).toContain('refused=true');
+  });
+  test('found:false is still "no key" (none)', async () => {
+    bindNative({ available: true, later: async (r: { op?: string }) => (r.op === 'session' ? { found: false } : { state: 'absent' }) } as never);
+    expect(await reasonOf()).toBe('none'); done();
+  });
+  test('no source at all stays "no key store" (none)', async () => {
+    expect(await reasonOf()).toBe('none'); done();
+  });
+});
+
+describe('U9 between answers is unknown, a store failure is locked', () => {
+  test('no store here: unknown', async () => {
+    bindStore({ get: () => { throw new Error(NO_STORE); }, set: () => undefined, forget: () => undefined });
+    expect(await reasonOf()).toBe('unknown'); expect(sent).toBe(0); done();
+  });
+  test('any other store failure: locked', async () => {
+    bindStore({ get: () => { throw new Error('InvalidAccessError: the Keychain is locked'); }, set: () => undefined, forget: () => undefined });
+    expect(await reasonOf()).toBe('locked'); expect(sent).toBe(0); done();
+  });
+  test('(a) only the session read throws: unreadable through the real storeSource, then unknown', async () => {
+    let n = 0;
+    bindStore({ get: () => { n += 1; if (n === 1) throw new Error('boom'); return null; }, set: () => undefined, forget: () => undefined });
+    const why = await reasonOf(); done();
+    expect(why).toBe('unknown'); expect(sent).toBe(0);       // keystate then reads "absent", but a refused read is never "none"
+  });
+  test('(b) every read throws: locked, nothing sent, reconcile wipes nothing', async () => {
+    bindStore({ get: () => { throw new Error('boom'); }, set: () => undefined, forget: () => undefined });
+    expect(await reasonOf()).toBe('locked'); expect(sent).toBe(0);
+    const files = new Map<string, Uint8Array>([['app:/data/takes.json', new Uint8Array([1])], [STAMP_FILE, new TextEncoder().encode('f'.repeat(64))], [PENDING_FILE, new TextEncoder().encode('1')]]);
+    const storage = { fs: { stat: async (p: string) => { if (!files.has(p)) throw new Error('absent'); return { size: 1 }; }, readFile: async (p: string) => files.get(p)!, atomicWriteFile: async (p: string, b: Uint8Array) => { files.set(p, b); }, writeFile: async () => undefined, rm: async (p: string) => { files.delete(p); }, readdir: async () => [], mkdir: async () => undefined } } as never;
+    const natives: string[] = [];
+    const out = await reconcile(storage, undefined, { signOut: async () => { natives.push('signOut'); return true; }, wipe: async () => { natives.push('wipe'); return true; } } as never);
+    done();
+    expect(out.action).toBe('nothing'); expect(natives).toEqual([]); expect(files.size).toBe(3);
+  });
+});
+
+describe('U10 an item read tells absent from unreadable', () => {
+  const src = (answer: unknown | Error) => bindNative({ available: true, later: async () => { if (answer instanceof Error) throw answer; return answer; } } as never);
+  test('found:false is null', async () => { src({ found: false }); expect(await keptComputerId()).toBeNull(); done(); });
+  test('found is the value', async () => { src({ found: true, value: 'c1' }); expect(await keptComputerId()).toBe('c1'); done(); });
+  test.each([['flagged', { found: false, unreadable: true }], ['throws', new Error('x')], ['malformed', {}], ['empty value', { found: true, value: '' }]] as const)('%s throws unknown, never null', async (_n, a) => {
+    src(a as never);
+    await expect(keptComputerId()).rejects.toMatchObject({ name: 'SignedOutError', reason: 'unknown' }); done();
+  });
+});
+
+describe('U11 the computer id read throws', () => {
+  test('key readable, computer id refused: the whole session is refused, nothing is sent', async () => {
+    bindStore({ get: (n: string) => { if (n === 'choir.computer-id') throw new Error('boom'); return n === KEY_NAME ? KEY : null; }, set: () => undefined, forget: () => undefined });
+    expect(await reasonOf()).toBe('unknown'); expect(sent).toBe(0); done();
+  });
+  test('accountId is null under a refused read', async () => {
+    bindStore({ get: () => { throw new Error('boom'); }, set: () => undefined, forget: () => undefined });
+    expect(await accountId()).toBeNull(); done();
+  });
+});
+
+describe('U12 pinned residual: a sign-out begun on an unreadable key', () => {
+  test('its block lifts when the same key is readable again (today: the digest could not be named)', async () => {
+    let refuse = true;
+    bindStore({ get: (n: string) => { if (refuse) throw new Error('boom'); return n === KEY_NAME ? KEY : 'c1'; }, set: () => undefined, forget: () => undefined });
+    await beginSignOut(); expect(sealingBlocked()).toBe(true);
+    refuse = false; await refreshSealBlock(); done();
+    expect(sealingBlocked()).toBe(false);
   });
 });

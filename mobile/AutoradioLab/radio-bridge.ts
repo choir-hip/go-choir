@@ -10,7 +10,13 @@ import { RadioRuntime, NO_FACTS, type NativeFacts, type Resolvers } from './radi
 import { Writer, ASK_DEADLINE_MS, phoneOpening, PROGRAMME_PATH, frontFill } from './radio-writer.ts';
 import { applyTurnOps, resetTurnLog, turnQueueJSON } from './voice-queue.ts';
 import { routePoster, signedInRequester } from './runsheet-store.ts';
-import { authedJSON } from './api.ts';
+import { authedJSON, isUnreadable } from './api.ts';
+
+/** The `kind` a failed programme post carries (radio-writer.ts). A key that could not be read is `transport` ("the desk can't be reached right now", asked again), never `signedOut` ("Sign in to hear the desk"). */
+export const programmeFailKind = (e: unknown): 'signedOut' | 'transport' | 'other' => {
+  const s = (e as { status?: number } | null)?.status;
+  return (e as Error | null)?.name === 'SignedOutError' && !isUnreadable(e) ? 'signedOut' : s === undefined ? 'transport' : 'other';
+};
 import { audioSpec, audio as audioEntry, book as bookEntry, filesAudio, mintId, paperStory, readAloud, webPage, estimateSeconds, heldStory, forgetLongURLs } from './runsheet-entries.ts';
 import { offlineStories } from './content-run.ts';
 import { getText } from './api.ts';
@@ -196,7 +202,7 @@ async function makeRadio(storage: Store | undefined, native: NativeReader | unde
     },
     post: async (body) => {
       try { return await authedText(PROGRAMME_PATH, { method: 'POST', body }); }
-      catch (e) { const s = (e as { status?: number }).status; throw Object.assign(e as Error, { kind: (e as Error).name === 'SignedOutError' ? 'signedOut' : s === undefined ? 'transport' : 'other' }); }
+      catch (e) { throw Object.assign(e as Error, { kind: programmeFailKind(e) }); }
     },
     now: clockNow, tz: () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', requestId: () => 'radio-' + mintId('').slice(0, 12), generation: accountGeneration,
   });
