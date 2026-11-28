@@ -52,3 +52,14 @@ Built 2026-11-28 (scripts only, not yet run against staging; see the change entr
 - The signed-out banner covering the "Culture" row: the edition drive now runs signed in, with no banner, so the proof no longer meets it. Whether it matters to a signed-out person is still not checked (the plan, 7a, finds it by design).
 - `sim-device.sh` now picks the newest runtime that supports the device type and fails naming the type; tested over fake `simctl`.
 - `ProofKey.swift` and its two call sites remain (Swift; owner decision D6).
+
+## Fixed
+
+2026-11-28: the proof mints a disposable key and places it where shared code
+reads it in a drive (`mobile/scripts/proof-key.sh`). Five real runs; the last
+passed 29 drives signed in. The first signed-in run found a request storm
+that had been on main for a day
+([record](a-signed-in-app-asks-the-server-for-the-changelog-about-forty-times-a-second-2026-11-28.md)).
+From 2026-11-23 to 2026-11-28 no signed-in path of the app was proved at app
+level; every landing in that window that touched one was proved by unit tests
+only. Still not driven by the proof: the app's own server revoke at sign-out.
