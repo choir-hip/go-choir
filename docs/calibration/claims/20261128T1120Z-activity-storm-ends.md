@@ -7,7 +7,7 @@ p: 0.8
 settle_by: 2026-11-28T20:00Z
 evidence_source: the count of `GET https://choir.news/api/changelog` lines in the plain-launch console (bg-js-console.txt) of a signed-in run of mobile/scripts/proof-real.sh on the landed commit
 status: settled
-settled: 2026-11-28T12:35Z
+settled: 2026-11-28T12:26Z
 outcome: true
 evidence: signed-in run of proof-real.sh on 776291faa (main 954102fc7 plus the proof lane), 2026-11-28; the plain-launch console holds 0 changelog requests (was 6,643) and 3 `api: session found=false` lines (was 313)
 brier: 0.04
