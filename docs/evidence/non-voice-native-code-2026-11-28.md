@@ -118,6 +118,5 @@ Plain deletions beat all three on lines per risk but are (d): `NativeTts.kt`
 
 ## Recommendations for the owner's list
 
-Add the 23 (c) files, or rule file by file under D2. Add the name
-`nativeAnswers`: it reports what the module answers, which only the module
-knows. Then the gate reads 15 lines before D4, D6 and D7.
+Add the 23 (c) files, or rule file by file under D2. Then the gate reads
+15 lines before D4, D6 and D7.

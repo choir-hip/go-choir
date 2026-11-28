@@ -14,6 +14,7 @@ import { accountNative, accountSignOut, adoptKey, settleAccount } from './accoun
 import { clearDemoLeftovers } from './demo-leftovers.ts';
 import * as pages from './pages.ts';
 import { hostMode } from './host.ts';
+import { nativeOps } from './native-answers.ts';
 import { accountState, choirAuthState } from './account-state.ts';
 import { APP_ID } from './app-id.ts';
 import { readerDocShared, readerPrefetch, readerReload, readerRestore, readerStop } from './reader.ts';
@@ -227,6 +228,7 @@ const sources: Sources = {
   notebookPageShared: ([selected, tick, active, signedOutTick, _signedIn], _store, storage) => notebookShared({ selected, tick, active, signedOutTick }, storage),
   contentSync: ([key], _store, storage) => syncContent(key, storage),
   accountState: ([tick, top, host, platform]) => accountState(tick, top, host, platform),
+  nativeOps: ([platform]) => nativeOps(String(platform ?? '')),
   hostCaps: async ([nativeSeen, _again]) => ({ mode: await hostMode(1500, 800, nativeSeen) }),
   // The story cards and the launcher (cards.ts): the places, recent pages and local hits; "more of this" and the steering tap; what the paper has learned.
   launcherData: ([q, _pages, now], _s, storage) => cards.launcherData({ q, now }, storage),

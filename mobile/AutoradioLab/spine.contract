@@ -5,7 +5,7 @@ use pageRequest, barFacts, deckState, radioNote from "@choir/autoradio"
 use PageList, PageRequest, Theme, ThemeList, SettingsAck, BarFacts, DeckState, RadioNote from "@choir/autoradio"
 use RadioTick, Heartbeat, RadioAir from "./radio-types.contract"
 use BarInfo, BarRun from "./bar-types.contract"
-use HostCaps from "./host-types.contract"
+use HostCaps, NativeOps from "./host-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 
 // A URL typed into the bar (this was Swift's `BarURL.detect`; bar-url.test.contract and bar-url.test.ts are its tests). The address to open, or "" for an ordinary sentence: http or https with a host, as typed;
@@ -32,7 +32,19 @@ fn barBareOk(t: string): bool = not t.includes("://") and not t.endsWith("?") an
 fn barUrlOf(raw: string): string = barUrlText(raw.replaceAll("\u0085", " ").trim())
 fn barUrlText(t: string): string = t == "" or barHasSpace(t) or barUnholdable(t) ? "" : (t.toLowerCase().startsWith("http://") or t.toLowerCase().startsWith("https://") ? (barWebOk(t) ? t : "") : (t.includes("@") ? "" : (barBareOk(t) ? `https://${t}` : "")))
 
+fn opAnswered(all: bool, ops: string[], name: string): bool = all or ops.indexOf(name) >= 0
+
 members Autoradio
+  // What this host's native module answers (native-answers.ts, by the host's platform: the one place the platform is read for this; a platform with no row answers everything). A control whose op is not answered is not offered
+  // (owner's conservative default, 2026-11-28; android-controls.test.ts), so when Kotlin answers an op and the table gains it the control appears with no change here.
+  resource nans = nativeOps(hpg.platform) as shape NativeOps else empty(known=false, all=false, ops=[])
+  derive opsKnown = nans.known
+  derive canSpeed = nans.known and opAnswered(nans.all, nans.ops, "radioSpeed")
+  derive canAsk = nans.known and opAnswered(nans.all, nans.ops, "choirAsk")
+  derive canHandsFree = nans.known and opAnswered(nans.all, nans.ops, "choirHandsFreeToggle")
+  derive canTalkCancel = nans.known and opAnswered(nans.all, nans.ops, "choirTalkCancel")
+  // Send is offered for a question only if something answers it; an address is opened by shared code whatever the module answers.
+  derive sendOffered = canAsk or askUrl != ""
   // Is there a native package? (host.ts: decided once from the native handle, never from what the native set holds). "none" is Android; "" (not decided) and "native" are iOS.
   resource hc = hostCaps(false, lockTick) as shape HostCaps else empty()
   derive noNative = hc.mode == "none"
@@ -128,12 +140,12 @@ members Autoradio
   // same step as the send: nothing is waited for, nothing can be overwritten by a second Send, and the field is cleared once the chosen send is issued (as it was before the rule moved from Swift).
   derive askUrl = barUrlOf(ask)
   action sendAsk
-    if au.signedIn == false
+    if au.signedIn == false and (canAsk or askUrl != "")
       gate = "signin"
     if au.signedIn and askUrl != ""
       send qm = queueAct("openWeb", askUrl)
       ask = ""
-    if au.signedIn and askUrl == ""
+    if au.signedIn and askUrl == "" and canAsk
       send acct = choirAsk(text=ask, aim=pg.top)
       ask = ""
   // The microphone button is the hands-free switch (owner, 2026-11-15): ON, the microphone is open and turns open and close by

@@ -76,6 +76,11 @@ component BarShell
     vp: StackVp
     layer: string
     typing: bool
+    opsKnown: bool
+    canAsk: bool
+    canHandsFree: bool
+    canTalkCancel: bool
+    sendOffered: bool
     ask: string
     micOn: bool
     heardNow: bool
@@ -107,7 +112,7 @@ component BarShell
   // and has no tools, so the wording says "ask" and promises no action.
   // The aim is shown apart, as a short label on the glass: "On: <the page's title>" (never an address). The address itself goes with
   // the turn (`aim=`), unchanged.
-  derive aim = "Ask about this page…"
+  derive aim = canAsk ? "Ask about this page…" : (opsKnown ? "Open a web address…" : "")
   derive aimTitle = topAddr == "paper:front" ? "Front page" : ((raim.address == pg.top and raim.blockId != "") ? raim.label : frontName)
   derive onSetup = pg.top == "onboarding:setup"
   derive setupLine = ob.step == "topics" ? "Choose your topics" : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
@@ -197,7 +202,9 @@ component BarShell
                 row padding="6px 4px" align-items="center"
                   text "Try again" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
         // ---- the line above the controls
-        if lineMode == "aim"
+        if lineMode == "aim" and opsKnown and canAsk == false
+          text "This phone does not answer questions yet. A web address opens in the app." testId="bar-aim" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted line-clamp=2 padding-left=4 animation=enter -exact-exit-animation=leave
+        if lineMode == "aim" and canAsk
           text `The radio answers aloud, from ${aimTitle}. Try “Summarize this” or “Who is involved?”` testId="bar-aim" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted line-clamp=2 padding-left=4 animation=enter -exact-exit-animation=leave
         if lineMode == "setup"
           text setupLine testId="bar-setup" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg line-clamp=1 padding-left=4 animation=enter -exact-exit-animation=leave
@@ -224,9 +231,10 @@ component BarShell
             row gap=6 align-items="center" width="100%"
               box width=3 height=12 background-color=th.danger animation=(still ? "none" : "barBlink 1s ease-in-out infinite")
               text "Listening" font-family=th.fontLabel font-size="-exact-caption2" color=th.danger flex=1
-              button press=micCancel testId="bar-cancel" appearance="none" aria-label="Cancel listening"
-                row padding="8px 4px" align-items="center"
-                  text "Cancel" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
+              if canTalkCancel
+                button press=micCancel testId="bar-cancel" appearance="none" aria-label="Cancel listening"
+                  row padding="8px 4px" align-items="center"
+                    text "Cancel" font-family=th.fontAction font-size="-exact-footnote" font-weight=600 color=th.accent
             text bi.text testId="bar-text" font-family=th.fontText font-size="-exact-subheadline" font-style="italic" color=th.fg line-clamp=3
         if lineMode == "heard"
           text bi.text testId="bar-text" font-family=th.fontText font-size="-exact-subheadline" color=th.fg line-clamp=3 padding-left=4 animation=enter -exact-exit-animation=leave font-style="italic"
@@ -246,14 +254,14 @@ component BarShell
           button testId="bar-mark" press=toggleLauncher appearance="none" width=48 height=48 aria-label=(layer == "launcher" ? "Close the launcher" : "Open the launcher")
             column width=48 height=48 align-items="center" justify-content="center"
               BarMark()
-          input appearance="none" value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=(vp.width < 360 ? "Ask…" : aim) aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0 min-height=44
+          input appearance="none" value=ask input=editAsk submit=sendAsk focus=barFocus blur=barBlur placeholder=(vp.width < 360 ? (canAsk ? "Ask…" : (opsKnown ? "Web address…" : "")) : aim) aria-label=aim testId="bar-field" enterkeyhint="send" flex=1 min-width=0 min-height=44
             font-family=(ask == "" ? th.fontLabel : th.fontText) font-size=(vp.width < 360 ? 16 : 17) color=th.fg padding="8px 6px" border-width=0 background-color="transparent"
             ::placeholder
               color=th.muted
-          if typing
+          if typing and sendOffered
             button testId="bar-send" press=sendAsk retainFocus=true appearance="none" width=52 height=48 aria-label="Send"
               BarGlyph(glyph="send", caption="Send", on=true)
-          else
+          if typing == false and canHandsFree
             button testId="bar-mic" press=micTap appearance="none" width=52 height=48 aria-label=(micOn ? "Hands-free on. Turn it off" : "Hands-free off. Turn it on")
               box position="relative" width=52 height=48
                 BarGlyph(glyph="mic", caption=(micOn ? "Voice on" : "Voice off"), on=micOn)

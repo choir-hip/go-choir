@@ -82,6 +82,7 @@ component RadioPage
     acs: AccountView
     pfront: PaperFront
     noNative: bool
+    canSpeed: bool
     playPublic: action
     playStory: action
     queueLater: action
@@ -250,7 +251,7 @@ component RadioPage
             // a clip: keep listening to the episode it is cut from, or open the episode
             QueueAudio()
             // the reading speed, one line: the value, minus, the slider from 0.5x to 3x, plus, and 1x to reset when it is not 1x
-            if rp.onAir
+            if rp.onAir and canSpeed
               row gap=4 width="100%" align-items="center"
                 text "Speed" font-family=th.fontLabel font-size="-exact-footnote" color=th.muted width=44
                 text `${speedShown}×` testId="radio-speed" font-family=th.fontLabel font-size="-exact-footnote" color=th.fg width=44 font-variant-numeric="tabular-nums"

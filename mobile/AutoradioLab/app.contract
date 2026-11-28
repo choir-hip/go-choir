@@ -121,6 +121,12 @@ component Autoradio
     signedOutTick
     hc
     noNative
+    opsKnown
+    canSpeed
+    canAsk
+    canHandsFree
+    canTalkCancel
+    sendOffered
     radioPlay
     playStory
     listen

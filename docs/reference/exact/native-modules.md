@@ -56,6 +56,7 @@ Exact's standard packages answer `NotSupportedError` and `available: false`
 substitute answers (`host/android/README.md:832-834`). For *our* interface on
 a platform with no implementation outside the agent, the source states
 nothing [unknown].
+Our own answer to it (2026-11-28): Exact tells a contract nothing about an unanswered op (`contract-for-agents.md:4453-4459` names only `web`), so the ops each host's module answers are a table in shared code, `mobile/AutoradioLab/native-answers.ts`, kept equal to the Kotlin `when` cases by a test; a control is offered only when its op is in the host's row. `docs/evidence/android-ops-and-controls-2026-11-28.md`.
 
 ## Two ways in; only one reaches the audio session
 

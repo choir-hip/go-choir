@@ -1,0 +1,12 @@
+// A control whose op the platform does not answer is not offered (android-controls.test.ts has the failure list and the table). The harness cannot set `exactPage().platform` (`prefer` has no platform), so only
+// the host it is, "web", runs here: a platform with no row in native-answers.ts answers everything, so the bar is as it was (the iPhone's case too). The Android row is tested in android-controls.test.ts.
+test "A1 a host with no row answers every op: the bar is as it was"
+  clock data
+  expect tree has "bar-mic"
+  expect state canAsk == true
+  expect state canSpeed == true
+  expect state canHandsFree == true
+  type "bar-field" "what is this"
+  expect state sendOffered == true
+  expect tree has "bar-send"
+  expect tree missing "bar-mic"

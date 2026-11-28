@@ -1,3 +1,8 @@
 // Is there a native package on this host (host.ts): "native", "none", or "" (not decided yet: read as native).
 shape HostCaps
   mode: string
+// Which native ops this host's module answers (native-answers.ts): all of them, or the list.
+shape NativeOps
+  known: bool
+  all: bool
+  ops: string[]

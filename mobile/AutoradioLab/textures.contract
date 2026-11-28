@@ -31,6 +31,7 @@ component TexturesPage
     ob: Onboarding
     openPage: action
     editAsk: action
+    canAsk: bool
     ndNew: action
     ndBusy: bool
     ndMsg: string
@@ -63,7 +64,7 @@ component TexturesPage
         SkeletonRows(rows=5, testId="textures-skeleton")
       if tlist.status == "error"
         text tlist.message testId="textures-message" font-family=th.fontLabel color=th.muted
-      if tlist.status == "ready" and tlist.hasEdition == false and q == ""
+      if tlist.status == "ready" and tlist.hasEdition == false and q == "" and canAsk
         Card(level=2, testId="textures-make-edition-card", minHeight=0)
           column padding=18 gap=8 align-items="flex-start" width="100%" box-sizing="border-box"
             text "YOUR EDITION" font-family=th.fontLabel font-size="-exact-caption2" font-weight=600 letter-spacing="0.08em" color=th.muted

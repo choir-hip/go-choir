@@ -141,6 +141,7 @@ component MailMessage
     readMail: action
     unreadMail: action
     askMail: action
+    canAsk: bool
   props
     address: string
     title: string
@@ -166,8 +167,9 @@ component MailMessage
           if mmsg.canReply
             button press=openPage(`mail:reply/${mmsg.id}`, `Reply: ${mmsg.subject}`) testId="mail-reply" appearance="none"
               Btn(label=mmsg.replyLabel, primary=false, wide=false)
-          button press=askMail("Summarise this thread") testId="mail-summarise" appearance="none"
-            Btn(label="Summarise this thread", primary=false, wide=false)
+          if canAsk
+            button press=askMail("Summarise this thread") testId="mail-summarise" appearance="none"
+              Btn(label="Summarise this thread", primary=false, wide=false)
           button press=readMail testId="mail-read" appearance="none"
             Btn(label="Read it to me", primary=false, wide=false)
         row gap=8 flex-wrap="wrap"

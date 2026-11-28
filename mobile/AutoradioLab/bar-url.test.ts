@@ -24,7 +24,7 @@ describe('the bar sends an address or an ask', () => {
     expect(spine).toContain('derive askUrl = barUrlOf(ask)');
     expect(sendAsk).toContain('if au.signedIn and askUrl != ""');
     expect(sendAsk).toContain('send qm = queueAct("openWeb", askUrl)');
-    expect(sendAsk).toContain('if au.signedIn and askUrl == ""');
+    expect(sendAsk).toContain('if au.signedIn and askUrl == "" and canAsk');
     expect(sendAsk).toContain('send acct = choirAsk(text=ask, aim=pg.top)');
   });
   test('S3 the field is cleared after the chosen send, in each branch', () => {
@@ -34,7 +34,7 @@ describe('the bar sends an address or an ask', () => {
     expect(sendAsk.indexOf('ask = ""')).toBeGreaterThan(a);          // none before the first send
   });
   test('S4 signed out opens the sign-in sheet and keeps the text', () => {
-    expect(sendAsk).toContain('if au.signedIn == false\n      gate = "signin"');
+    expect(sendAsk).toContain('if au.signedIn == false and (canAsk or askUrl != "")\n      gate = "signin"');
   });
   test('S5 the Swift module and the radio verbs', () => {
     expect(read('../exact-package/apple/AutoradioModule+Spine.swift')).not.toContain('BarURL');
