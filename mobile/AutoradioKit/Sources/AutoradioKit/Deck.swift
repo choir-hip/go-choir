@@ -30,13 +30,16 @@ import Foundation
 /// What plays the sound. Spoken things go through the programme player; remote audio through AVPlayer.
 @MainActor public protocol PlaybackEngine: AnyObject {
     /// Speak `paragraphs` as the document `documentID` (one segment named by what it is: `kind` is opening, transition, answer, result, mail; "" a story), replacing what is playing. False: nothing started.
-    func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String]) async -> Bool
+    /// `source` is the item's `paragraphs` string exactly as the deck received it: the place reported while it speaks is a range into it.
+    func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String], source: String) async -> Bool
     /// The spoken entry from the block that did not play (the engine was lost mid-entry and is back).
     func resumeSpoken()
     /// The spoken entry from its start.
     func restartSpoken()
     /// Where the spoken entry is: the server block being spoken, the last server block it has, and the seconds into it.
     func spokenReport() -> (block: Int, final: Int, seconds: Double)
+    /// Where the voice is in the text the deck was handed (the unit being spoken, as a range into it), read once: voice, because only the player knows what it is saying and how far. Empty when it cannot be told.
+    func spokenPlace() -> DeckPlace
     /// The block of the spoken entry and the seconds into it.
     func spokenPosition() -> (block: Int, seconds: Double)
     /// Silence the spoken entry (something else is starting, or it was skipped).
@@ -76,6 +79,7 @@ extension PlaybackEngine {
     public func resumeSpoken() {}
     public func spokenReport() -> (block: Int, final: Int, seconds: Double) { (0, 0, 0) }
     public func spokenPosition() -> (block: Int, seconds: Double) { (0, 0) }
+    public func spokenPlace() -> DeckPlace { DeckPlace() }
     public func stopSpoken() {}
     public func endSpokenAfterCurrentBlock() {}
 }
@@ -299,6 +303,66 @@ extension DeckLine {
     }
 }
 
+/// Where the voice is in the entry's text (interface/deck.json `DeckPlace`; shared code makes the sentence from it: AutoradioLab/radio-follow.ts). `entry` is the id the deck was given for the item (empty: no place);
+/// `digest` is `DeckDigest.of` the item's `paragraphs` as received; `start` and `length` are the unit being spoken, in UTF-16 code units of that string; `seconds` and `total` are media seconds in the unit (0 when not known yet).
+public struct DeckPlace: Codable, Equatable, Sendable {
+    public var entry = "", digest = ""
+    public var start = 0, length = 0
+    public var seconds = 0.0, total = 0.0
+    public init() {}
+    public init(entry: String, digest: String, start: Int, length: Int, seconds: Double, total: Double) {
+        self.entry = entry; self.digest = digest; self.start = start; self.length = length; self.seconds = seconds; self.total = total
+    }
+}
+
+/// A unit's range in the text it was cut from, in UTF-16 code units.
+public struct UnitRange: Codable, Sendable, Equatable {
+    public var start: Int, length: Int
+    public init(start: Int, length: Int) { self.start = start; self.length = length }
+}
+
+/// The digest of an entry's text, and where each spoken unit lies in it. Voice: the cut is the voice engine's own bound, so only native knows where each unit begins.
+public enum DeckDigest {
+    /// The length in UTF-16 code units, a colon, and the 32-bit FNV-1a of those code units in eight hex digits (AutoradioLab/radio-follow.ts `digestOf` and Android's `DeckDigest` make the same string).
+    public static func of(_ s: String) -> String {
+        var h: UInt32 = 0x811c9dc5, n = 0
+        for u in s.utf16 { h = (h ^ UInt32(u)) &* 0x01000193; n += 1 }
+        let hex = String(h, radix: 16)
+        return "\(n):" + String(repeating: "0", count: 8 - hex.count) + hex
+    }
+    /// Each unit's range in `source`, in order. The units are `source` cut and trimmed, with a run of white space (a newline joined to a space) standing for the run it came from, so a unit is matched
+    /// character by character, white space to white space. Nil when any unit cannot be found that way: no place is reported rather than a wrong one.
+    public static func ranges(of units: [String], in source: String) -> [UnitRange]? {
+        let src = Array(source.unicodeScalars)
+        var offset = [Int](); offset.reserveCapacity(src.count + 1)
+        var o = 0
+        for u in src { offset.append(o); o += u.utf16.count }
+        offset.append(o)
+        func blank(_ u: Unicode.Scalar) -> Bool { u.properties.isWhitespace }
+        var i = 0, out: [UnitRange] = []
+        for unit in units {
+            let us = Array(unit.unicodeScalars)
+            guard !us.isEmpty else { return nil }
+            while i < src.count, blank(src[i]) { i += 1 }
+            let start = i
+            var j = 0
+            while j < us.count {
+                if blank(us[j]) {
+                    while j < us.count, blank(us[j]) { j += 1 }
+                    guard i < src.count, blank(src[i]) else { return nil }
+                    while i < src.count, blank(src[i]) { i += 1 }
+                } else {
+                    while i < src.count, blank(src[i]) { i += 1 }
+                    guard i < src.count, src[i] == us[j] else { return nil }
+                    i += 1; j += 1
+                }
+            }
+            out.append(UnitRange(start: offset[start], length: offset[i] - offset[start]))
+        }
+        return out
+    }
+}
+
 /// What `deckState` answers.
 public struct DeckSnapshot: Codable, Equatable, Sendable {
     public var why: DeckWhy
@@ -306,6 +370,7 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
     public var block: Int
     public var seconds: Double
     public var duration: Double
+    public var place: DeckPlace
     public var held: [String]
     public var seq: Int
     public var acked: Int
@@ -546,7 +611,7 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
         if item.kind == "audio", let url = URL(string: item.url) {
             ok = await engine.playRemote(url: url, title: item.title, show: item.show, start: item.seconds > 0 ? item.seconds : (item.start > 0 ? item.start : nil), end: item.end > 0 ? item.end : nil)
         } else if item.kind == "speech" {
-            ok = await engine.speak(documentID: item.documentID, entryID: item.id, title: item.title, kind: item.segment, paragraphs: item.paragraphList)
+            ok = await engine.speak(documentID: item.documentID, entryID: item.id, title: item.title, kind: item.segment, paragraphs: item.paragraphList, source: item.paragraphs)
         }
         guard my == generation, current?.id == item.id else { if ok, current == nil { stopEngine() }; return ok }       // wiped while it started: no sound for the next account
         if ok, item.kind == "audio" { soundBegan(block: 0, seconds: item.start) }        // the player took the audio and started it: the journal's `sounding` line (speech: `senseSound`, from what the engine renders)
@@ -586,7 +651,9 @@ public struct DeckSnapshot: Codable, Equatable, Sendable {
         senseSound()
         let p = position()
         let dur = current?.kind == "audio" ? (engine?.remotePosition()?.duration ?? 0) : 0
-        return DeckSnapshot(why: why, item: current?.id ?? "", block: p.block, seconds: current == nil ? 0 : p.seconds, duration: dur,
+        var place = current?.kind == "speech" ? engine?.spokenPlace() ?? DeckPlace() : DeckPlace()
+        if place.entry != current?.id { place = DeckPlace() }       // the place is for the item on air, or nothing
+        return DeckSnapshot(why: why, item: current?.id ?? "", block: p.block, seconds: current == nil ? 0 : p.seconds, duration: dur, place: place,
                             held: held.map(\.id), seq: journal.seq, acked: journal.acked, journal: journal.lines)
     }
 

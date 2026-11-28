@@ -9,8 +9,11 @@
       "seq": "number", "type": "string", "item": "string", "at": "string", "block": "number", "seconds": "number", "final": "number",
       "rendered": "bool", "end": "string", "command": "string", "reason": "string"
     },
+    "DeckPlace": {
+      "entry": "string", "digest": "string", "start": "number", "length": "number", "seconds": "number", "total": "number"
+    },
     "DeckState": {
-      "why": "string", "item": "string", "block": "number", "seconds": "number", "duration": "number",
+      "why": "string", "item": "string", "block": "number", "seconds": "number", "duration": "number", "place": "DeckPlace",
       "held": "string[]", "seq": "number", "acked": "number", "journal": "DeckEvent[]"
     }
   },
@@ -20,7 +23,7 @@
       "live": true,
       "answers": "DeckState",
       "substitute": {
-        "default": { "why": "empty", "item": "", "block": 0, "seconds": 0, "duration": 0, "held": [], "seq": 0, "acked": 0, "journal": [] }
+        "default": { "why": "empty", "item": "", "block": 0, "seconds": 0, "duration": 0, "place": { "entry": "", "digest": "", "start": 0, "length": 0, "seconds": 0, "total": 0 }, "held": [], "seq": 0, "acked": 0, "journal": [] }
       },
       "options": { "tick": "number" }
     },

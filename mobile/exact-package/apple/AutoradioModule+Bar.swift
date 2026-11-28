@@ -62,9 +62,7 @@ extension AutoradioModule {
 
         handle("radioView") { [unowned self] _, reply in
             scheduleExpiry()
-            let route = RadioBridge.shared.airAddress()
             let info = MainActor.assumeIsolated { (tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document)) }   // lane autoradio-queue
-            ReaderFeed.shared.feed(info, address: route)
             reply(json(info))
         }
 
@@ -79,8 +77,6 @@ extension AutoradioModule {
     }
 }
 
-/// Lane 1 feeds the reader: the sentence the radio is saying, by address, so the reader lights it (ReaderFollow, lane 3).
-/// Only a change is passed on; when nothing plays the follow is cleared.
 /// The bar's facts as the shared bar page model reads them (interface/bar.json `BarFacts`).
 struct BarFacts: Codable {
     var at = 0.0
@@ -112,13 +108,12 @@ extension AutoradioModule {
     /// `at` is the device's time in milliseconds (a data source may not read the clock); `ready`: onboarding is complete and no other audio holds the phone, so the radio may start by itself.
     /// `foreground`: the app is in front. Only native knows it on a locked iPhone, because Exact does not establish that the page turns `hidden` there (docs/reference/exact/ui-model.md "Page facts"); shared code stops re-asking the screens
     /// each second while it is false (spine.contract `posKey`). A host that does not give it is taken as in front.
-    @MainActor public func radioFacts(peek: Bool) -> [String: Any] {
-        let s = runtime.snapshot(), tracker = BarTracker.shared, deck = Deck.shared
-        let info = tracker.radioInfo(player: choir.playerView(), snapshot: s, document: runtime.player.document)
+    @MainActor public func radioFacts() -> [String: Any] {
+        let s = runtime.snapshot(), deck = Deck.shared
         let pos = runtime.player.storyPosition()
         var o: [String: Any] = ["at": Date().timeIntervalSince1970 * 1000, "turnOpen": s.phase != "playing", "remainder": runtime.player.remainingText() ?? "",
                                 "position": ["block": pos.block, "seconds": pos.seconds], "wants": !runtime.player.userPaused, "foreground": !runtime.coordinator.isBackgrounded, "ready": OnboardingController.shared?.finished ?? false,
-                                "sentences": info.sentences, "sentenceIndex": info.sentenceIndex, "progress": info.progress, "inbox": peek ? [] : RadioBridge.shared.drain()]
+                                "inbox": RadioBridge.shared.drain()]
         if let c = deck.current, c.kind == "audio", let r = deck.engine?.remotePosition() {
             o["audio"] = ["url": c.url, "title": c.title, "show": c.show, "start": c.start, "elapsed": r.elapsed] as [String: Any]
             o["remote"] = ["elapsed": r.elapsed, "duration": r.duration ?? 0] as [String: Any]

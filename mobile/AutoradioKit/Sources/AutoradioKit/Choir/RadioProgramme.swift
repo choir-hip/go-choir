@@ -32,12 +32,15 @@ public struct ProgrammeSegment: Codable, Sendable, Equatable {
     public var serverBlockCount: Int
     /// For each playback block, the index of the server block it was made from (the `last_block` to report), inside `serverBlockCount`.
     public var unitServerBlocks: [Int]
+    /// Each playback block's range in the text the segment was cut from, and that text's `DeckDigest`: the place the deck reports. Nil when no source text was given or a unit could not be found in it.
+    public var unitRanges: [UnitRange]?
+    public var sourceDigest: String?
 
     public init(id: String, stretchID: String, kind: String, title: String, cites: [ProgrammeCite], firstBlock: Int, blockCount: Int,
-                serverBlockCount: Int, unitServerBlocks: [Int]) {
+                serverBlockCount: Int, unitServerBlocks: [Int], unitRanges: [UnitRange]? = nil, sourceDigest: String? = nil) {
         self.id = id; self.stretchID = stretchID; self.kind = kind; self.title = title; self.cites = cites; self.firstBlock = firstBlock
         self.blockCount = blockCount; self.serverBlockCount = serverBlockCount
-        self.unitServerBlocks = unitServerBlocks
+        self.unitServerBlocks = unitServerBlocks; self.unitRanges = unitRanges; self.sourceDigest = sourceDigest
     }
 
     /// The labels of the cites that have one, each once, in order: the chips on screen.
@@ -68,9 +71,11 @@ public struct IncomingSegment: Sendable, Equatable {
     public var cites: [ProgrammeCite]
     /// The server's `block_count`, when sent.
     public var blockCount: Int?
-    public init(stretchID: String, segmentID: String, kind: String, title: String, text: String, cites: [ProgrammeCite], blockCount: Int?) {
+    /// The deck item's `paragraphs` as received, when the segment is the deck's: the units' ranges are into it.
+    public var source: String?
+    public init(stretchID: String, segmentID: String, kind: String, title: String, text: String, cites: [ProgrammeCite], blockCount: Int?, source: String? = nil) {
         self.stretchID = stretchID; self.segmentID = segmentID; self.kind = kind; self.title = title; self.text = text
-        self.cites = cites; self.blockCount = blockCount
+        self.cites = cites; self.blockCount = blockCount; self.source = source
     }
 }
 
@@ -199,7 +204,8 @@ public enum SegmentPrep {
             cites.append(ProgrammeCite(ref: c.ref, role: c.role, label: l))
         }
         let seg = ProgrammeSegment(id: s.segmentID, stretchID: s.stretchID, kind: s.kind, title: title(s.title, kind: s.kind), cites: cites,
-                                   firstBlock: 0, blockCount: units.count, serverBlockCount: reported, unitServerBlocks: map)
+                                   firstBlock: 0, blockCount: units.count, serverBlockCount: reported, unitServerBlocks: map,
+                                   unitRanges: s.source.flatMap { DeckDigest.ranges(of: units.compactMap(\.spokenText), in: $0) }, sourceDigest: s.source.map(DeckDigest.of))
         return PreparedSegment(segment: seg, blocks: units)
     }
 }

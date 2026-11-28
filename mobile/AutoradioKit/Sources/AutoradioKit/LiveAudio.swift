@@ -529,7 +529,7 @@ public final class LiveAudio: @unchecked Sendable {
         let r = virtual ? 0 : renderedFrames()
         lock.lock(); defer { lock.unlock() }
         guard let h = playhead, h.tag == tag else { return nil }
-        return RenderPosition(index: tag, fraction: h.fraction(rendered: r), seconds: h.seconds(rendered: r), total: h.totalSeconds)
+        return RenderPosition(index: tag, fraction: h.fraction(rendered: r), seconds: h.seconds(rendered: r), total: h.totalSeconds, docGen: h.docGen)
     }
     /// A block starts or is skipped: the old position answers for nothing.
     public func clearPlayhead() { lock.lock(); playhead = nil; lock.unlock() }
@@ -594,11 +594,11 @@ public final class LiveAudio: @unchecked Sendable {
     /// True when the block was played (to its end, or until a transport change stopped it); false when the engine is down and could not be made
     /// ready (or the wait was cancelled while it was down): nothing was heard, and the caller must not count it as heard.
     @discardableResult
-    func playProgramme(_ samples: [Float], rate: Double, tag: Int = -1) async -> Bool {
+    func playProgramme(_ samples: [Float], rate: Double, tag: Int = -1, gen docGen: Int = 0) async -> Bool {
         lock.lock(); samplesHanded += samples.count; lock.unlock()
         if virtual {
             let total = Int(Double(samples.count) / rate * LiveAudio.playRate)
-            lock.lock(); var h = Playhead(tag: tag, totalFrames: total); h.frozen = 0; playhead = h; lock.unlock()
+            lock.lock(); var h = Playhead(tag: tag, totalFrames: total); h.frozen = 0; h.docGen = docGen; playhead = h; lock.unlock()
             var played = 0.0                                      // source seconds
             let length = Double(samples.count) / rate
             // A block always ends: a virtual engine that stays paused gives up at ten times the block's own length (and at least a minute).
@@ -615,7 +615,7 @@ public final class LiveAudio: @unchecked Sendable {
         }
         guard let inb = monoBuffer(samples, rate: rate) else { return true }
         let all = Resampler(rate: LiveAudio.playRate).convert(inb)
-        lock.lock(); playhead = Playhead(tag: tag, totalFrames: all.count); lock.unlock()
+        lock.lock(); var h = Playhead(tag: tag, totalFrames: all.count); h.docGen = docGen; playhead = h; lock.unlock()
         var offset = 0
         while offset < all.count, !Task.isCancelled {
             // The engine is down. A restart that is under way is waited for a moment; otherwise the host is asked to bring it back (it
@@ -683,6 +683,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         var rate = 1.0
         var loop: Task<Void, Never>?
         var epoch = 0                           // bumped by every start: a loop that is no longer the current one writes nothing
+        var docGen = 0                          // bumped when the document is replaced or revised: a playhead scheduled under another one is not this document's
     }
     private let st: Locked<State>
     public var document: ProgrammeDocument { st.read { $0.document } }
@@ -747,7 +748,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     }
     /// Per-document state dies with the document: the block index and where the loop ran dry (`resumeAt`).
     public func setDocument(_ d: ProgrammeDocument) {
-        st.write { $0.document = d; $0.blockIndex = 0; $0.resumeAt = nil }
+        st.write { $0.document = d; $0.blockIndex = 0; $0.resumeAt = nil; $0.docGen += 1 }
     }
 
     // MARK: Transport
@@ -860,15 +861,15 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             outer: while !Task.isCancelled {
                 while !Task.isCancelled {
                     // One look at the state per block: the block to play, and whether this loop is still the current one.
-                    let step = self.st.write { s -> (ProgrammeBlock, Bool, PlayLevel)? in
+                    let step = self.st.write { s -> (ProgrammeBlock, Bool, PlayLevel, Int)? in
                         guard s.epoch == my, n < s.document.blocks.count else { return nil }
                         s.blockIndex = n
-                        return (s.document.blocks[n], s.userPaused, s.level)
+                        return (s.document.blocks[n], s.userPaused, s.level, s.docGen)
                     }
-                    guard let (block, paused, lvl) = step else { break }
+                    guard let (block, paused, lvl, gen) = step else { break }
                     self.audio.clearPlayhead(); self.onChange?(); self.publishNowPlaying()
                     if paused { self.audio.programmePause() } else if lvl != .pause { self.audio.programmePlay() }
-                    let played = await self.playBlock(block, index: n)
+                    let played = await self.playBlock(block, index: n, gen: gen)
                     if Task.isCancelled { break }
                     if self.engineLostFlag.write({ let v = $0; $0 = false; return v }) {
                         guard self.st.read({ $0.epoch == my }) else { break outer }       // a newer start has replaced this loop: the loss is not its to report
@@ -916,6 +917,23 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
         st.write { $0.rate = c }; audio.setProgrammeRate(c); publishNowPlaying(); onChange?()
     }
 
+    /// Where the voice is in the text the deck handed over: the entry (the segment's id), the digest of that text, the range of the unit being spoken, and the rendered seconds in it and its length. Voice: only the player
+    /// knows which unit it is saying and how far. One look at the document, the block and the document's generation under one lock; the audio's position is then asked for that block, and it is taken only when the playhead was
+    /// scheduled under the same generation (a revision or a new document at the SAME block index has another one). A mismatch is read again twice, then dropped (an empty place): never old words with new timing.
+    /// No audio for the block yet (another block's playhead, nothing scheduled) is the same words with 0 and 0.
+    public func spokenPlace() -> DeckPlace {
+        for _ in 0..<3 {
+            let (doc, idx, gen) = st.read { ($0.document, $0.blockIndex, $0.docGen) }
+            guard let si = doc.segmentIndex(containingBlock: idx) else { return DeckPlace() }
+            let seg = doc.segments[si], k = idx - seg.firstBlock
+            guard let ranges = seg.unitRanges, ranges.indices.contains(k), let digest = seg.sourceDigest else { return DeckPlace() }
+            let pos = audio.programmePosition(tag: idx)
+            if let pos, pos.docGen != gen { continue }
+            return DeckPlace(entry: seg.id, digest: digest, start: ranges[k].start, length: ranges[k].length, seconds: pos?.seconds ?? 0, total: pos?.total ?? 0)
+        }
+        return DeckPlace()
+    }
+
     /// Where the player is in the block it is playing, from the audio rendered; nil when that block has no audio yet.
     public func renderPosition() -> RenderPosition? { audio.programmePosition(tag: blockIndex) }
 
@@ -956,7 +974,8 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// True when the block's audio was played (to its end, or until a transport change stopped it); false when it made no sound
     /// (no voice, a voice that failed, a clip that is not there): that is not a finish.
     @discardableResult
-    func playBlock(_ b: ProgrammeBlock, index tag: Int) async -> Bool {
+    func playBlock(_ b: ProgrammeBlock, index tag: Int, gen: Int? = nil) async -> Bool {
+        let docGen = gen ?? st.read { $0.docGen }
         switch b {
         case .speech(let t), .listenerPassage(let t, _):
             // The block after this one is synthesised while this one plays (`lookahead`), so a long story starts after its first short
@@ -987,7 +1006,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             }
             log.emit(.programmeAudioStart(block: tag))      // the trace reads "desk audio start" from the first of these after a revision
             startLookahead(after: tag)
-            let sounded = await audio.playProgramme(made.samples, rate: made.rate, tag: tag)
+            let sounded = await audio.playProgramme(made.samples, rate: made.rate, tag: tag, gen: docGen)
             if !sounded { if !Task.isCancelled { engineLostFlag.value = true }; return false }
             lastBlockEnd.write { $0 = Date() }
             return true
@@ -1112,7 +1131,7 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     }
     public func speak(_ frames: AsyncThrowingStream<AudioFrame, Error>) async { await audio.playVoice(frames) }
     public func stopVoice() async { audio.stopVoice() }
-    public func apply(_ r: Revision) async { st.write { $0.document = $0.document.applying(r); $0.jumpTo = r.fromBlock }; onChange?() }
+    public func apply(_ r: Revision) async { st.write { $0.document = $0.document.applying(r); $0.jumpTo = r.fromBlock; $0.docGen += 1 }; onChange?() }
     public func resume() async {
         let jump = st.write { s -> Int? in
             guard let j = s.jumpTo else { return nil }

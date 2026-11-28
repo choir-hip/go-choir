@@ -104,28 +104,11 @@
    "source": "string",
    "docId": "string"
   },
-  "ReaderFollowInfo": {
-   "address": "string",
-   "blockId": "string",
-   "sentence": "number"
-  },
   "ReaderAck": {
    "ok": "bool"
   }
  },
  "names": [
-  {
-   "source": "readerFollow",
-   "live": true,
-   "answers": "ReaderFollowInfo",
-   "substitute": {
-    "default": {
-     "address": "",
-     "blockId": "",
-     "sentence": -1
-    }
-   }
-  },
   {
    "send": "readerOpenExternal",
    "options": {

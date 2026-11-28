@@ -36,7 +36,7 @@ export type PageInput = {
   sheet: Sheet;
   /** `BarInfo.state`: idle | playing | paused | listening | talking | heard | holding | revised | error */
   barState?: string;
-  heardWords?: string; playing?: boolean; sentences?: string[]; sentenceIndex?: number;
+  heardWords?: string; playing?: boolean; sentence?: string;
   /** 0...1 through the entry on air. */
   progress?: number;
   /** Remote audio's own labels ("1:12", "-3:40"); the entry is not spoken. */
@@ -197,7 +197,6 @@ export function make(i: PageInput): PageInfo {
     why: '', forecast: '', canWhy: false, cannotSpeak: '', action: '', heardWords: '', greeting: '', ahead: [], aheadMore: 0, writing, emptyNote: '', notice,
     heard: [], builtOn: [], canPlay: true, takePublisher: '', takeTranscript: '', takeRecord: '',
   };
-  const sentences = i.sentences ?? [], idx = i.sentenceIndex ?? 0;
 
   // the on-air card
   if (air) {
@@ -214,7 +213,7 @@ export function make(i: PageInput): PageInfo {
       const id = takeId(air), t = id ? i.takeLookup?.(id) : undefined;
       if (t) { o.takeTranscript = t.transcript; o.takeRecord = t.record_words; }
     }
-    if (!i.remoteAudio && idx >= 0 && idx < sentences.length) { o.sentence = sentences[idx]; }   // no "N of M": native hands over only the sentences of the current BLOCK, so a total would change under the listener ("1 of 1", then "2 of 2" in one story)
+    if (!i.remoteAudio) o.sentence = i.sentence ?? '';   // no "N of M": the sentence is the one in the unit on air, so a total would change under the listener
     const p = i.progress ?? 0;
     o.fraction = Math.min(1, Math.max(0, Number.isFinite(p) ? p : 0));
     if (i.remoteAudio) { o.elapsed = i.elapsedLabel ?? ''; o.remaining = i.remainingLabel ?? ''; }

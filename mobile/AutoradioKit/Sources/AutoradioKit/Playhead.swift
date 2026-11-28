@@ -30,6 +30,8 @@ struct Playhead: Equatable, Sendable {
     var base = 0
     /// While set, the position is this (engine stopped, or the virtual engine's own count).
     var frozen: Int?
+    /// The programme document's generation (`ProgrammePlayer`) the block was scheduled under: a position under another generation is not this document's.
+    var docGen = 0
 
     init(tag: Int, totalFrames: Int) { self.tag = tag; self.totalFrames = max(0, totalFrames) }
 
@@ -64,8 +66,9 @@ public struct RenderPosition: Sendable, Equatable {
     public var fraction: Double
     public var seconds: Double
     public var total: Double
-    public init(index: Int, fraction: Double, seconds: Double, total: Double) {
-        self.index = index; self.fraction = fraction; self.seconds = seconds; self.total = total
+    public var docGen = 0
+    public init(index: Int, fraction: Double, seconds: Double, total: Double, docGen: Int = 0) {
+        self.index = index; self.fraction = fraction; self.seconds = seconds; self.total = total; self.docGen = docGen
     }
 }
 

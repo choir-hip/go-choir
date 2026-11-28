@@ -185,30 +185,20 @@ final class RateAndPositionTests: XCTestCase {
         XCTAssertEqual(a.programmePosition(tag: 7)?.fraction ?? 0, 1, accuracy: 0.001)
     }
 
-    func testTrackerReadsTheAudioPositionAtAnyRate() {
+    func testTheBlockFractionIsTheAudiosPositionAtAnyRate() {
         let tr = BarTracker()
         var snap = LabSnapshot(); snap.running = true; snap.paused = false; snap.phase = "playing"; snap.level = "play"; snap.blockIndex = 1; snap.blockCount = 2
-        let doc = ProgrammeDocument(id: "d", title: "T", blocks: [.speech(text: "One."), .speech(text: "First sentence here. Second one follows it. Third closes.")])
-        var player = ChoirPlayerView(); player.playing = true
         let box = PosBox(); box.value = RenderPosition(index: 1, fraction: 0.5, seconds: 5, total: 10)
         tr.positionSource = { box.value }
         let now = Date(timeIntervalSince1970: 5000)
         tr.setSpeed(1.5)
-        var info = tr.radioInfo(player: player, snapshot: snap, document: doc, now: now)
-        XCTAssertEqual(info.progress, 0.75, accuracy: 1e-9, "from the audio, not from wall time (block 1 of 2, half played)")
-        XCTAssertEqual(info.sentenceIndex, 1)
-        let later = tr.radioInfo(player: player, snapshot: snap, document: doc, now: now.addingTimeInterval(300))
-        XCTAssertEqual(later.progress, 0.75, accuracy: 1e-9, "300 s of wall time moved nothing: the audio did not move")
-        XCTAssertEqual(later.sentenceIndex, 1)
-        box.value = RenderPosition(index: 1, fraction: 0.95, seconds: 9.5, total: 10)
-        info = tr.radioInfo(player: player, snapshot: snap, document: doc, now: now)
-        XCTAssertEqual(info.sentenceIndex, 2)
+        XCTAssertEqual(tr.blockFraction(snap, now: now), 0.5, accuracy: 1e-9, "from the audio, not from wall time")
+        XCTAssertEqual(tr.blockFraction(snap, now: now.addingTimeInterval(300)), 0.5, accuracy: 1e-9, "300 s of wall time moved nothing: the audio did not move")
+        box.value = RenderPosition(index: 1, fraction: 0.999, seconds: 9.99, total: 10)
+        XCTAssertEqual(tr.blockFraction(snap, now: now), 0.99, accuracy: 1e-9, "capped below 1")
         box.value = RenderPosition(index: 0, fraction: 0.9, seconds: 1, total: 1)
-        info = tr.radioInfo(player: player, snapshot: snap, document: doc, now: now)
-        XCTAssertEqual(info.progress, 0.5, accuracy: 1e-9, "the old block's position does not answer for the new one")
-        XCTAssertEqual(info.sentenceIndex, 0)
+        XCTAssertEqual(tr.blockFraction(snap, now: now), 0, "the old block's position does not answer for the new one")
         box.value = nil
-        XCTAssertEqual(tr.radioInfo(player: player, snapshot: snap, document: doc, now: now).progress, 0.5, accuracy: 1e-9)
         XCTAssertEqual(tr.blockFraction(snap, now: now), 0, "block 1 of 2 begun, nothing of it played (the bar adds the block index: bar.test.ts B7)")
     }
     final class PosBox: @unchecked Sendable { var value: RenderPosition? }

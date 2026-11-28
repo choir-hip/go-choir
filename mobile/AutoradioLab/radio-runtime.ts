@@ -381,6 +381,11 @@ export class RadioRuntime {
   /** Is there pump work a pulse might be let go in the middle of: an entry to start, or a held list that is not the sheet's next entries? (A mutation then does it and stays until it is done.) */
   /** What the deck last said it holds and plays (for the console). */
   knownCount(): number { return this.known.size; }
+  /** What was last handed to the deck for this entry id: its id and `paragraphs` text, "" for both when none (the sentence follow checks its digest against the deck's place, so a rewritten text lights nothing). */
+  handed(id: string): { id: string; text: string } {
+    const it = this.known.get(id);
+    return it && it.kind === 'speech' ? { id, text: it.paragraphs } : { id: '', text: '' };
+  }
   heldSentCount(): number { return this.heldSent.size; }
   deckLine(): { held: number; item: string } { return { held: this.deckState?.held.length ?? 0, item: this.deckState?.item ?? '' }; }
   /** The app is in front, as of the last read of the native facts. */

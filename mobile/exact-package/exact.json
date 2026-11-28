@@ -115,12 +115,21 @@
       "command": "string",
       "reason": "string"
     },
+    "DeckPlace": {
+      "entry": "string",
+      "digest": "string",
+      "start": "number",
+      "length": "number",
+      "seconds": "number",
+      "total": "number"
+    },
     "DeckState": {
       "why": "string",
       "item": "string",
       "block": "number",
       "seconds": "number",
       "duration": "number",
+      "place": "DeckPlace",
       "held": "string[]",
       "seq": "number",
       "acked": "number",
@@ -346,11 +355,6 @@
       "editable": "bool",
       "source": "string",
       "docId": "string"
-    },
-    "ReaderFollowInfo": {
-      "address": "string",
-      "blockId": "string",
-      "sentence": "number"
     },
     "ReaderAck": {
       "ok": "bool"
@@ -708,6 +712,14 @@
           "block": 0,
           "seconds": 0,
           "duration": 0,
+          "place": {
+            "entry": "",
+            "digest": "",
+            "start": 0,
+            "length": 0,
+            "seconds": 0,
+            "total": 0
+          },
           "held": [],
           "seq": 0,
           "acked": 0,
@@ -830,18 +842,6 @@
           },
           "modelRuns": [],
           "modelTests": []
-        }
-      }
-    },
-    {
-      "source": "readerFollow",
-      "live": true,
-      "answers": "ReaderFollowInfo",
-      "substitute": {
-        "default": {
-          "address": "",
-          "blockId": "",
-          "sentence": -1
         }
       }
     },

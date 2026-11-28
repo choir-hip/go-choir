@@ -5,3 +5,10 @@ shape ReaderAimInfo
   address: string
   blockId: string
   label: string
+
+// The block and sentence the radio is reading, for the reader to light (radio-follow.ts `followOf`, answered by app.ts as `readerFollowShared`); it was the Swift package's (interface/reader.json `ReaderFollowInfo`, source `readerFollow`)
+// before the follow moved to shared code. Empty `address` and `blockId` and `sentence` -1 when nothing is lit.
+shape ReaderFollowInfo
+  address: string
+  blockId: string
+  sentence: number

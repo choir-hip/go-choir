@@ -46,6 +46,17 @@ shape DeckEvent
   command: string
   reason: string
 
+// Where the voice is in the entry's text (radio-follow.ts reads it; docs/design/sentence-follow-in-shared-code-2026-11-28.md). `entry` is the id native was given for the item it speaks, "" when it speaks nothing or does not know;
+// `digest` is the length and FNV-1a of the item's `paragraphs` string as native received it; `start` and `length` are the unit being spoken, in UTF-16 code units of that string; `seconds` and `total` are media seconds in the
+// unit and its length (0 when not known yet).
+shape DeckPlace
+  entry: string
+  digest: string
+  start: number
+  length: number
+  seconds: number
+  total: number
+
 // Why the deck is silent (or not), one word, never a set of flags: "playing", "paused_listener", "paused_system", "held_session",
 // "held_engine", "stopped", "empty".
 shape DeckState
@@ -54,6 +65,7 @@ shape DeckState
   block: number
   seconds: number
   duration: number
+  place: DeckPlace
   held: string[]
   seq: number
   acked: number

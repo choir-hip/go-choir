@@ -43,12 +43,19 @@ export type DeckEvent = {
   reason: string;
 };
 
+/** Where the voice is in the entry's text, as native reports it (docs/design/sentence-follow-in-shared-code-2026-11-28.md). `entry` is the id native was given; `digest` is the length and FNV-1a of the entry's `paragraphs`
+ *  string as native received it (radio-follow.ts `digestOf`); `start` and `length` are the unit being spoken, in UTF-16 code units of that string; `seconds` and `total` are media seconds in the unit and its length (0 when
+ *  not known yet). An empty `entry` is no place. */
+export type DeckPlace = { entry: string; digest: string; start: number; length: number; seconds: number; total: number };
+export const NO_PLACE: DeckPlace = { entry: '', digest: '', start: 0, length: 0, seconds: 0, total: 0 };
+
 export type DeckState = {
   why: DeckWhy;
   item: string;
   block: number;
   seconds: number;
   duration: number;
+  place: DeckPlace;
   /** The ids of the items the deck holds after the one playing, in order. At most DECK_HELD_MAX (100). */
   held: string[];
   /** The last journal line's number. Numbers rise by one and are never reused, across a relaunch too. */

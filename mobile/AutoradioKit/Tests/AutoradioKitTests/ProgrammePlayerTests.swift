@@ -195,7 +195,6 @@ final class SegmentedDocumentTests: XCTestCase {
         let tr = BarTracker()
         let r = tr.radioInfo(player: pv, snapshot: snap, document: d, now: Date())
         XCTAssertEqual(r.title, "Title 0")
-        XCTAssertEqual(r.sentences, ["Two."], "the passage being read is still the block")
         XCTAssertFalse(String(data: try! JSONEncoder().encode(r), encoding: .utf8)!.contains("pub:"), "no raw ref reaches the screen")
         // one article: unchanged
         let plain = ProgrammeDocument(id: "choir:x", title: "A story", blocks: [.speech(text: "One."), .speech(text: "Two.")])

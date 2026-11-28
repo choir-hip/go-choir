@@ -60,6 +60,7 @@ class DeckMediaEngine(
     private var audioItem: MediaItem? = null
     private var speechChunks: List<SpeechChunk> = emptyList()
     private var speechFiles: List<File> = emptyList()
+    private var itemDigest = ""                              // DeckDigest of the speech item's paragraphs as received; made once when the item starts
     private var initialPositionMs = 0L
     private var released = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -213,6 +214,7 @@ class DeckMediaEngine(
         start?.cancel(); start = null
         exo.stop(); exo.clearMediaItems(); tts?.stop()
         speechFiles.forEach { it.delete() }; speechFiles = emptyList(); speechChunks = emptyList()
+        itemDigest = if (item.kind == "speech") DeckDigest.of(item.paragraphs) else ""
         this.generation = generation; this.itemID = item.id; this.item = item; audioItem = null
         initialPositionMs = (if (item.seconds > 0) item.seconds else item.start).coerceAtLeast(0.0).times(1000).toLong()
 
@@ -307,11 +309,8 @@ class DeckMediaEngine(
     private fun speechChunksOf(item: DeckItem): List<SpeechChunk>? {
         if (speechDir.exists()) speechDir.deleteRecursively()
         if (!speechDir.mkdirs()) return null
-        val chunks = ArrayList<SpeechChunk>()
-        item.paragraphList.drop(item.block.coerceAtLeast(0)).forEachIndexed { offset, text ->
-            splitSpeech(text).forEach { part -> chunks += SpeechChunk(item.block.coerceAtLeast(0) + offset, part, File(speechDir, "pending")) }
-        }
-        return chunks
+        return SpeechRanges.parts(item.paragraphs, item.block, minOf(TextToSpeech.getMaxSpeechInputLength(), 3500))
+            .map { SpeechChunk(it.block, it.text, File(speechDir, "pending"), it.start, it.length) }
     }
 
     /** Make the chunks in [from, until), each to its own file, and return them. The engine plays one
@@ -338,21 +337,6 @@ class DeckMediaEngine(
             made += chunks[index].copy(file = file)
         }
         return made
-    }
-
-    private fun splitSpeech(text: String): List<String> {
-        val max = minOf(TextToSpeech.getMaxSpeechInputLength(), 3500)
-        if (text.length <= max) return listOf(text)
-        val out = ArrayList<String>()
-        var rest = text
-        while (rest.length > max) {
-            var cut = rest.lastIndexOf(' ', max)
-            if (cut < max / 2) cut = rest.lastIndexOf('.', max)
-            if (cut < max / 2) cut = max
-            out += rest.substring(0, cut).trim(); rest = rest.substring(cut).trimStart()
-        }
-        if (rest.isNotEmpty()) out += rest
-        return out
     }
 
     private suspend fun speechEngine(): TextToSpeech? {
@@ -392,7 +376,7 @@ class DeckMediaEngine(
     }
     override fun stop() {
         start?.cancel(); start = null
-        shouldPause = true; expectedPause = true; generation += 1; itemID = ""; item = null; audioItem = null; speechChunks = emptyList(); incompleteItem = null
+        shouldPause = true; expectedPause = true; generation += 1; itemID = ""; item = null; audioItem = null; speechChunks = emptyList(); itemDigest = ""; incompleteItem = null
         utteranceWaiters.values.forEach { it.complete(false) }; utteranceWaiters.clear()
         tts?.stop(); exo.stop(); exo.clearMediaItems(); releaseSession()
         speechFiles.forEach { it.delete() }; speechFiles = emptyList(); speechDir.deleteRecursively()
@@ -422,9 +406,16 @@ class DeckMediaEngine(
             DeckPosition(speechChunks.getOrNull(index)?.block ?: current.block, seconds, speechChunks.lastOrNull()?.block ?: current.block, 0.0)
         }
     }
+    /** Voice: only the player knows which chunk sounds and how far. Run where ExoPlayer and `speechChunks` live (the main looper); the chunks and the player share that thread and no document can be replaced under them, so no
+     *  generation is needed. The duration of the chunk is Media3's, C.TIME_UNSET (a large negative number) until it is known: that is 0 (placeOf). */
+    override fun place(): DeckPlace {
+        val current = item ?: return DeckPlace()
+        if (current.kind != "speech") return DeckPlace()
+        return placeOf(itemID, itemDigest, speechChunks.map { SpeechPart(it.block, it.text, it.start, it.length) }, exo.currentMediaItemIndex, exo.currentPosition, exo.duration)
+    }
     private fun duration(): Double = if (exo.duration == androidx.media3.common.C.TIME_UNSET) 0.0 else exo.duration / 1000.0
     override fun release() { if (!released) { start?.cancel(); scope.cancel(); utteranceWaiters.values.forEach { it.complete(false) }; utteranceWaiters.clear(); stop(); exo.removeListener(listener); exo.removeAnalyticsListener(analytics); exo.release(); tts?.shutdown(); tts = null; released = true } }
     override fun wipeCache() { speechDir.deleteRecursively() }
 
-    private data class SpeechChunk(val block: Int, val text: String, val file: File)
+    private data class SpeechChunk(val block: Int, val text: String, val file: File, val start: Int, val length: Int)
 }

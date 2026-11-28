@@ -46,7 +46,8 @@ class DeckController(
         val item = current
         val p = if (item == null) DeckPosition() else engine.position()
         return DeckState(why.wire, item?.id ?: "", p.block, if (item == null) 0.0 else p.seconds, p.duration,
-            held.map { it.id }, journal.seq, journal.acked, journal.lines)
+            held.map { it.id }, journal.seq, journal.acked, journal.lines,
+            place = if (item == null || item.kind != "speech") DeckPlace() else engine.place().takeIf { it.entry == item.id } ?: DeckPlace())
     }
 
     fun playAsync(item: DeckItem): Job = scope.launch { play(item) }

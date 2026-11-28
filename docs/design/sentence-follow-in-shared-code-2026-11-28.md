@@ -1,6 +1,6 @@
 # The sentence follow in shared code: a plan
 
-Standing: undecided | kind: wanted | settled-by: none yet; a plan for review | note: read from code on main (aaad08a1d) and from the parked lane; nothing here was run, and no sentence timing was heard on a device
+Standing: built | kind: happened | scope: in part | settled-by: S1, S0 and S2+S3 are built (docs/changes/2026-11-28-readers-aim-in-shared-code.md, docs/changes/2026-11-28-sentence-follow-in-shared-code.md); S4 is not | note: built and tested (bun, Swift, Kotlin JVM, the contract build); no sentence timing was heard on a device, and the iPhone compile of the touched app-side Swift and the Android build are the landing's
 
 Station E5 of [finishing the move to Exact](../definitions/choir-finish-the-move-to-exact-2026-11-27.md).
 The parked attempt is `origin/lane/bar-facts` and
@@ -357,6 +357,19 @@ supported" on Android.
 - That the contract's `with` re-asks on a page edit as the grammar says. The
   text of the grammar is read (contract-grammar.md:657-660); the behaviour is
   for `exact test web` and then a phone.
+
+## What was built (2026-11-28)
+
+S1, S0 and S2+S3 are built; S4 (the bar's block facts) is not. Differences from the plan above, each a detail and each decided while building:
+
+- S0 took the three fields off the wire and out of the Swift struct's encoding (`CodingKeys`) and left the values held natively until S2+S3 deleted them: `radioFacts` and `ReaderFeed` still read them until then.
+- The page's blocks are arguments, not a `with` on a version. `ReaderDoc` has no `version`; `rfollow = readerFollowShared(ds, rair, rdoc.address, <block ids>, <block texts>)` passes what `followOf` reads, so no value is read from outside the input list. `rair` is a new resource, `radioAir(rpulse.tick, posKey)`: the on-air entry's id and page address, and the id and text last handed to the deck (`RadioRuntime.handed`).
+- The radio page shows its sentence and progress while the deck plays or the listener has paused (the place stands); the reader lights a sentence only while it plays (parity with Swift). The station's own words (no page address) show on the page and light nothing in the reader.
+- iPhone ranges: `SegmentPrep.prepare` cuts as before and the ranges are found afterwards by `DeckDigest.ranges`, matching each unit to the received string white space to white space, made once when the segment is prepared and stored on the segment. A unit that cannot be found gives no ranges and so no place. Tracking offsets through the trim, newline flattening and the ICU sentence cut was the alternative; matching afterwards touches none of those. Android makes its ranges as it cuts (`SpeechRanges`).
+- The reader's page numbers sentences with `sentenceEnds` over each block's text, as `reader-parse.ts` does; a block over the reader's size is one sentence.
+- `radioFacts` lost `sentences`, `sentenceIndex`, `progress` and its `peek` argument (the page facts no longer ask native for anything); `HeldBlock.sentences` and the `sentences` of the `pageText` hand-over are gone.
+
+Not done and listed for a device: see (f), and for Android that `exo.duration` is known for the chunk on air and that `currentMediaItemIndex` moves with the sound.
 
 ## What I would do first
 

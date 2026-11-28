@@ -5,8 +5,8 @@ shape RadioPageFacts
   at: number
   sheet: string
   playing: bool
-  sentences: string[]
-  sentenceIndex: number
+  // The sentence being said and the entry's progress, from the deck's place (radio-follow.ts `nowOf`); "" and 0 when the place is not the entry on air's.
+  sentence: string
   progress: number
   // The run sheet's own words, as the bar's overlay has them (bar.ts): the page and the bar agree on playing.
   ready: bool
@@ -47,6 +47,13 @@ shape RadioTick
 // The heartbeat's count (heartbeat.ts).
 shape Heartbeat
   n: number
+
+// The entry on air as the radio runtime holds it: its id, the address of the page it reads, and the id and text last handed to the deck for it ("" when none).
+shape RadioAir
+  id: string
+  address: string
+  handedId: string
+  handedText: string
 
 shape RadioBuiltOn
   n: number

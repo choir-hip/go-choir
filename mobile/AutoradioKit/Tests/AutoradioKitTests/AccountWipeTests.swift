@@ -111,7 +111,6 @@ final class AccountWipeTests: XCTestCase {
         let conversation = Conversation(); conversation.begin(id: "q1", question: m)
         let acks = AckHistory(); acks.add(m, page: m)
         SharedGeneration.resetForTest(); let reader = HeldPages(limit: 4); reader.hold(gen: 0, HeldPage(address: "pub:x", title: m, blocks: [HeldBlock(id: "b1", kind: "p", text: m)]))
-        ReaderFollow.shared.set(address: "pub:x", spoken: m, held: reader)      // the old account's place in a page
         let kept = KeptTurnStore(root: root.appendingPathComponent("turns")); write("turns/t1/record.json", m)
         write("MikeVoice/speaker.json", m); let voice = SpeakerGate(url: root.appendingPathComponent("MikeVoice/speaker.json"))
         let openPages = OpenPageFacts(); openPages.replace(gen: 1, [FrontPage(address: "mailbox:inbox", title: m, kind: "mailbox")])
@@ -142,7 +141,7 @@ final class AccountWipeTests: XCTestCase {
         XCTAssertNil(env.playing("p1"))
         XCTAssertTrue(conversation.entries().isEmpty); XCTAssertTrue(acks.recent.isEmpty)
         XCTAssertTrue(kept.list().isEmpty); XCTAssertFalse(voice.info().learned)
-        XCTAssertTrue(openPages.list().isEmpty); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty, "the native copy of the picks"); XCTAssertFalse(EditionPicksMirror.shared.known, "and it is forgotten"); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice"); XCTAssertEqual(ReaderFollow.shared.info, ReaderFollowInfo(), "the sentence followed")
+        XCTAssertTrue(openPages.list().isEmpty); XCTAssertTrue(EditionPicksMirror.shared.topics.isEmpty, "the native copy of the picks"); XCTAssertFalse(EditionPicksMirror.shared.known, "and it is forgotten"); XCTAssertEqual(reader.count, 0, "the pages the reader handed to the voice")
 
         // (c) the next sign-in: the first request of each kind carries nothing of the old account.
         let body = (try? JSONSerialization.data(withJSONObject: ["history": turns.snapshot().map { $0.text }])).map { String(decoding: $0, as: UTF8.self) } ?? ""

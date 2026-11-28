@@ -21,6 +21,7 @@ import { firstRunOver } from './onboarding.ts';
 import { deskMode } from './consent.ts';
 import { perform } from './radio-model.ts';
 import { voiceFacts, respondsOf, airAddressOf } from './voice-facts.ts';
+import { nowOf } from './radio-follow.ts';
 import { htmlToText } from './mail-model.ts';
 import { parseList, weight, FRONT_LIMIT, type Story } from './paper-model.ts';
 import { listing } from './paper.ts';
@@ -610,18 +611,25 @@ function sheetText(sheet: Sheet): string {
   return text;
 }
 
-export async function radioPageFacts(storage: Store | undefined, native: NativeReader | undefined): Promise<RadioFacts> {
+/** The entry on air as the contract needs it for the sentence follow (members-radio.contract `rair`): its id, its page's address, and what was last handed to the deck under that id. Asked on the pulse and the beat. */
+export async function radioAir(storage: Store | undefined, native: NativeReader | undefined): Promise<{ id: string; address: string; handedId: string; handedText: string }> {
   const r = await getRadio(storage, native, false);
-  const v = r.rt.view(), later = nativeLater();
-  let sentences: string[] = [], sentenceIndex = 0, progress = 0;
-  if (later) { try { const o = obj(await later({ op: 'radioFacts', peek: true })); sentences = Array.isArray(o.sentences) ? o.sentences.filter((x): x is string => typeof x === 'string') : []; sentenceIndex = num(o.sentenceIndex); progress = num(o.progress); } catch { /* none */ } }
+  const e = r.rt.store.onAir();
+  const h = e ? r.rt.handed(e.id) : { id: '', text: '' };
+  return { id: e?.id ?? '', address: airAddressOf(e), handedId: h.id, handedText: h.text };
+}
+
+export async function radioPageFacts(storage: Store | undefined, native: NativeReader | undefined, deck: unknown, air: unknown): Promise<RadioFacts> {
+  const r = await getRadio(storage, native, false);
+  const v = r.rt.view();
+  const now = nowOf(deck, air);
   const prog = r.rt.programme(), route = prog.route;
   const airEntry = r.rt.store.onAir(), takeRef = airEntry?.kind === 'take' && airEntry.source?.ref.startsWith('take:') ? airEntry.source.ref.slice(5) : '';
   const take = takeRef !== '' ? r.takeList.find((t) => t.takeID === takeRef) : undefined;
   const published = route !== '' ? r.front.published[route] ?? 0 : 0;
   const versions = Object.entries(r.front.versions);
   return {
-    at: clock.ms / 1000, sheet: sheetText(r.rt.store.sheet), playing: v.playing, sentences, sentenceIndex, progress: v.audio ? v.fraction : progress,
+    at: clock.ms / 1000, sheet: sheetText(r.rt.store.sheet), playing: v.playing, sentence: v.audio ? '' : now.sentence, progress: v.audio ? v.fraction : now.progress,
     ready: true, onAir: v.onAir, waiting: v.waiting, remoteAudio: v.audio, remoteElapsed: v.elapsed, spokenElapsed: v.spokenElapsed, remoteDuration: v.duration, wants: r.rt.director.wants, message: v.message, notice: v.notice, writing: v.writing, dry: v.dry,
     airTitle: prog.title, airRoute: route, publishedAt: published, versionRoutes: versions.map(([k]) => k), versionNumbers: versions.map(([, n]) => n),
     stale: r.rt.store.ahead().filter((e) => r.rt.store.isStale(e)).map((e) => e.id), takeTranscript: take?.transcript ?? '', takeRecord: take?.record?.summary ?? '',

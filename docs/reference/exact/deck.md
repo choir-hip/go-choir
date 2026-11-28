@@ -43,7 +43,7 @@ Apple: its host has no app-module bus).
 
 | Name | Kind | Does |
 |---|---|---|
-| `deckState` | source, live (and an op name) | `DeckState`: `why`, `item`, `block`, `seconds`, `duration`, `held` (ids), `seq`, `acked`, `journal` (the lines not yet acknowledged). A read also writes the `sounding` line when sound has begun |
+| `deckState` | source, live (and an op name) | `DeckState`: `why`, `item`, `block`, `seconds`, `duration`, `place` (where the voice is in the item's text: `entry`, `digest`, `start`, `length`, `seconds`, `total`; `radio-follow.ts` reads it, the design is docs/design/sentence-follow-in-shared-code-2026-11-28.md), `held` (ids), `seq`, `acked`, `journal` (the lines not yet acknowledged). A read also writes the `sounding` line when sound has begun |
 | `deckPlay` | op name | play this item now; what was playing ends `replaced` |
 | `deckEnqueue` | op name | hold this item after the playing one at place `at` (0 is next; -1 or absent is the end); the held items from `at` on are dropped first; an id already held is removed first; at most 100 are held (the sheet's bound) |
 | `deckAct` | op name | `op` is `pause`, `resume`, `stop`, `skip`, `seekTo`, `seekBy`, `trim` or `clearEnd` (a clip no longer ends: the episode goes on from where it is); `value` as the op needs |

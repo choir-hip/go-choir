@@ -43,24 +43,4 @@ final class BarStateTests: XCTestCase {
         c.update(index: 1, running: true, now: t0.addingTimeInterval(11))
         XCTAssertEqual(c.seconds(now: t0.addingTimeInterval(11)), 0, accuracy: 0.001)
     }
-
-    func testSentencesAndIndex() {
-        let s = BarTracker.sentences("One short. Two is a longer sentence here. Three.")
-        XCTAssertEqual(s.count, 3)
-        XCTAssertEqual(BarTracker.sentenceIndex(s, progress: 0.0), 0)
-        XCTAssertEqual(BarTracker.sentenceIndex(s, progress: 0.99), 2)
-        XCTAssertEqual(BarTracker.sentenceIndex([], progress: 0.5), 0)
-    }
-
-    func testRadioInfoClampsTheBlockIndex() {
-        let tr = BarTracker()
-        let blocks = (0..<100).map { ProgrammeBlock.speech(text: "Block \($0). More words.") }
-        let d = ProgrammeDocument(id: "d", title: "Doc", blocks: blocks)
-        let r = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: 99, count: 100), document: d, now: t0)
-        XCTAssertEqual(r.sentences, ["Block 99.", "More words."])
-        let over = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: 500, count: 100), document: d, now: t0)
-        XCTAssertEqual(over.sentences, ["Block 99.", "More words."])
-        let empty = tr.radioInfo(player: player(playing: false, title: ""), snapshot: snap(count: 0), document: ProgrammeDocument(id: "n", title: "", blocks: []), now: t0)
-        XCTAssertEqual(empty.sentences, [])
-    }
 }

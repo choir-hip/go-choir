@@ -13,6 +13,8 @@ interface DeckEngine {
     fun clearEnd()
     fun restart()
     fun position(): DeckPosition
+    /** Where the voice is in the text the deck was handed (see [DeckPlace]); empty for audio and when nothing is known. */
+    fun place(): DeckPlace = DeckPlace()
     fun release()
     fun wipeCache()
 }

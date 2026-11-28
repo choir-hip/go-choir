@@ -90,7 +90,7 @@ describe('C1 the model is the contract', () => {
     const declared = (name: string): string => (new RegExp(`resource ${name} = [a-zA-Z]+\\(([^)]*)\\)`).exec(contracts)?.[1] ?? 'MISSING').replace(/\s/g, '');
     expect(declared('rpulse')).toBe('ds,rnote.tick,radioTick');
     expect(/resource ds = deckState\(tick=radioTick\)/.test(contracts)).toBe(true);
-    expect(declared('brun')).toBe('rpulse.tick,posKey'); expect(declared('qv')).toBe('rpulse.tick,posKey'); expect(declared('rpfacts')).toBe('rpulse.tick,posKey');
+    expect(declared('brun')).toBe('rpulse.tick,posKey'); expect(declared('qv')).toBe('rpulse.tick,posKey'); expect(declared('rpfacts')).toBe('rpulse.tick,posKey,ds,rair'); expect(declared('rair')).toBe('rpulse.tick,posKey');
     expect(declared('rp')).toBe('rpfacts,bf,cvraw'); expect(declared('lnc')).toBe('lq,pg.count,rpfacts.at');
     expect(declared('bi')).toContain('bf,brun,cvraw');
     expect(/derive posKey = rpulse\.live and hpg\.visibilityState == "visible" \? rpulse\.beat : 0/.test(contracts)).toBe(true);

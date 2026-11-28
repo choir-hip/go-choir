@@ -7,8 +7,6 @@ import Foundation
 //
 // Ways this can fail (the radio view's; the bar's list is in bar.test.ts):
 //  1. Pause/resume must not count paused time: elapsed time accumulates only while running at normal level (not paused, not yielded to "pause").
-//  2. The sentence estimate runs past the block (audio longer than the guess): progress clamps below 1, the last sentence stays lit until the block changes.
-//  3. A block that is a clip (no spoken text) has no sentences: current is its summary, one "sentence".
 //  5. A block index past the end (after a revision shortens it) clamps, not traps.
 //  6. The words from a former turn show in a new one: the holding line clears on the phase to "candidate".
 
@@ -20,10 +18,8 @@ public struct RadioInfo: Codable, Sendable, Equatable {
     public var level = "play"
     /// The speed as a number, for the slider (0.5 to 3).
     public var speedValue = 1.0
-    public var progress = 0.0, sentenceIndex = 0, sentences: [String] = []   // native only, not on the wire (CodingKeys): the progress and the sentence, for `ReaderFeed` and the `radioFacts` op
     /// 0...1, the smoothed microphone level while the mic is open (the mark breathes with it); 0 when nothing is heard.
     public var micLevel = 0.0
-    private enum CodingKeys: String, CodingKey { case title, playing, level, speedValue, micLevel }
     public init() {}
 }
 
@@ -149,29 +145,9 @@ public final class BarTracker: @unchecked Sendable {
         return min(0.99, clock.seconds(now: now) / duration)
     }
 
-    public static func sentences(_ t: String) -> [String] {
-        var out: [String] = []
-        t.enumerateSubstrings(in: t.startIndex..<t.endIndex, options: .bySentences) { s, _, _, _ in
-            if let s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty { out.append(s) }
-        }
-        return out.isEmpty && !t.isEmpty ? [t] : out
-    }
-
-    public static func sentenceIndex(_ sentences: [String], progress: Double) -> Int {
-        let total = sentences.reduce(0) { $0 + $1.count }
-        guard total > 0, sentences.count > 1 else { return 0 }
-        var acc = 0
-        for (i, s) in sentences.enumerated() {
-            acc += s.count
-            if Double(acc) / Double(total) > progress { return i }
-        }
-        return sentences.count - 1
-    }
-
     public func radioInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, document d: ProgrammeDocument, now: Date = Date()) -> RadioInfo {
         lock.lock(); defer { lock.unlock() }
         var r = RadioInfo()
-        let bp = clockProgress(s, doc: d, now: now)
         let n = d.blocks.count
         let idx = n == 0 ? 0 : min(max(s.blockIndex, 0), n - 1)
         r.title = d.title
@@ -180,13 +156,6 @@ public final class BarTracker: @unchecked Sendable {
         r.playing = p.playing
         r.level = s.level; r.speedValue = speed
         r.micLevel = (level * 100).rounded() / 100
-        r.progress = n == 0 ? 0 : min(1, (Double(idx) + bp) / Double(n))
-        if n > 0 {
-            let b = d.blocks[idx]
-            let text = b.spokenText ?? b.summary
-            r.sentences = Self.sentences(text)
-            r.sentenceIndex = Self.sentenceIndex(r.sentences, progress: bp)
-        }
         return r
     }
 }

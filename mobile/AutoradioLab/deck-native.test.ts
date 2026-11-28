@@ -33,11 +33,11 @@ describe('the generated package deck port', () => {
     expect(s).toMatchObject({ why: 'playing', item: 'a', block: 2, seconds: 5.5, held: ['b', 'c'], seq: 7, acked: 3 });
     expect(s.journal.map((l) => l.seq)).toEqual([4, 5]); expect(s.journal[1]).toMatchObject({ end: 'finished', rendered: true, block: 2, final: 3 });
     const bad = await nativeDeck(async () => ({ why: 4, held: 'x', journal: 'no', seq: 'a' })).state();
-    expect(bad).toEqual({ why: 'empty', item: '', block: 0, seconds: 0, duration: 0, held: [], seq: 0, acked: 0, journal: [] });
+    expect(bad).toEqual({ why: 'empty', item: '', block: 0, seconds: 0, duration: 0, place: { entry: '', digest: '', start: 0, length: 0, seconds: 0, total: 0 }, held: [], seq: 0, acked: 0, journal: [] });
   });
 
   test('N3 no package, a thrown send and no answer are the empty state', async () => {
-    const empty = { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, held: [], seq: 0, acked: 0, journal: [] };
+    const empty = { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, place: { entry: '', digest: '', start: 0, length: 0, seconds: 0, total: 0 }, held: [], seq: 0, acked: 0, journal: [] };
     expect(await nativeDeck(unavailable).state()).toEqual(empty);
     expect(await nativeDeck(async () => { throw new Error('x'); }).play(item({ id: 'a', kind: 'speech' }))).toEqual(empty);
     expect(await nativeDeck(async () => undefined).act('stop')).toEqual(empty);

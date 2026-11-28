@@ -122,12 +122,12 @@ describe('P3 hidden: no re-ask at all', () => {
 });
 
 describe('P4 native asks per second', () => {
-  test('playing and visible adds one `radioFacts` peek per second (the page facts); the pulse keeps its own; paused adds none', async () => {
+  test('playing and visible adds no `radioFacts` peek (the page facts read the sentence from the place in the deck state, `ds.place`); the pulse keeps its own; paused adds none', async () => {
     fresh(); await play(); await ask(0, true);
     calls = [];
     for (let i = 0; i < 10; i++) await ask(1, true);
     const peeks = calls.filter((c) => c.op === 'radioFacts' && c.peek === true).length;
-    expect(peeks).toBe(10);                                                   // one per second
+    expect(peeks).toBe(0);                                                    // none: the sentence and the progress are made in shared code from `ds.place`
     const perPulse = (n: string): number => calls.filter((c) => (c.op === n) || c.name === n).length;
     expect(perPulse('deckState')).toBe(10);                                   // the contract's `ds` read, once a tick (the pulse makes none of its own)
     expect(calls.filter((c) => c.op === 'deck' && c.name !== 'deckState' && c.name !== 'deckAck').length).toBe(0);
@@ -184,7 +184,8 @@ describe('P7 the contract is wired to the key', () => {
     expect(c('spine.contract')).toMatch(/derive posKey = rpulse\.live and hpg\.visibilityState == "visible" \? rpulse\.beat : 0/);
   });
   test('the page facts, the queue view and the bar run take it', () => {
-    expect(c('members-radio.contract')).toContain('radioPageFacts(rpulse.tick, posKey)');
+    expect(c('members-radio.contract')).toContain('radioPageFacts(rpulse.tick, posKey, ds, rair)');
+    expect(c('members-radio.contract')).toContain('radioAir(rpulse.tick, posKey)');
     expect(c('members-queue.contract')).toContain('queueView(rpulse.tick, posKey)');
     expect(c('spine.contract')).toContain('barRun(rpulse.tick, posKey)');
   });

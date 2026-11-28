@@ -1,14 +1,12 @@
 import Foundation
 
 // The page in front, as the shared reader hands it to the voice (AutoradioLab/reader.ts `hand`, the app module's `pageText` op): the native voice cannot ask the shared module what is on the page,
-// and matches what the radio says against it, so the shared page hands over its blocks with their sentences.
-// This holds them (at most `limit`, least recently used first, forgotten at sign-out) for the native readers: the page text a turn reads (`HeldPages.page`, `pageTextProvider`) and the follow-along
-// (ReaderFollow.locate). Nothing here parses a document.
+// so the shared page hands over its blocks.
+// This holds them (at most `limit`, least recently used first, forgotten at sign-out) for the native readers: the page text a turn reads (`HeldPages.page`, `pageTextProvider`). Nothing here parses a document.
 
 public struct HeldBlock: Sendable, Equatable {
     public var id: String, kind: String, text: String      // kind: p, h, li, quote, code, embed
-    public var sentences: [String]
-    public init(id: String, kind: String, text: String, sentences: [String] = []) { self.id = id; self.kind = kind; self.text = text; self.sentences = sentences }
+    public init(id: String, kind: String, text: String) { self.id = id; self.kind = kind; self.text = text }
 }
 
 public struct HeldPage: Sendable, Equatable {
@@ -31,7 +29,7 @@ public struct HeldPage: Sendable, Equatable {
         guard let address = r["address"] as? String, !address.isEmpty else { return nil }
         let blocks = ((r["blocks"] as? [[String: Any]]) ?? []).compactMap { b -> HeldBlock? in
             guard let id = b["id"] as? String, let text = b["text"] as? String else { return nil }
-            return HeldBlock(id: id, kind: (b["kind"] as? String) ?? "p", text: text, sentences: (b["sentences"] as? [String]) ?? [])
+            return HeldBlock(id: id, kind: (b["kind"] as? String) ?? "p", text: text)
         }
         return HeldPage(address: address, title: (r["title"] as? String) ?? "", dek: (r["dek"] as? String) ?? "", kind: (r["kind"] as? String) ?? "document", blocks: blocks)
     }
@@ -66,17 +64,6 @@ public final class HeldPages: @unchecked Sendable {
     }
     public func all() -> [HeldPage] { lock.lock(); defer { lock.unlock() }; return Array(pages.values) }
     public var count: Int { lock.lock(); defer { lock.unlock() }; return pages.count }
-    /// Lower-cased, curly quotes and dashes straightened, runs of white space collapsed: what the follow-along compares spoken words and the page's text through.
-    static func normalised(_ s: String) -> String {
-        var out = "", lastSpace = true
-        for ch in s {
-            var c = ch
-            switch c { case "\u{2018}", "\u{2019}": c = "'"; case "\u{201C}", "\u{201D}": c = "\""; case "\u{2013}", "\u{2014}": c = "-"; default: break }
-            if c.isWhitespace || c == "\u{00A0}" { if !lastSpace { out.append(" "); lastSpace = true } } else { out += String(c).lowercased(); lastSpace = false }
-        }
-        while out.hasSuffix(" ") { out.removeLast() }
-        return out
-    }
     /// Sign-out: every page held (the previous account's).
     public func wipe() { lock.lock(); pages = [:]; recency = []; lock.unlock() }
 }

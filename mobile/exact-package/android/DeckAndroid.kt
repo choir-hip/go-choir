@@ -68,6 +68,8 @@ object DeckAndroid {
 
     private fun state(s: DeckState): JSONObject = JSONObject().put("why", s.why).put("item", s.item)
         .put("block", s.block).put("seconds", s.seconds.numberOrNull()).put("duration", s.duration.numberOrNull())
+        .put("place", JSONObject().put("entry", s.place.entry).put("digest", s.place.digest).put("start", s.place.start).put("length", s.place.length)
+            .put("seconds", s.place.seconds.numberOrNull()).put("total", s.place.total.numberOrNull()))
         .put("held", JSONArray(s.held)).put("seq", s.seq).put("acked", s.acked)
         .put("journal", JSONArray(s.journal.map {
             JSONObject().put("seq", it.seq).put("type", it.type).put("item", it.item).put("at", it.at)

@@ -153,19 +153,19 @@ describe('the on-air card', () => {
     expect(p.why.startsWith('The desk wrote this')).toBe(true); expect(p.forecast).toBe('The desk forecast a 50 in 100 chance that you hear it through.');
     expect(make(input([entry('n')])).canWhy).toBe(false);      // nothing on air: no control
   });
-  test('9: the sentence is the one at the index; an index past the end shows none', () => {
-    const i = input([entry('a', 'story', { state: 'on_air', est_seconds: 100 })], { playing: true, sentences: ['One.', 'Two.', 'Three.'], sentenceIndex: 1, progress: 0.25 });
+  test('9: the sentence is the one shared code made from the deck\'s place; none when there is none', () => {
+    const i = input([entry('a', 'story', { state: 'on_air', est_seconds: 100 })], { playing: true, sentence: 'Two.', progress: 0.25 });
     let p = make(i);
     expect(p.sentence).toBe('Two.');
-    // no "N of M": native knows only the current block's sentences, so a total would change under the listener (the owner read "1 of 1" then "2 of 2" in one story as wrong)
+    // no "N of M": the sentence is the one in the unit on air, so a total would change under the listener (the owner read "1 of 1" then "2 of 2" in one story as wrong)
     expect('sentenceNumber' in p).toBe(false); expect('sentenceCount' in p).toBe(false);
     expect(p.elapsed).toBe('0:25'); expect(p.remaining).toBe('-1:15'); expect(p.fraction).toBeCloseTo(0.25, 3);
-    p = make({ ...i, sentenceIndex: 9 });
+    p = make({ ...i, sentence: '' });
     expect(p.sentence).toBe('');
   });
   test('10: audio has no sentence and uses its own clock', () => {
     const e = entry('p', 'episode', { state: 'on_air', title: 'Episode', source: { ref: 'episode:show', label: 'Harbour Hour', url: 'https://example.com/a.mp3' } });
-    const p = make(input([e], { playing: true, remoteAudio: true, sentences: ['x'], elapsedLabel: '1:12', remainingLabel: '-3:40' }));
+    const p = make(input([e], { playing: true, remoteAudio: true, sentence: 'x', elapsedLabel: '1:12', remainingLabel: '-3:40' }));
     expect(p.sentence).toBe(''); expect(p.elapsed).toBe('1:12'); expect(p.remaining).toBe('-3:40'); expect(p.kindLabel).toBe('Podcast'); expect(p.source).toBe('Harbour Hour');
   });
   test('a take on air shows its publisher, transcript and record', () => {

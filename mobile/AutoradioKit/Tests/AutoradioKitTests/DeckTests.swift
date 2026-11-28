@@ -10,7 +10,10 @@ final class FakeEngine: PlaybackEngine {
     var elapsed = 0.0
     var position: (block: Int, seconds: Double) = (0, 0)
     var holdSpeak: (() async -> Void)?
-    func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String]) async -> Bool { await holdSpeak?(); log.append("speak:\(entryID)"); return !failSpeak.contains(entryID) }
+    var sources: [String] = []
+    var place = DeckPlace()
+    func spokenPlace() -> DeckPlace { place }
+    func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String], source: String) async -> Bool { await holdSpeak?(); sources.append(source); log.append("speak:\(entryID)"); return !failSpeak.contains(entryID) }
     var report: (block: Int, final: Int, seconds: Double) = (0, 0, 0)
     func spokenReport() -> (block: Int, final: Int, seconds: Double) { report }
     func restartSpoken() { log.append("restart") }
@@ -127,6 +130,19 @@ final class DeckTests: XCTestCase {
     }
 
     // 4
+    // The place in the deck's state (docs/design/sentence-follow-in-shared-code-2026-11-28.md): the engine's, only while it is for the item on air; the engine is handed the text exactly as the deck received it.
+    func test04b_ThePlaceIsTheEnginesForTheItemOnAirAndNothingElse() async {
+        let (d, e) = makeDeck()
+        _ = await d.play(speech("a"))
+        XCTAssertEqual(e.sources, ["One.\n\nTwo."], "the source is the item's paragraphs string as received")
+        e.place = DeckPlace(entry: "a", digest: DeckDigest.of("One.\n\nTwo."), start: 0, length: 4, seconds: 1, total: 2)
+        XCTAssertEqual(d.snapshot().place, e.place)
+        e.place = DeckPlace(entry: "other", digest: "x", start: 0, length: 4, seconds: 1, total: 2)
+        XCTAssertEqual(d.snapshot().place, DeckPlace(), "a place for another entry is no place")
+        d.wipe()
+        XCTAssertEqual(d.snapshot().place, DeckPlace())
+    }
+
     func test04_PlayCutsWhatIsPlayingAndALateEndClosesNothing() async {
         let (d, e) = makeDeck()
         _ = await d.play(speech("a")); d.soundBegan()

@@ -164,8 +164,8 @@ public final class ChoirApp: @unchecked Sendable {
     // MARK: What the engine does for the run sheet
 
     /// Speak words as a document of one segment, from the start. The segment is named by what it is, not by a run sheet entry (the deck's item).
-    func speakSegment(documentID: String, entryID: String, title: String, kind: String, cites: [ProgrammeCite] = [], paragraphs: [String]) async -> Bool {
-        let incoming = IncomingSegment(stretchID: "rs", segmentID: entryID, kind: kind.isEmpty ? "story" : kind, title: title, text: paragraphs.joined(separator: "\n\n"), cites: cites, blockCount: nil)
+    func speakSegment(documentID: String, entryID: String, title: String, kind: String, cites: [ProgrammeCite] = [], paragraphs: [String], source: String? = nil) async -> Bool {
+        let incoming = IncomingSegment(stretchID: "rs", segmentID: entryID, kind: kind.isEmpty ? "story" : kind, title: title, text: paragraphs.joined(separator: "\n\n"), cites: cites, blockCount: nil, source: source)
         guard let prepared = SegmentPrep.prepare(incoming) else { return false }
         var doc = ProgrammeDocument(id: documentID, title: title.isEmpty ? "Autoradio" : title, blocks: [])
         doc.append(prepared)

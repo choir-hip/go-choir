@@ -9,10 +9,11 @@ import Foundation
 
     public init(app: ChoirApp) { self.app = app }
 
-    public func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String]) async -> Bool {
+    public func speak(documentID: String, entryID: String, title: String, kind: String, paragraphs: [String], source: String) async -> Bool {
         remote.stop()
-        return await app.speakSegment(documentID: documentID, entryID: entryID, title: title, kind: kind, paragraphs: paragraphs)
+        return await app.speakSegment(documentID: documentID, entryID: entryID, title: title, kind: kind, paragraphs: paragraphs, source: source)
     }
+    public func spokenPlace() -> DeckPlace { app.runtime.player.spokenPlace() }
 
     /// The server block being spoken, the last one, and the seconds into the entry (the words before this block at the speaking rate, plus the
     /// rendered seconds in it).

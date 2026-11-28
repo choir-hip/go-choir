@@ -1,9 +1,9 @@
 // Lane members file (reader): the reader's and the Textures place's resources, states and actions, as if written in the root.
 // Owned by the reader lane. The child components (reader.contract, textures.contract) `inject` these by name; each name is
 // in lane 3's band of the `provide` list in app.contract.
-use readerFollow, readerOpenExternal from "@choir/autoradio"
-use ReaderDoc, ReaderFollowInfo, ReaderAck from "@choir/autoradio"
-use ReaderAimInfo from "./reader-types.contract"
+use readerOpenExternal from "@choir/autoradio"
+use ReaderDoc, ReaderAck from "@choir/autoradio"
+use ReaderAimInfo, ReaderFollowInfo from "./reader-types.contract"
 use TextureList from "./textures-types.contract"
 
 members Autoradio
@@ -17,8 +17,9 @@ members Autoradio
     after(5, rbump)
   // The Textures place reloads each time it is the page in front (textures.ts, shared code: both platforms), and again when a document was stopped, restored or reloaded (`rack` refreshes it) and when the account state changes (sign-in from the banner).
   resource tlist = texturesList(pg.top, acs.state) as shape TextureList else empty()
-  // The block and sentence the radio is reading (set by the radio); what the bar's prompt is aimed at.
-  resource rfollow = readerFollow() as shape ReaderFollowInfo else empty()
+  // The block and sentence the radio is reading (radio-follow.ts, shared code on both platforms), from the place native reports in the deck's state (`ds.place`). Every value it reads is an argument: the deck's state, the on-air entry
+  // (`rair`: its id and page address, the id and text last handed to the deck), and the page's address, block ids and block texts (joined by U+001F), so a change to any of them asks again.
+  resource rfollow = readerFollowShared(ds, rair, rdoc.address, rdoc.blocks.map(b => b.id).join("\n"), rdoc.blocks.map(b => b.text).join("\u001F")) as shape ReaderFollowInfo else empty()
   // The aim is shared code (reader-aim.ts): the open pages and the document in front are given, so an aim at a page that closed or a block that went is dropped.
   resource raim = readerAimShared(`${signedOutTick}|${acs.state}`, pg.rows.map(p => p.address).join("\n"), rdoc.address, rdoc.status, rdoc.blocks.map(b => b.id).join("\n")) as shape ReaderAimInfo else empty()
   mutation rack as shape ReaderAck refreshes tlist, rdoc

@@ -11,13 +11,13 @@ import { decodeSheet, emptySheet, type Sheet } from './runsheet-model.ts';
 import { relative } from './paper-model.ts';
 
 export type RadioFacts = {
-  at: number; sheet: string; playing: boolean; sentences: string[]; sentenceIndex: number; progress: number;
+  at: number; sheet: string; playing: boolean; sentence: string; progress: number;
   ready: boolean; onAir: boolean; waiting: boolean; remoteAudio: boolean; remoteElapsed: number; spokenElapsed: number; remoteDuration: number; wants: boolean; message: string; notice: string; writing: boolean; dry: boolean;
   /** The title and route of the programme on air (the headline being read and the story it is); "" when none. */
   airTitle: string; airRoute: string; publishedAt: number; versionRoutes: string[]; versionNumbers: number[]; stale: string[]; takeTranscript: string; takeRecord: string;
 };
 export const EMPTY_FACTS: RadioFacts = {
-  at: 0, sheet: '', playing: false, sentences: [], sentenceIndex: 0, progress: 0, ready: false, onAir: false, waiting: false, remoteAudio: false, remoteElapsed: 0, spokenElapsed: 0, remoteDuration: 0, wants: false, message: '', notice: '', writing: false, dry: false,
+  at: 0, sheet: '', playing: false, sentence: '', progress: 0, ready: false, onAir: false, waiting: false, remoteAudio: false, remoteElapsed: 0, spokenElapsed: 0, remoteDuration: 0, wants: false, message: '', notice: '', writing: false, dry: false,
   airTitle: '', airRoute: '', publishedAt: 0, versionRoutes: [], versionNumbers: [], stale: [], takeTranscript: '', takeRecord: '',
 };
 
@@ -67,7 +67,7 @@ export function radioPage(rawFacts: unknown, rawBar: unknown, rawEntries: unknow
     sheet: namedOnAir(readSheet(str(f.sheet)), str(f.airTitle), str(f.airRoute), remote),
     barState: b.state, heardWords: b.text,
     playing: f.playing === true || b.state === 'playing',
-    sentences: strs(f.sentences), sentenceIndex: Math.trunc(num(f.sentenceIndex)), progress: num(f.progress),
+    sentence: str(f.sentence), progress: num(f.progress),
     remoteAudio: remote, elapsedLabel: remote ? clockLabel(elapsed) : '', remainingLabel: remote && duration > 0 ? '-' + clockLabel(Math.max(0, duration - elapsed)) : '',
     message: str(f.message), notice: str(f.notice), writing: f.writing === true, dry: f.dry === true, wants: f.wants === true,
     published: at > 0 && published > 0 ? relative(published * 1000, at * 1000) : '',

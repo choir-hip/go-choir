@@ -28,6 +28,7 @@ import { aimView, setAim } from './reader-aim.ts';
 import { heartbeat } from './heartbeat.ts';
 import * as radioBridge from './radio-bridge.ts';
 import { radioPage } from './radio-page.ts';
+import { followOf } from './radio-follow.ts';
 import { retrievalServe, paperSearch } from './retrieval-live.ts';
 import * as imported from './imported.ts';
 import { act as takesAct, pageFor as takesPageFor, newOverlay as newTakes, liveEnv as takesEnv } from './take-session.ts';
@@ -179,7 +180,8 @@ const sources: Sources = {
   queueAdd: ([mode, kind, ref, title, local], _s, storage, native) => radioBridge.queueAdd(storage as never, native as never, mode, kind, ref, title, local),
   queueAct: ([op, arg], _s, storage, native) => radioBridge.queueAct(storage as never, native as never, op, arg),
   barRun: ([_t, _pos], _s, storage, native) => radioBridge.barRun(storage as never, native as never) as never,
-  radioPageFacts: ([_t, _pos], _s, storage, native) => radioBridge.radioPageFacts(storage as never, native as never) as never,
+  radioAir: ([_t, _pos], _s, storage, native) => radioBridge.radioAir(storage as never, native as never) as never,
+  radioPageFacts: ([_t, _pos, deck, air], _s, storage, native) => radioBridge.radioPageFacts(storage as never, native as never, deck, air) as never,
   radioPageAct: ([op, arg, to], _s, storage, native) => radioBridge.radioPageAct(storage as never, native as never, op, arg, to),
   radioPlayPause: (_a, _s, storage, native) => radioBridge.radioPlayPause(storage as never, native as never),
   radioStart: (_a, _s, storage, native) => radioBridge.radioStart(storage as never, native as never),
@@ -214,6 +216,7 @@ const sources: Sources = {
   // The reader (reader.ts): the story or document in front, and what its page does to it.
   readerDocShared: ([address, acc, saved, _tick]) => readerDocShared(address, acc, saved),
   // What the bar's prompt is aimed at (reader-aim.ts): shared code, so Android has it. The open pages and the document in front are arguments, so an aim at a page that closed or a block that went is dropped.
+  readerFollowShared: ([deck, air, address, ids, texts]) => followOf(deck, air, String(address), String(ids), String(texts)),
   readerAimShared: ([_tick, open, docAddress, docStatus, blocks]) => aimView(open, docAddress, docStatus, blocks),
   readerAimSetShared: ([address, blockId, label]) => setAim(address, blockId, label),
   readerStopShared: ([address]) => readerStop(address),

@@ -2,7 +2,7 @@
 // Android has no Apple app-module bus. Native because the session, engine, media controls and durable journal are platform work; shared code still decides what plays next and what is posted.
 // An absent package answers the EMPTY state. A failed send answers it too (the next pump asks again), but a failed deckState THROWS: an unreadable deck is not an empty one.
 import { deckAck, deckAct, deckEnqueue, deckPlay, deckState, deckWipe } from '@choir/autoradio';
-import type { DeckEvent, DeckItem, DeckOp, DeckPort, DeckState, DeckWhy } from './deck.ts';
+import { NO_PLACE, type DeckEvent, type DeckItem, type DeckOp, type DeckPlace, type DeckPort, type DeckState, type DeckWhy } from './deck.ts';
 
 type PackageCall = (name: string, args: Record<string, unknown>) => Promise<unknown>;
 
@@ -11,7 +11,7 @@ const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-export const EMPTY_STATE: DeckState = { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, held: [], seq: 0, acked: 0, journal: [] };
+export const EMPTY_STATE: DeckState = { why: 'empty', item: '', block: 0, seconds: 0, duration: 0, place: NO_PLACE, held: [], seq: 0, acked: 0, journal: [] };
 
 function line(v: unknown): DeckEvent | undefined {
   const o = obj(v);
@@ -19,11 +19,16 @@ function line(v: unknown): DeckEvent | undefined {
   return { seq: o.seq, type: o.type as DeckEvent['type'], item: str(o.item), at: str(o.at), block: num(o.block), seconds: num(o.seconds), final: num(o.final), rendered: o.rendered === true, end: str(o.end) as DeckEvent['end'], command: str(o.command) as DeckEvent['command'], reason: str(o.reason) };
 }
 
+function place(v: unknown): DeckPlace {
+  const o = obj(v);
+  return { entry: str(o.entry), digest: str(o.digest), start: num(o.start), length: num(o.length), seconds: num(o.seconds), total: num(o.total) };
+}
+
 export function readState(raw: unknown): DeckState {
   const o = obj(raw);
   const why = WHYS.includes(str(o.why)) ? (str(o.why) as DeckWhy) : 'empty';
   return {
-    why, item: str(o.item), block: num(o.block), seconds: num(o.seconds), duration: num(o.duration),
+    why, item: str(o.item), block: num(o.block), seconds: num(o.seconds), duration: num(o.duration), place: place(o.place),
     held: Array.isArray(o.held) ? o.held.filter((x): x is string => typeof x === 'string') : [],
     seq: num(o.seq), acked: num(o.acked),
     journal: Array.isArray(o.journal) ? o.journal.map(line).filter((l): l is DeckEvent => l !== undefined) : [],

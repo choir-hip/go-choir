@@ -31,7 +31,7 @@ export function intOf(v: unknown): number | null {
 const wordCh = (c: string): boolean => c !== undefined && (c.toLowerCase() !== c.toUpperCase() || /[0-9぀-ヿ㐀-鿿가-힯]/.test(c));
 
 export const MAX_VERSIONS = 500;
-const MAX_SENTENCE_CHARS = 20000;
+export const MAX_SENTENCE_CHARS = 20000;
 export const DISCLOSURE_STORY = 'Written by AI. Autopaper’s agent desks wrote this story from the sources it links; no human editor reviewed it before publication.';
 export const NOTICE_OPINION = 'Opinion. Written and published by a reader; Autopaper’s agent desks did not write it and no editor reviewed it.';
 
