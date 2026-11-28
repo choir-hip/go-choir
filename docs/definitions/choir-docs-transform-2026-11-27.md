@@ -170,8 +170,8 @@ stations:
   class: green
   review: one seat
   depends_on: [T6]
-  carrier: 'f1e30b16b (a first line on the 126 built-triaged documents; 34 built, 65 built in part, 17 superseded, 10 undecided) and 77e587208 (17 built facts added to current-architecture.md); the vault, storage and SwiftUI-era groups still have no governing member chosen'
-  status: working
+  carrier: 'f1e30b16b (a first line on the 126 built-triaged documents; 34 built, 65 built in part, 17 superseded, 10 undecided) and 77e587208 (17 built facts added to current-architecture.md); the three groups were read against the code and the owner''s words in bfa3e3ff4''s change (docs/evidence/design-groups-standing-2026-11-27.md): no vault design governs (three undecided, no vault code exists), one storage design governs in part (snapshot-one-pass, stage A1 landed), two app designs are superseded in part; five questions are left for the owner there. Seat 1 sent the first text back for owner rulings cited without quotes; the one governing line was narrowed to in part, and the cited rulings are quoted in CLAUDE.md'
+  status: proved
 - id: T11
   name: checks named for what they protect
   scope: the Vocabulary Gates job and its lints are renamed after the rule each enforces, with one line each on the decision or incident behind it
