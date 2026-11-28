@@ -35,7 +35,7 @@ shape ActivityItem
   label: string
   detail: string
   group: string
-  ago: string
+  stamp: string
   target: string
   title: string
   at: number
@@ -52,7 +52,7 @@ shape ActivityInfo
   unseen: number
   blank: bool
 
-// Exact's clock (`exactTime`): the date is epochAtZero plus performanceNow() (Activity's ages).
+// Exact's clock (`exactTime`): the date is epochAtZero plus performanceNow() (Activity's ages, made at render).
 shape SettingsTime
   epochAtZero: number
 

@@ -12,12 +12,12 @@
 //  V4 a bad date shows nothing about when, never "1970"
 //  V5 the route missing (404) or the key refused: one plain line, and the radio's turns still show
 //  V6 a route that is an absolute URL or has a scheme is never opened: only a path starting with "/" without ":" becomes `pub:<route>`
-// Time arrives as an argument (epoch milliseconds); a day-old row's clock is shown in UTC (the shared code has no zone).
+// Each row carries its own time (`at`, epoch milliseconds) and a UTC stamp; "5 minutes ago" is made at render in activity.contract from Exact's date.
 
 import { authedJSON, HTTPError, SignedOutError } from './api.ts';
 import { parseDate } from './paper-model.ts';
 
-export type Item = { id: string; kind: string; label: string; detail: string; group: string; ago: string; target: string; title: string; at: number; unseen: boolean };
+export type Item = { id: string; kind: string; label: string; detail: string; group: string; stamp: string; target: string; title: string; at: number; unseen: boolean };
 export type View = { status: string; message: string; live: Item[]; computer: Item[]; desk: Item[]; paper: Item[]; radio: Item[]; unseen: number; blank: boolean };
 
 const LABELS: Record<string, string> = {
@@ -32,12 +32,9 @@ export function target(docID: string, route: string): string {
   return '';
 }
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-/** `now` is null until the date is known (Exact's `exactTime` has not answered): no age is shown then, never one measured from a placeholder. */
-export function when(atMs: number, now: number | null): string {
-  if (now === null || !(atMs > 86400000)) return '';
-  const age = (now - atMs) / 1000;
-  if (age >= 0 && age < 3600) { const m = Math.max(1, Math.floor(age / 60)); return m === 1 ? 'a minute ago' : `${m} minutes ago`; }
-  if (age >= 0 && age < 86400) { const h = Math.floor(age / 3600); return h === 1 ? 'an hour ago' : `${h} hours ago`; }
+/** The row's date and time, in UTC, from its own time only ("2 Jan, 03:04"); '' for a bad date. How long ago it was ("5 minutes ago") is the contract's (`agoText`, activity.contract), measured from Exact's date at render, so the source is not asked again as time passes. */
+export function stamp(atMs: number): string {
+  if (!(atMs > 86400000)) return '';
   const d = new Date(atMs); const p = (n: number): string => String(n).padStart(2, '0');
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}, ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 }
@@ -46,7 +43,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof
 const s = (o: Record<string, unknown>, k: string): string => (typeof o[k] === 'string' ? (o[k] as string) : '');
 
 /** The changelog route's answer as rows, newest first. Throws when the body is not an object. */
-export function items(body: unknown, now: number | null): Item[] {
+export function items(body: unknown): Item[] {
   if (!isObj(body)) throw new Error('changelog: not an object');
   const seen = typeof body.seen_seq === 'number' ? body.seen_seq : 0;
   const out: Item[] = [];
@@ -57,7 +54,7 @@ export function items(body: unknown, now: number | null): Item[] {
     const subject = isObj(c.subject) ? c.subject : {}, tape = isObj(c.tape_ref) ? c.tape_ref : {};
     const at = parseDate(s(c, 'occurred_at')) ?? 0;
     out.push({
-      id: s(c, 'event_id') || `seq-${seq}`, kind, label: label(kind), group: group(kind), detail: [...s(c, 'summary')].slice(0, 240).join(''), title: s(c, 'actor_label'), at, ago: when(at, now),
+      id: s(c, 'event_id') || `seq-${seq}`, kind, label: label(kind), group: group(kind), detail: [...s(c, 'summary')].slice(0, 240).join(''), title: s(c, 'actor_label'), at, stamp: stamp(at),
       target: target(s(subject, 'doc_id') || s(tape, 'doc_id'), s(subject, 'route_path')), unseen: seq > seen && (s(e, 'level') || 'major') === 'major',
     });
   }
@@ -75,19 +72,19 @@ export function view(events: Item[], status: string, message: string, radio: Ite
 }
 
 /** The page's source: the changelog with the radio's own rows as given. Never throws; a failure is `failed` and its one line. */
-export async function activityInfo(a: { now: number | null; signedIn: boolean; radio: Item[]; live: Item[] }, get: (path: string, q: Record<string, string | number>) => Promise<unknown> = async (p, q) => (await authedJSON(p, { query: q })).body): Promise<View> {
+export async function activityInfo(a: { signedIn: boolean; radio: Item[]; live: Item[] }, get: (path: string, q: Record<string, string | number>) => Promise<unknown> = async (p, q) => (await authedJSON(p, { query: q })).body): Promise<View> {
   if (!a.signedIn) return view([], 'idle', '', a.radio, a.live);
-  try { return view(items(await get('/api/changelog', { limit: 50, minor: 1 }), a.now), 'ok', '', a.radio, a.live); }
+  try { return view(items(await get('/api/changelog', { limit: 50, minor: 1 })), 'ok', '', a.radio, a.live); }
   catch (e) { return view([], 'failed', plain(e), a.radio, a.live); }
 }
 
 // ---- the rows the radio's engine and the computer give (native facts in, rows out): the Swift AutoradioModule+Settings `radioTurns` and `nowLines` ----
 
-/** What the native side reports for this page: the engine's phase and its kept turns (the voice: only native code holds them). The date is the contract's (Exact's `exactTime`). */
+/** What the native side reports for this page: the engine's phase and its kept turns (the voice: only native code holds them). No clock: the ages are the contract's. */
 export type Facts = { appVersion: string; radio: { known: boolean; running: boolean; phase: string }; turns: { id: string; outcome: string; transcript: string; configName: string }[] };
 export const noFacts = (): Facts => ({ appVersion: '', radio: { known: false, running: false, phase: '' }, turns: [] });
 
-const blank = (): Item => ({ id: '', kind: '', label: '', detail: '', group: '', ago: '', target: '', title: '', at: 0, unseen: false });
+const blank = (): Item => ({ id: '', kind: '', label: '', detail: '', group: '', stamp: '', target: '', title: '', at: 0, unseen: false });
 
 /** The radio's turns, as given (newest first as the engine keeps them): the label is the outcome, the detail what was heard. */
 export function radioItems(f: Facts): Item[] {
@@ -109,7 +106,7 @@ export function liveItems(f: Facts, computer: { state: string; updateAvailable: 
   return out;
 }
 
-/** The source the page binds: the native facts, the signed-in flag and the Refresh tick; `known` is whether Exact's date has answered (`current(stime)`), `now` the date (`with`: epochAtZero plus performanceNow()); until it is known no age is shown. */
-export async function activityPage(f: Facts, signedIn: boolean, _tick: number, state: string, updateAvailable: boolean, checked: boolean, known: boolean, now: number, get?: Parameters<typeof activityInfo>[1]): Promise<View> {
-  return activityInfo({ now: known ? now : null, signedIn, radio: radioItems(f), live: liveItems(f, checked || state !== '' ? { state, updateAvailable } : null) }, get);
+/** The source the page binds: the native facts, the signed-in flag, the Refresh tick and the computer's line. It takes no clock: it is asked when one of these changes and never as time passes (2026-11-28: a date passed after `with` asked it every frame). */
+export async function activityPage(f: Facts, signedIn: boolean, _tick: number, state: string, updateAvailable: boolean, checked: boolean, get?: Parameters<typeof activityInfo>[1]): Promise<View> {
+  return activityInfo({ signedIn, radio: radioItems(f), live: liveItems(f, checked || state !== '' ? { state, updateAvailable } : null) }, get);
 }

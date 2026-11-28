@@ -1,15 +1,15 @@
 // Activity under bun test: the Swift ActivityFeedTests (V1 to V6), on a canned changelog (invented content).
 import { describe, expect, test } from 'bun:test';
-import { items, target, when, activityInfo, view, label, type Item } from './activity.ts';
+import { items, target, stamp, activityInfo, view, label, type Item } from './activity.ts';
 import { HTTPError, SignedOutError } from './api.ts';
 import changelog from '../fixtures/activity/changelog.json';
 
 const NOW = 1_800_000_000_000;
-const turn: Item = { id: 't1', kind: 'turn', label: 'Answered', detail: '', group: 'radio', ago: '', target: '', title: '', at: 0, unseen: false };
+const turn: Item = { id: 't1', kind: 'turn', label: 'Answered', detail: '', group: 'radio', stamp: '', target: '', title: '', at: 0, unseen: false };
 
 describe('activity', () => {
   test('the changelog parses newest first with groups, targets and unseen', () => {
-    const rows = items(changelog, NOW);
+    const rows = items(changelog);
     expect(rows.length).toBe(5);
     expect(rows.map((r) => r.at)).toEqual(rows.map((r) => r.at).sort((a, b) => b - a));
     expect(rows[0]).toMatchObject({ kind: 'revision_committed', target: 'texture:sample-doc-edition', label: 'Revision saved', group: 'desk' });
@@ -26,24 +26,23 @@ describe('activity', () => {
     expect(target('', 'https://evil.example/x')).toBe(''); expect(target('', '/a:b')).toBe(''); expect(target('', '/')).toBe(''); expect(target('d', '/r')).toBe('texture:d');
   });
   test('V1 and V4 a long summary is cut; a bad date says nothing', () => {
-    const r = items({ events: [{ inbox_seq: 1, level: 'major', changelog: { event_id: 'e', kind: 'wake_decision', occurred_at: 'garbage', summary: 'x'.repeat(500), subject: {} } }] }, NOW);
-    expect(r[0].detail.length).toBe(240); expect(r[0].ago).toBe('');
+    const r = items({ events: [{ inbox_seq: 1, level: 'major', changelog: { event_id: 'e', kind: 'wake_decision', occurred_at: 'garbage', summary: 'x'.repeat(500), subject: {} } }] });
+    expect(r[0].detail.length).toBe(240); expect(r[0].stamp).toBe('');
   });
-  test('relative times', () => {
-    expect(when(NOW - 300000, NOW)).toBe('5 minutes ago'); expect(when(NOW - 7300000, NOW)).toBe('2 hours ago'); expect(when(0, NOW)).toBe('');
-    expect(when(Date.parse('2026-01-02T03:04:00Z'), NOW)).toBe('2 Jan, 03:04');
+  test('a row\'s stamp is its own UTC time, and nothing for a bad one', () => {
+    expect(stamp(Date.parse('2026-01-02T03:04:00Z'))).toBe('2 Jan, 03:04'); expect(stamp(0)).toBe(''); expect(stamp(NaN)).toBe('');
   });
   test('V5 a missing route leaves the radio\'s turns visible and says so in one line', async () => {
-    const v = await activityInfo({ now: NOW, signedIn: true, radio: [turn], live: [] }, async () => { throw new HTTPError(404, 'HTTP 404'); });
+    const v = await activityInfo({ signedIn: true, radio: [turn], live: [] }, async () => { throw new HTTPError(404, 'HTTP 404'); });
     expect(v.status).toBe('failed'); expect(v.message).toContain('no activity feed'); expect(v.radio.length).toBe(1); expect(v.blank).toBe(false);
-    expect((await activityInfo({ now: NOW, signedIn: true, radio: [], live: [] }, async () => { throw new SignedOutError(); })).message).toBe('Not signed in.');
-    expect((await activityInfo({ now: NOW, signedIn: true, radio: [], live: [] }, async () => { throw new HTTPError(401, 'x'); })).message).toContain('no longer accepted');
-    expect((await activityInfo({ now: NOW, signedIn: true, radio: [], live: [] }, async () => { throw new Error('net'); })).message).toContain('Could not load');
-    expect((await activityInfo({ now: NOW, signedIn: false, radio: [], live: [] })).status).toBe('idle');
+    expect((await activityInfo({ signedIn: true, radio: [], live: [] }, async () => { throw new SignedOutError(); })).message).toBe('Not signed in.');
+    expect((await activityInfo({ signedIn: true, radio: [], live: [] }, async () => { throw new HTTPError(401, 'x'); })).message).toContain('no longer accepted');
+    expect((await activityInfo({ signedIn: true, radio: [], live: [] }, async () => { throw new Error('net'); })).message).toContain('Could not load');
+    expect((await activityInfo({ signedIn: false, radio: [], live: [] })).status).toBe('idle');
   });
   test('a signed-in page fills the sections from the changelog it is given; the route is /api/changelog?limit=50&minor=1', async () => {
     const asked: string[] = [];
-    const v = await activityInfo({ now: NOW, signedIn: true, radio: [], live: [] }, async (p, q) => { asked.push(p + JSON.stringify(q)); return changelog; });
+    const v = await activityInfo({ signedIn: true, radio: [], live: [] }, async (p, q) => { asked.push(p + JSON.stringify(q)); return changelog; });
     expect(v).toMatchObject({ status: 'ok', unseen: 2 }); expect([v.computer.length, v.desk.length, v.paper.length]).toEqual([2, 2, 1]);
     expect(asked).toEqual(['/api/changelog{"limit":50,"minor":1}']);
     expect(view([], 'loading', '', [], []).blank).toBe(false); expect(view([], 'ok', '', [], []).blank).toBe(true);

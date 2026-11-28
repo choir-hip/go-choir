@@ -3,9 +3,13 @@
 // GET /api/changelog (kit: ActivityFeed.swift). A row with a document or a route opens it
 // as a page. testIds: activity-refresh, activity-section-<name>, activity-row-<id>, activity-status, activity-empty.
 use Theme, ThemeExtras from "@choir/autoradio"
-use ActivityInfo, ActivityItem from "./settings-types.contract"
+use ActivityInfo, ActivityItem, SettingsTime from "./settings-types.contract"
 use ToolScroll, Card, Btn, PlainList, dyn from "./ui.contract"
 use SectionLabel, Hairline, ScreenTitle from "./settings.contract"
+
+// How long ago a row was, from its own time and Exact's date (`now`: epochAtZero + performanceNow(), read where it is drawn). Nothing until the date is known (`known`:
+// `stimeKnown`, `current(stime)`), never an age from a placeholder; a bad time shows nothing; a row older than a day, or ahead of the clock, shows its UTC stamp.
+fn agoText(at: number, now: number, known: bool, stamp: string): string = (!known or at <= 86400000 ? "" : (now - at >= 0 and now - at < 3600000 ? (floor((now - at) / 60000) < 2 ? "a minute ago" : `${floor((now - at) / 60000)} minutes ago`) : (now - at >= 0 and now - at < 86400000 ? (floor((now - at) / 3600000) < 2 ? "an hour ago" : `${floor((now - at) / 3600000)} hours ago`) : stamp)))
 
 component ActivityPage
   inject
@@ -69,6 +73,8 @@ component ActivityBody
   inject
     th: Theme
     tx: ThemeExtras
+    stime: SettingsTime
+    stimeKnown: bool
   props
     ev: ActivityItem
     opens: bool
@@ -78,7 +84,7 @@ component ActivityBody
       column flex=1 min-width=0 gap=3 align-items="flex-start"
         row gap=8 width="100%" align-items="flex-start"
           text ev.label text-align="left" font-family=th.fontHead font-size=dyn(tx.sizeLabel) font-weight=600 color=th.fg flex=1 min-width=0
-          text ev.ago font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted font-variant-numeric="tabular-nums"
+          text agoText(ev.at, stime.epochAtZero + performanceNow(), stimeKnown, ev.stamp) font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted font-variant-numeric="tabular-nums"
         text ev.detail text-align="left" font-family=th.fontText font-size=dyn(tx.sizeLabel) line-height=1.4 color=th.fg
         if ev.title != ""
           text ev.title text-align="left" font-family=th.fontLabel font-size=dyn(tx.sizeMeta) color=th.muted

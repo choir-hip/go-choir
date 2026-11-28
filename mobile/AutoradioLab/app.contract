@@ -374,6 +374,8 @@ component Autoradio
     cmpt
     learnt
     act
+    stime
+    stimeKnown
     about
     bld
     themeDoc
