@@ -115,10 +115,10 @@ function storeSource(store: SecretStore): NativeReader {
     later: async (r: { op: string; account?: Account }) => {
       try {
         if (r.op === 'keystate') return { state: read(KEY_NAME) === null ? 'absent' : 'present' };
-        if (r.op === 'session') { const k = read(KEY_NAME); return k === null ? { found: false } : { found: true, value: k, computerId: read(COMPUTER_ID_NAME) ?? '' }; }
+        if (r.op === 'session') { const k = read(KEY_NAME); return k === null ? { found: false } : { found: true, value: k, computerId: read(COMPUTER_ID_NAME) ?? '' }; }   // a read outside an answer throws (Exact door.rs:45-53); the catch says so
         if (r.op === 'get' && r.account && r.account in SECRET_OF) { const v = read(SECRET_OF[r.account]); return v === null ? { found: false } : { found: true, value: v }; }
         return { found: false };
-      } catch { return r.op === 'keystate' ? { state: 'unreadable' } : r.op === 'get' ? { found: false, unreadable: true } : { found: false }; }
+      } catch { return r.op === 'keystate' ? { state: 'unreadable' } : { found: false, unreadable: true }; }       // session and get alike: a refused read is never "absent"
     },
   };
 }
@@ -190,15 +190,22 @@ async function noSessionReason(): Promise<SignedOutReason> {
   try { const r = (await source.later({ op: 'keystate' })) as { state?: unknown } | null | undefined; return r && r.state === 'unreadable' ? 'locked' : r && r.state === 'absent' ? 'none' : 'unknown'; } catch { return 'unknown'; }       // a bridge that throws or says nothing: say so, never "sign in"
 }
 
-/** The key and the computer id in ONE native read: a sign-out or a new sign-in between two reads cannot pair an old key with a new computer. */
+/** The key and the computer id in ONE native read: a sign-out or a new sign-in between two reads cannot pair an old key with a new computer.
+ * `null` means the source answered and there is no key. A read that is refused (the source says `unreadable`, or throws: a store read outside an answer, a Keychain locked before the first unlock) THROWS a
+ * SignedOutError of reason `locked` or `unknown`, never `none`: a failed read is not "signed out". Callers that must not act on an unknown catch it and do nothing. */
 let lastFlags = '';
 async function keptSession(): Promise<{ key: string; computerId: string } | null> {
   const source = credentials();
   if (!source || source.available === false) return null;
-  const r = (await source.later({ op: 'session' })) as { found?: boolean; value?: unknown; computerId?: unknown } | null;
-  if (r && typeof r === 'object' && typeof r.found === 'boolean') nativeAnswered = true;
-  const flags = `found=${String(r?.found)} key=${typeof r?.value === 'string' && r.value !== ''} computer=${typeof r?.computerId === 'string' && r.computerId !== ''}`;   // flags only, never a value
+  type Kept = { found?: boolean; value?: unknown; computerId?: unknown; unreadable?: unknown };
+  let r = null as Kept | null;
+  let refused = false;
+  try { r = (await source.later({ op: 'session' })) as Kept | null; } catch { refused = true; }
+  if (!refused && r && r.unreadable === true) refused = true;
+  if (!refused && r && typeof r === 'object' && typeof r.found === 'boolean') nativeAnswered = true;
+  const flags = `found=${String(refused ? undefined : r?.found)} key=${!refused && typeof r?.value === 'string' && r.value !== ''} computer=${!refused && typeof r?.computerId === 'string' && r.computerId !== ''} refused=${refused}`;   // flags only, never a value
   if (flags !== lastFlags) { lastFlags = flags; console.log(`api: session ${flags}`); }              // on change only: one line per request is volume
+  if (refused) throw new SignedOutError('the key could not be read', (await noSessionReason()) === 'locked' ? 'locked' : 'unknown');
   if (!r || r.found !== true || typeof r.value !== 'string' || r.value === '') return null;
   return { key: r.value, computerId: typeof r.computerId === 'string' ? r.computerId : '' };
 }

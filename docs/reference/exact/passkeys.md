@@ -60,6 +60,10 @@ Deletion uses the same `credentials.get` with options from `POST /auth/account/d
 - **Who reads the key.** Shared code (`api.ts`, through the store of the current answer) for every page. The voice code in Swift (`ChoirDesk`, `AutoradioDesk`, `ChoirSystem1`: the turn's server calls;
   the Texture editor; the notebook) calls the server itself and reads the same Keychain items through `KeychainKeyStore` (service = bundle id, the names above). That is why the Swift stays: the voice's
   calls cannot be handed a key by shared code per call without a rewrite of the turn engine, and the item is already where Swift can read it. Swift **writes** the key at no time any more.
+- **The store lives only while an answer runs** [src]. The `store` an answer is handed is one shared JS object, and `get`, `set` and `forget` work only during a turn. Called between answers (for example from the
+  continuation of an answer Exact has let go), `get` throws (`no_store`, `js/src/door.rs:45-53` in the Exact checkout). So a throw means "could not read", never "no key". `api.ts` answers `unreadable` for
+  the `session` and `get` ops that throw and `locked` or `unknown` to the page (`SignedOutError`), and never `none`; the log line `api: session` carries `refused=true` for such a read. The larger fix, not made:
+  pass the key into the request as a value from the answer that starts it, so no continuation reads the store at all.
 - A read of a locked Keychain (before the first unlock after a restart) throws; `api.ts` answers `unreadable`, never "signed out" (`account-state.ts`).
 - No presence policy (Face ID) on the key tonight (`secret.keep choir.key user-presence` would need `@exact/local-auth` and a lock the voice code cannot meet).
 - Android's ordinary secrets are AES-GCM files under
