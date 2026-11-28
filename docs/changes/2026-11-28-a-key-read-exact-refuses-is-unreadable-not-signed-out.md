@@ -15,6 +15,7 @@ Replaced: `session` answering `found:false` for a refused read; page words that 
 
 Residuals, not fixed here (from the evidence record and the reviews):
 - The sign-in sheet on a key that could not be read (above).
+- On a host with no key store at all, `keyState` answers `unreadable` with no flag, so Settings' account line and delete account now say "Unlock your phone" where they said "Not signed in" (`account-state.ts` tells this case apart with `hasCredentialSource`; `settings.ts` and `keyAnswer` do not yet). Phones have a key store; the web host does not.
 - `members-settings.contract` and `members-notebook.contract` pass the plain flag to their sources, so on a locked or unknown key the Computer buttons and the notebook skip their work as if signed out.
 - `bar.ts` turns an engine error whose text contains "not signed in" into sign-in words; whether a locked-key error can reach it through the native voice engine is not traced.
 - `keptItem` does not carry the between-answers flag; `content-run.ts` words a between-answers refusal as offline where it should stop quietly; `keyState` reports a locked session read as unknown.

@@ -471,5 +471,5 @@ export function resetSession(): void { discovered = null; discovering = null; }
 /** For tests: the generation and the rest as a fresh process has them. */
 export function resetSeam(): void { resetSession(); bootSent = null; uncertainAbort = false; generation = 0; reader = undefined; secrets = undefined; blockedDigest = null; lastNative = ''; lastFlags = ''; nativeAnswered = false; rejected = ''; }
 
-/** The computer id today's sign-in kept in the Keychain, or null (the Account screen names it when the key answers none). */
+/** The computer id today's sign-in kept in the Keychain, or null when there is none (the Account screen names it when the key answers none). REJECTS with a SignedOutError `unknown` when the read was refused or malformed: its one caller (settings.ts settingsAccount) catches that and shows no id. */
 export async function keptComputerId(): Promise<string | null> { return keptItem('computer-id'); }
