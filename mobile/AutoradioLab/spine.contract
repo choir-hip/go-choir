@@ -8,6 +8,26 @@ use BarInfo, BarRun from "./bar-types.contract"
 use HostCaps from "./host-types.contract"
 use choirAsk, choirTalkCancel, choirHandsFreeToggle from "@choir/autoradio"
 
+// A URL typed into the bar (this was Swift's `BarURL.detect`; bar-url.test.contract and bar-url.test.ts are its tests). The address to open, or "" for an ordinary sentence: http or https with a host, as typed;
+// or one bare word with a dot and a known-looking host ("choir.news", "example.com/path"), to which https is put in front. A question ("what is choir.news?") has spaces, so it is not an address.
+// Exact has no regular expressions, so the letters are named: ASCII letters, digits and the hyphen, and any character outside printable ASCII (an accented or non-Latin letter: "cafe.de" with an accent is a host).
+// A top-level label is two or more characters, each a lower-case ASCII letter or a non-ASCII character that has no upper-case form other than itself. Characters a URL cannot hold (`^ { } | \\`) refuse the text.
+fn barAt(xs: string[], i: number, d: string): string = match xs.at(i) { case some(v) => v, case none => d }
+fn barAscii(c: string): bool = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-".includes(c)
+fn barPunct(c: string): bool = " !\"#$%&'()*+,./:;<=>?@[\\]^_`{|}~".includes(c)
+fn barHasSpace(t: string): bool = [" ", "\t", "\n", "\u000D", "\u000B", "\u000C", "\u0085", "\u00A0", "\u2028", "\u2029", "\u3000"].filter(c => t.includes(c)).length > 0
+fn barUnholdable(t: string): bool = ["^", "{", "}", "|", "\\"].filter(c => t.includes(c)).length > 0
+fn barLabel(l: string): bool = l != "" and l.split("").filter(c => not (barAscii(c) or not barPunct(c))).length == 0
+fn barTld(l: string): bool = l.length >= 2 and l.split("").filter(c => not ("abcdefghijklmnopqrstuvwxyz".includes(c) or (not barAscii(c) and not barPunct(c) and c == c.toLowerCase()))).length == 0
+fn barAuthority(rest: string): string = barAt(barAt(barAt(rest.split("#"), 0, "").split("?"), 0, "").split("/"), 0, "")
+fn barHostPart(auth: string): string = barAt(auth.split("@"), auth.split("@").length - 1, "")
+fn barWebOk(t: string): bool = barAt(barHostPart(barAuthority(t.slice(t.indexOf("://") + 3))).split(":"), 0, "") != ""
+fn barLabelsOk(ls: string[]): bool = ls.length >= 2 and ls.filter(l => not barLabel(l)).length == 0 and barTld(barAt(ls, ls.length - 1, ""))
+fn barBareHost(t: string): string = barAt(barAt(t.split("/"), 0, t).split(":").filter(p => p != ""), 0, barAt(t.split("/"), 0, t))
+fn barBareOk(t: string): bool = not t.includes("://") and not t.endsWith("?") and not t.endsWith("!") and not t.endsWith(",") and barLabelsOk(barBareHost(t).split("."))
+fn barUrlOf(raw: string): string = barUrlText(raw.replaceAll("\u0085", " ").trim())
+fn barUrlText(t: string): string = t == "" or barHasSpace(t) or barUnholdable(t) ? "" : (t.toLowerCase().startsWith("http://") or t.toLowerCase().startsWith("https://") ? (barWebOk(t) ? t : "") : (t.includes("@") ? "" : (barBareOk(t) ? `https://${t}` : "")))
+
 members Autoradio
   // Is there a native package? (host.ts: decided once from the native handle, never from what the native set holds). "none" is Android; "" (not decided) and "native" are iOS.
   resource hc = hostCaps(false, lockTick) as shape HostCaps else empty()
@@ -97,10 +117,16 @@ members Autoradio
   // choirAsk and puts the page's address, title and text in the Autoradio desk request.
   // An ask goes out only for a signed-in person (asking needs an account, and the account's creation carried the agreement to outside AI companies); otherwise the sign-in sheet opens and the text stays in the field.
   derive askGate = au.signedIn ? "" : "signin"
+  // A URL in the bar is not a question: it opens in place with Read aloud and Add to queue; any other text is asked. The rule is a pure function of the field (`barUrlOf`, above), so it is decided in the
+  // same step as the send: nothing is waited for, nothing can be overwritten by a second Send, and the field is cleared once the chosen send is issued (as it was before the rule moved from Swift).
+  derive askUrl = barUrlOf(ask)
   action sendAsk
     if au.signedIn == false
       gate = "signin"
-    if au.signedIn
+    if au.signedIn and askUrl != ""
+      send qm = queueAct("openWeb", askUrl)
+      ask = ""
+    if au.signedIn and askUrl == ""
       send acct = choirAsk(text=ask, aim=pg.top)
       ask = ""
   // The microphone button is the hands-free switch (owner, 2026-11-15): ON, the microphone is open and turns open and close by

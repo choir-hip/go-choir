@@ -127,7 +127,7 @@ describe('the bar state', () => {
     expect(barInfo(play({ blockIndex: -3, blockFraction: -1, blockCount: 4 }), none, at()).progress).toBe(0);
     expect(barInfo(play({ phase: 'candidate', blockIndex: 1, blockFraction: 0.5 }), none, at()).progress).toBeCloseTo(0.375, 9);   // carried in every state
   });
-  test('B7 the facts the bar passes on: signed in, playing, hands-free', () => {
+  test('B7 the facts the bar passes on: playing, hands-free', () => {
     expect(barInfo(play({ handsFree: true }), none, at())).toMatchObject({ playing: true, handsFree: true });
     expect(barInfo(facts({ playing: false }), none, at())).toMatchObject({ playing: false, handsFree: false });
   });

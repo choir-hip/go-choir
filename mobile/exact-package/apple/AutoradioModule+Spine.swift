@@ -63,11 +63,7 @@ extension AutoradioModule {
         for name in ["choirAsk"] {
             handle(name) { [unowned self] args, reply in
                 let text = args["text"] as? String ?? ""
-                // A URL in the bar is not a question: it opens in place with Read aloud and Add to queue (lane autoradio-queue; the one early branch).
-                if let url = BarURL.detect(text) {
-                    self.barWebURL = url.absoluteString
-                    return reply(self.json(self.runtime.snapshot()))
-                }
+                // A URL in the bar never reaches here: shared code (bar-url.ts, spine.contract `sendAsk`) opens it in place first.
                 // `aim` (lane SHELL) is the front page's address; `address` is the older name. Either may be absent.
                 let address = (args["aim"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? args["address"] as? String ?? ""
                 Task { [weak self] in

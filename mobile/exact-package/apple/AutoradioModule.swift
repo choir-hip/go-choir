@@ -97,9 +97,6 @@ public final class AutoradioModule: ExactPackage {
     private var dirty = Set<String>()
     private var scheduled = false
     private var turnArg: [String: Any] = [:]
-    /// The page the bar opened in place (a URL typed in the bar); lane autoradio-queue.
-    /// The page the bar opened (a link in a message, a URL typed in the bar): shared code holds it (radio-bridge.ts); native only says it opened.
-    var barWebURL: String { get { "" } set { RadioBridge.shared.send(newValue.isEmpty ? "closeWeb" : "openWeb", ["url": newValue]) } }
 
     /// The one handle the app module (modules/apple/ModelsEntry.swift) uses to run the native half of sign-out, which shared code leads
     /// (AutoradioLab/account.ts). Weak: the module owns its life; this is set at init and read on the main thread.

@@ -455,8 +455,6 @@ async function handle(r: Radio, text: string): Promise<void> {
       if (later) { try { await later({ op: 'radioSet', signedOut: true }); } catch { /* native stops waiting at its deadline */ } }
       break;
     }
-    case 'openWeb': r.web.url = str(m.url); break;
-    case 'closeWeb': r.web.url = ''; break;
     case 'place': {
       const e = (() => { try { return decodeEntry(m.entry); } catch { return undefined; } })();
       if (!e) break;
