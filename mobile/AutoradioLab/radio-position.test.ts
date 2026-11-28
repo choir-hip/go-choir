@@ -17,7 +17,7 @@ import { forgetOnboarding } from './onboarding.ts';
 import { radioPage } from './radio-page.ts';
 import { respondsOf } from './voice-facts.ts';
 import type { Entry } from './runsheet-model.ts';
-import { barRun, getRadio, radioHold, queueAct, queueView, radioMove, radioPageFacts, radioPlayAudio, radioPlayStory, radioPulse, wipeRadio } from './radio-bridge.ts';
+import { barRun, radioAir, getRadio, radioHold, queueAct, queueView, radioMove, radioPageFacts, radioPlayAudio, radioPlayStory, radioPulse, wipeRadio } from './radio-bridge.ts';
 
 type Call = { op: string; name?: string; peek?: boolean };
 let calls: Call[] = [];
@@ -72,8 +72,8 @@ async function ask(seconds: number, visible: boolean): Promise<{ pulse: Awaited<
   let reasked = false;
   if (key !== screens.last) {
     screens.last = key; reasked = true; screens.reasks += 1;
-    const f = await radioPageFacts(undefined, native as never), q = await queueView(undefined, native as never), b = await barRun(undefined, native as never);
-    screens.shown = { elapsed: q.elapsed, label: q.elapsedLabel, fraction: q.fraction, barFraction: b.remoteFraction as number, pageElapsed: f.remoteElapsed };
+    const f = await radioPageFacts(undefined, native as never), q = await queueView(undefined, native as never), b = await barRun(undefined, native as never, ds, await radioAir(undefined, native as never));
+    screens.shown = { elapsed: q.elapsed, label: q.elapsedLabel, fraction: q.fraction, barFraction: b.progress as number, pageElapsed: f.remoteElapsed };
   }
   return { pulse, reasked };
 }
@@ -185,9 +185,9 @@ describe('P7 the contract is wired to the key', () => {
   });
   test('the page facts, the queue view and the bar run take it', () => {
     expect(c('members-radio.contract')).toContain('radioPageFacts(rpulse.tick, posKey, ds, rair)');
-    expect(c('members-radio.contract')).toContain('radioAir(rpulse.tick, posKey, ds.item)');
+    expect(c('spine.contract')).toContain('radioAir(rpulse.tick, posKey, ds.item)');
     expect(c('members-queue.contract')).toContain('queueView(rpulse.tick, posKey)');
-    expect(c('spine.contract')).toContain('barRun(rpulse.tick, posKey)');
+    expect(c('spine.contract')).toContain('barRun(rpulse.tick, posKey, ds, rair)');
   });
   test('the pulse says live and beat (RadioTick)', () => {
     const t = c('radio-types.contract');

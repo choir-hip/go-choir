@@ -3,13 +3,6 @@ import XCTest
 
 // Written from the failure list at the top of BarState.swift.
 final class BarStateTests: XCTestCase {
-    private func snap(_ phase: String = "playing", running: Bool = true, paused: Bool = false, level: String = "play", idx: Int = 0, count: Int = 3, text: String = "") -> LabSnapshot {
-        var s = LabSnapshot(); s.running = running; s.paused = paused; s.phase = phase; s.level = level
-        s.blockIndex = idx; s.blockCount = count; s.transcript = text; return s
-    }
-    private func player(playing: Bool, title: String = "T", message: String = "") -> ChoirPlayerView {
-        var p = ChoirPlayerView(); p.playing = playing; p.title = title; p.message = message; return p
-    }
     private let t0 = Date(timeIntervalSince1970: 1000)
 
     // (The bar's states, words and windows are bar.ts: bar.test.ts. What is native is what the engine told it, kept raw.)
@@ -33,26 +26,12 @@ final class BarStateTests: XCTestCase {
         XCTAssertEqual(tr.raw().errorAt, 0); XCTAssertEqual(tr.raw().holding, ""); XCTAssertEqual(tr.raw().revisedAt, 0)
     }
 
-    func testRadioInfoClampsTheBlockIndex() {
+    func testRadioInfoCarriesOnlyWhatNativeReports() {
         let tr = BarTracker()
-        let d = segmentedDocument(["One.", "Two.", "Three."])
-        let last = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: 2, count: 3), document: d, now: t0)
-        let over = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: 500, count: 3), document: d, now: t0)
-        let under = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: -4, count: 3), document: d, now: t0)
-        XCTAssertEqual(over.title, last.title, "a block index past the end is the last block, not a trap")
-        XCTAssertEqual(under.title, "Title 0")
-        let empty = tr.radioInfo(player: player(playing: false, title: ""), snapshot: snap(count: 0), document: ProgrammeDocument(id: "n", title: "", blocks: []), now: t0)
-        XCTAssertEqual(empty.title, "")
-    }
-
-    func testClockCountsOnlyRunningTime() {
-        var c = BlockClock()
-        c.update(index: 0, running: true, now: t0)
-        c.update(index: 0, running: false, now: t0.addingTimeInterval(2))
-        c.update(index: 0, running: false, now: t0.addingTimeInterval(9))
-        c.update(index: 0, running: true, now: t0.addingTimeInterval(10))
-        XCTAssertEqual(c.seconds(now: t0.addingTimeInterval(11)), 3, accuracy: 0.001)
-        c.update(index: 1, running: true, now: t0.addingTimeInterval(11))
-        XCTAssertEqual(c.seconds(now: t0.addingTimeInterval(11)), 0, accuracy: 0.001)
+        tr.setSpeed(1.5); _ = tr.feedMic(db: -20)
+        let r = tr.radioInfo(level: "dip")
+        XCTAssertEqual(r.level, "dip"); XCTAssertEqual(r.speedValue, 1.5); XCTAssertEqual(r.micLevel, 1, accuracy: 0.001)
+        let keys = Set((try! JSONSerialization.jsonObject(with: JSONEncoder().encode(r)) as! [String: Any]).keys)
+        XCTAssertEqual(keys, ["level", "speedValue", "micLevel"], "the title and whether it plays are shared code's: they are not across the boundary")
     }
 }

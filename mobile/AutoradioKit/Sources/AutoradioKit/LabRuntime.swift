@@ -131,9 +131,8 @@ public final class LabRuntime: @unchecked Sendable {
                 await coordinator.reapply()
             }
         }
-        // The bar and the player read the real position from the audio, and a speed picked there reaches the audio.
+        // A speed picked on the page reaches the audio.
         let pl = player
-        BarTracker.shared.positionSource = { [weak pl] in pl?.renderPosition() }
         BarTracker.shared.speedSink = { [weak pl] v in pl?.setRate(v) }
         coord.onChange = { [weak self] in self?.refresh() }
         eventTask = Task { [weak self] in

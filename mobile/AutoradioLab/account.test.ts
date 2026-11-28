@@ -18,6 +18,8 @@
 //  S10 a different account's key at launch (the stamp) wipes the old data first; the same account, or a phone with no key, keeps it.
 import { describe, expect, test } from 'bun:test';
 import { setAim, aimView, forgetAim } from './reader-aim.ts';
+import { barInfo, forgetBar, ERROR_WINDOW } from './bar.ts';
+import { barRun } from './radio-bridge.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { accountSignOut, accountNative, adoptKey, retryPendingRevoke, PENDING_REVOKE_FILE, REVOKE_PENDING_NOTE, REVOKE_NOID_NOTE, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
 import { createHash } from 'node:crypto';
@@ -537,6 +539,22 @@ describe('S19 a key that replaces the key of another account in the same launch'
     const r = await settleAccount(m.storage, undefined);                  // what every source's first answer awaits (app.ts)
     expect(r.action).toBe('account-change');
     expect(aimView('pub:a', 'pub:a', 'ready', 'b1')).toEqual({ address: '', blockId: '', label: '' });      // the page is still open and the block still there: only the account moved
+  });
+  test('S19-bar a different account\'s key in a running app leaves nothing of the old account\'s bar: the held message is new again, and the old deck state and on-air entry say nothing plays', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); forgetBar();
+    const run = { ready: true, onAir: true, waiting: false, playing: true, paused: false, title: 'A story of the first account', progress: 0.4 };
+    const held = { ...run, message: 'Could not load the story.' };
+    expect(barInfo(held, { entries: [] }, 10).state).toBe('error');
+    expect(barInfo(held, { entries: [] }, 10 + ERROR_WINDOW + 1).state).toBe('playing');         // seen once: the same words later do not hold the bar
+    adoptKey(store(), 'choir_sk_test-key-B-not-real', 'ak_b');
+    const r = await settleAccount(m.storage, undefined);
+    expect(r.action).toBe('account-change');
+    expect(barInfo(held, { entries: [] }, 10 + ERROR_WINDOW + 2).state).toBe('error');           // the account moved: the words are the new account's to see
+    // The contract's `ds` and `rair` still hold the old account's answers until they are asked again: against the new account's empty sheet they say nothing plays.
+    const staleDeck = { why: 'playing', item: 'e1', block: 0, seconds: 4, duration: 0, place: { entry: 'e1', digest: '5:00000000', start: 0, length: 5, seconds: 1, total: 2 }, held: [], seq: 3, acked: 3, journal: [] };
+    const staleAir = { id: 'e1', address: 'pub:/p/a', handedId: 'e1', handedText: 'Hello' };
+    expect(await barRun(m.storage as never, undefined, staleDeck, staleAir)).toMatchObject({ ready: true, onAir: false, playing: false, paused: false, waiting: false, title: '', progress: 0 });
   });
   test('the same account signing in again keeps its aim', async () => {
     W = newWorld('present'); const m = memFs(SEED);

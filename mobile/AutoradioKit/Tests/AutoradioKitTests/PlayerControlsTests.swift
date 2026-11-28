@@ -36,8 +36,7 @@ final class PlaybackSpeedTests: XCTestCase {
         a.setProgrammeRate(.nan); XCTAssertEqual(a.programmeRate, 1)
         var info = RadioInfo(); info.speedValue = 3
         XCTAssertEqual(info.speedValue, 3)
-        var snap = LabSnapshot(); snap.running = true; snap.blockCount = 1
-        let r = tr.radioInfo(player: ChoirPlayerView(), snapshot: snap, document: ProgrammeDocument(id: "d", title: "T", blocks: [.speech(text: "One.")]))
+        let r = tr.radioInfo(level: "play")
         XCTAssertEqual(r.speedValue, 1.25)
     }
     func testP4_ThreeTimesIsThreeTimesFasterForAnyVoice() async {

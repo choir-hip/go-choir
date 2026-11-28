@@ -113,13 +113,13 @@ component BarShell
   derive setupLine = ob.step == "topics" ? "Choose your topics" : (ob.step == "setup" ? "Setting up the voice…" : (ob.step == "mic" ? "Check the microphone" : (ob.step == "hearing" ? "Check that you can hear me" : (ob.step == "ready" ? "Voice is set up" : (ob.step == "writing" ? "Writing your edition…" : (ob.step == "done" ? "Your edition is ready" : "Voice setup"))))))
   // What the line above the controls shows. On the Autoradio page the now-playing line is redundant (the page is what it opens), so it is not drawn there.
   derive lineMode = heardNow ? "listen" : (st == "heard" ? "heard" : (st == "holding" ? "holding" : (st == "revised" ? "revised" : (st == "error" ? "error" : (typing ? "aim" : (st == "playing" ? (topAddr == "radio:" ? "none" : "playing") : (st == "paused" ? (topAddr == "radio:" ? "none" : "paused") : (onSetup ? "setup" : "none"))))))))
-  derive loaded = ri.title != "" ? ri.title : bi.text
+  derive loaded = bi.text
   derive yielded = ri.level != "play" and heardNow
   derive tint = st == "error" ? th.danger : (st == "revised" ? th.success : (st == "playing" ? th.accent2 : th.accent))
   derive tintOn = (lineMode == "none" or lineMode == "aim" or lineMode == "paused" or lineMode == "listen") ? 0 : (st == "playing" ? 0.08 : 0.12)
   derive markState = heardNow ? "listening" : (st == "paused" ? "idle" : st)
-  // One truth for the button and the strip: the bar state decides; the radio view (which can lag a pause) only counts while the bar has no verdict.
-  derive isPlaying = st == "playing" or (st != "paused" and ri.playing)
+  // One truth for the button and the strip: whether the deck is playing the entry on air (bar.ts, from the run sheet and the deck; the voice states above it do not stop the radio underneath).
+  derive isPlaying = bi.playing
   derive playWord = isPlaying ? "Pause" : "Play"
   derive playLabel = isPlaying ? "Pause the radio" : (st == "paused" ? "Resume the radio" : "Play the edition")
   derive still = th.reducedMotion

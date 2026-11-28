@@ -1,5 +1,5 @@
-// Lane 1 (bar, radio, talk): the bar's FACTS (the bar's own page model is shared code: AutoradioLab/bar.ts), the radio view that
-// feeds the expanded player, jump and speed. Registered by registerBar().
+// The bar's VOICE FACTS (the bar's own page model, and what plays, are shared code: AutoradioLab/bar.ts, radio-follow.ts `runOf`), the radio view's yield level, speed and microphone level, and the speed.
+// Registered by registerBar().
 import Foundation
 
 extension AutoradioModule {
@@ -28,13 +28,12 @@ extension AutoradioModule {
             }
         }
 
-        // While the programme plays, the position inside the block moves: one gentle refresh, ~2.5 per second.
+        // The DJ's coming segments move on when the block does. (The bar's progress is shared code's, from the deck's place: nothing here moves it.)
         DispatchQueue.main.async { [weak self] in
             var lastBlock = -1
             let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] timer in
                 guard let self else { timer.invalidate(); return }
                 let s = self.runtime.snapshot()
-                if s.running && !s.paused { self.touch(["radioView", "barFacts"], pump: false) }
                 if s.blockIndex != lastBlock { lastBlock = s.blockIndex; self.touch(["queueView"]) }   // lane autoradio-joins: the DJ's coming segments moved on
             }
             RunLoop.main.add(t, forMode: .common)
@@ -53,7 +52,8 @@ extension AutoradioModule {
             }
         }
 
-        // Native because only native code knows these: the engine's phase and words, its events (stamped with the device's clock), the player and the run sheet player.
+        // Native because only the voice knows these: the engine's phase and words, its events (stamped with the device's clock), the plain words the app said, the hands-free switch. Android has no voice turn and
+        // answers none (NotSupportedError: Exact then uses the declared default, which is the facts of a phone with no voice).
         // It decides nothing: bar.ts makes the state, the words and the timed windows from them. `at` is the clock bar.ts uses (a data source may not read time).
         handle("barFacts") { [unowned self] _, reply in
             let facts = MainActor.assumeIsolated { self.barFacts() }
@@ -62,8 +62,7 @@ extension AutoradioModule {
 
         handle("radioView") { [unowned self] _, reply in
             scheduleExpiry()
-            let info = MainActor.assumeIsolated { (tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document)) }   // lane autoradio-queue
-            reply(json(info))
+            reply(json(tracker.radioInfo(level: runtime.snapshot().level)))
         }
 
         // Reading speed, 0.5 to 3 in steps of 0.05. The tracker clamps and snaps it, hands it to the player (time-pitch in the audio
@@ -72,19 +71,18 @@ extension AutoradioModule {
         handle("radioSpeed") { [unowned self] args, reply in
             if let v = Double(args["speed"] as? String ?? "") { tracker.setSpeed(v); SpeedStore.standard.save(tracker.speed) }
             touch(["radioView"])
-            reply(json(tracker.radioInfo(player: choir.playerView(), snapshot: runtime.snapshot(), document: runtime.player.document)))
+            reply(json(tracker.radioInfo(level: runtime.snapshot().level)))
         }
     }
 }
 
-/// The bar's facts as the shared bar page model reads them (interface/bar.json `BarFacts`).
+/// The voice's facts as the shared bar page model reads them (interface/bar.json `BarFacts`). What plays (title, playing, progress) is not here: shared code makes it from the run sheet and the deck's state.
+/// Each field is something only the voice reports: `at` the device's clock the events are stamped with (a data source may not read time); `phase` and `transcript` the engine's turn; `message` the plain words
+/// the app said about anything wrong (ChoirApp); `handsFree` whether the microphone switch is on; the rest the engine's events, raw.
 struct BarFacts: Codable {
     var at = 0.0
     var phase = "playing", transcript = ""
-    var blockIndex = 0, blockCount = 0
-    var blockFraction = 0.0
-    var running = false, playing = false
-    var title = "", message = ""
+    var message = ""
     var handsFree = false
     var holding = ""
     var revisedAt = 0.0, errorAt = 0.0
@@ -97,8 +95,7 @@ extension AutoradioModule {
         var f = BarFacts()
         f.at = Date().timeIntervalSince1970
         f.phase = s.phase; f.transcript = s.transcript
-        f.blockIndex = s.blockIndex; f.blockCount = s.blockCount; f.blockFraction = BarTracker.shared.blockFraction(s)
-        f.running = s.running; f.playing = p.playing; f.title = p.title; f.message = p.message
+        f.message = p.message
         f.handsFree = HandsFreeSwitch.shared.isOn
         f.holding = raw.holding; f.revisedAt = raw.revisedAt; f.errorAt = raw.errorAt; f.errorStage = raw.errorStage; f.errorMessage = raw.errorMessage
         return f

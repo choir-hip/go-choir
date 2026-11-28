@@ -21,7 +21,7 @@ import { firstRunOver } from './onboarding.ts';
 import { deskMode } from './consent.ts';
 import { perform } from './radio-model.ts';
 import { voiceFacts, respondsOf, airAddressOf } from './voice-facts.ts';
-import { nowOf } from './radio-follow.ts';
+import { nowOf, runOf } from './radio-follow.ts';
 import { htmlToText } from './mail-model.ts';
 import { parseList, weight, FRONT_LIMIT, type Story } from './paper-model.ts';
 import { listing } from './paper.ts';
@@ -594,11 +594,11 @@ export async function radioPageAct(storage: Store | undefined, native: NativeRea
   await r.rt.pump(); return ACK;
 }
 
-/** The run sheet's own facts for the bar's overlay (bar.ts) and the Autoradio page (radio-page.ts). */
-export async function barRun(storage: Store | undefined, native: NativeReader | undefined): Promise<Record<string, unknown>> {
+/** What the bar shows of what plays, for both phones: the sheet's on-air entry and the deck's state (radio-follow.ts `runOf`). The deck's state and the on-air entry are arguments (the contract's `ds` and `rair`), so a change to either asks again. */
+export async function barRun(storage: Store | undefined, native: NativeReader | undefined, deck: unknown, air: unknown): Promise<Record<string, unknown>> {
   const r = await getRadio(storage, native, false);
   const v = r.rt.view();
-  return { ready: true, onAir: v.onAir, waiting: v.waiting, remote: v.audio, remotePlaying: v.audio && v.playing, remoteTitle: v.current, remoteFraction: v.fraction };
+  return runOf({ onAir: v.onAir, title: v.current, audio: v.audio }, deck, air);
 }
 
 /** The sheet as the page's facts carry it. The facts are asked again every second while the radio sounds (spine.contract `posKey`), and the sheet can be a megabyte: it is written out when it moved

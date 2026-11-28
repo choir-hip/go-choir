@@ -1,8 +1,8 @@
 // The bar's page model, in shared code (it was Swift: BarState.swift `BarTracker.barInfo` / `baseInfo` / `decorate` and the run sheet overlay in QueueView.swift).
-// What stays native, and why: the FACTS. The voice engine's phase and transcript, the engine's events (holding line, revision, error: stamped with the device's clock), the
-// player's own state (playing, title, the audio's place in the block) and the run sheet player's state (what is on air, held for the audio session, remote audio) are only
-// known to the native audio code, so the native source `barFacts` hands them over as they are and decides nothing. Everything the bar says is decided here:
-// the state, the words, the timed windows, the progress, the answer card, the overlay. The conversation's entries come from `conversationEntries` (conversation.ts's input).
+// What stays native, and why: the VOICE'S FACTS only. The engine's phase and transcript, its events (holding line, revision, error: stamped with the device's clock), the player's plain-words message and
+// whether hands-free is on are only known to the voice, so the native source `barFacts` hands them over as they are and decides nothing (a phone with no voice turn, Android today, answers none: the source's
+// declared default). What plays is not native's to say: the title, playing or paused and the progress come from the run sheet and the deck's state (radio-follow.ts `runOf`, the source `barRun`), on both
+// phones. Everything the bar says is decided here: the state, the words, the timed windows, the answer card. The conversation's entries come from `conversationEntries` (conversation.ts's input).
 //
 // The memory here is two things, both keyed on the account generation (api.ts) so a sign-out forgets them and one account's words never reach the next account's bar:
 //  - the player's message: it is new once (it holds the bar for the error window), so the first time it is seen is kept;
@@ -66,9 +66,11 @@ function plain(stage: string, message: string): string {
 export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): BarInfo {
   const f = obj(rawFacts);
   now = now ?? num(f.at);
-  const b: BarInfo = { state: 'idle', text: '', playing: bool(f.playing), talking: false, handsFree: bool(f.handsFree), progress: 0, question: '', answerId: '', answerText: '', answerLabel: '', answerState: '', answerNote: '', canRetry: false, answering: false, until: 0 };
-  const blockCount = Math.max(0, Math.floor(num(f.blockCount)));
-  if (blockCount > 0) b.progress = Math.min(1, Math.max(0, (Math.max(0, num(f.blockIndex)) + Math.max(0, num(f.blockFraction))) / blockCount));
+  const b: BarInfo = { state: 'idle', text: '', playing: bool(f.ready) && bool(f.playing), talking: false, handsFree: bool(f.handsFree), progress: 0, question: '', answerId: '', answerText: '', answerLabel: '', answerState: '', answerNote: '', canRetry: false, answering: false, until: 0 };
+  // What plays is the run sheet's and the deck's (radio-follow.ts `runOf`, handed over as `barRun`): ready once the run has answered; before that the bar says nothing is playing.
+  const ran = bool(f.ready);
+  const title = ran ? str(f.title) : '';
+  if (ran) b.progress = Math.min(1, Math.max(0, num(f.progress)));
 
   // The player's message is new once (and again when it went and came back, or under another account).
   const gen = accountGeneration();
@@ -92,18 +94,8 @@ export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): B
   else if (phase === 'ended') { b.state = 'heard'; b.text = transcript || 'Heard you'; }
   else if (phase === 'acknowledging' || phase === 'holding') { b.state = 'holding'; b.text = str(f.holding) || 'On it…'; }
   else if (phase === 'revised' || left(revisedAt, REVISED_WINDOW) > 0) { b.state = 'revised'; b.text = 'Revised · Show'; }
-  else if (b.playing) { b.state = 'playing'; b.text = str(f.title); }
-  else if (str(f.title) !== '' && blockCount > 0 && bool(f.running)) { b.state = 'paused'; b.text = str(f.title); }
-
-  // The run sheet's overlay (what is on air, held for the audio session, remote audio shown as the radio).
-  // Only a run that has answered says anything (`ready`): the shape's empty form (the first `barRun` not back yet, or one that threw) has `onAir` false and must not blank a bar that sounds.
-  const ran = bool(f.ready), remote = ran && bool(f.remote), onAir = !ran || f.onAir !== false;
-  if (ran && bool(f.waiting) && !remote && b.state === 'playing') { b.state = 'paused'; b.playing = false; }
-  else if (!onAir && !remote && (b.state === 'playing' || b.state === 'paused')) { b.state = 'idle'; b.text = ''; b.playing = false; b.progress = 0; }
-  else if (remote && (b.state === 'idle' || b.state === 'playing' || b.state === 'paused')) {
-    const p = bool(f.remotePlaying);
-    b.state = p ? 'playing' : 'paused'; b.text = str(f.remoteTitle); b.playing = p; b.progress = Math.min(1, Math.max(0, num(f.remoteFraction)));
-  }
+  else if (b.playing) { b.state = 'playing'; b.text = title; }
+  else if (title !== '' && ran && (bool(f.paused) || bool(f.waiting))) { b.state = 'paused'; b.text = title; }       // paused by the listener or the system, or held for the audio session: the deck's own word, never a guess
 
   // The answer card: the latest entry that is not cancelled, unless the listener closed it. A cancelled entry is skipped and the answer before it shows only if it was not closed.
   const list = Array.isArray(obj(rawEntries).entries) ? (obj(rawEntries).entries as unknown[]) : [];

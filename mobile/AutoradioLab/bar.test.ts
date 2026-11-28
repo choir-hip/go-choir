@@ -1,6 +1,6 @@
 // The bar's page model under bun test (bar.ts). Ported in meaning from BarStateTests, the card tests of TalkTests and the overlay tests of RunSheetStoreTests / AudioHeldTests
 // (Swift), which this replaces. The failure list, written first:
-//  B1  nothing loaded is idle, never paused (a play button with nothing behind it); a loaded programme that is not playing is paused only while the engine runs.
+//  B1  nothing loaded is idle, never paused (a play button with nothing behind it); a loaded entry that is not playing is paused only when the deck says paused or held; a run that has not answered says nothing plays.
 //  B2  every engine phase has its state: candidate listening, addressed/capturing talking, ended heard, acknowledging/holding holding (the holding line, or "On it…"),
 //      revised revised; the words are the transcript or "Listening…" / "Heard you".
 //  B3  the revised and error windows end by themselves: the state is a pure function of the clock, so asking again later (the task) clears it; a repeat restarts the window.
@@ -8,9 +8,9 @@
 //  B5  the player's message is new once: it holds the bar for the error window, the same words later do not hold it again, words that went and came back do, and
 //      "Pick a story below." never does.
 //  B6  a sign-out forgets the held message (it was the old account's): the same words under the next account are new.
-//  B7  progress is along the programme, clamped to 1, and 0 with no blocks; a block count past the index never traps.
+//  B7  progress is the run's, clamped to 0..1, carried in every state, and 0 before the run has answered.
 //  B8  the answer card: working, first, full, failed; the retry flag; cancelled and dismissed entries show no card; the latest visible entry decides.
-//  B9  the run sheet's overlay: held for the audio session shows paused; nothing on air shows idle; remote audio shows as the radio with its own play state and progress.
+//  B9  held for the audio session shows paused; what plays, its title and its progress are the run's (radio-follow.ts `runOf`, bar-run.test.ts), whatever the voice says; the voice's facts alone make an idle bar on a phone with no voice.
 //  B10 `until` is the seconds to the next change of a timed state, 0 when none, so the contract asks again then and not before.
 //  B12 a card the listener closed stays closed for that answer: a turn that begins, is cancelled, fails or is pending never brings an older closed card back; a new answer shows; a sign-out forgets.
 //  B11 the native answer's real shape: missing fields, wrong types, extra fields and nothing at all give an idle bar, never a throw.
@@ -20,10 +20,10 @@ import { nextGeneration } from './api.ts';
 
 const T0 = 1_000_000;
 const facts = (o: Record<string, unknown> = {}) => ({
-  phase: 'playing', transcript: '', blockIndex: 0, blockCount: 0, blockFraction: 0, running: false, playing: false, title: '', message: '', handsFree: false,
-  holding: '', revisedAt: 0, errorAt: 0, errorStage: '', errorMessage: '', onAir: true, waiting: false, remote: false, remotePlaying: false, remoteTitle: '', remoteFraction: 0, ...o,
+  phase: 'playing', transcript: '', message: '', handsFree: false, holding: '', revisedAt: 0, errorAt: 0, errorStage: '', errorMessage: '',
+  ready: true, onAir: true, waiting: false, playing: false, paused: false, title: '', progress: 0, ...o,
 });
-const play = (o: Record<string, unknown> = {}) => facts({ playing: true, title: 'Harbor strike ends', running: true, blockCount: 4, ...o });
+const play = (o: Record<string, unknown> = {}) => facts({ playing: true, title: 'Harbor strike ends', ...o });
 const entry = (o: Record<string, unknown> = {}) => ({ id: 'e1', question: 'what changed?', first: '', firstSource: '', answer: '', status: 'asking', note: '', ...o });
 const none = { entries: [] };
 const at = (s = 0) => T0 + s;
@@ -34,11 +34,11 @@ describe('the bar state', () => {
   test('B1 nothing loaded is idle; loaded and not playing is paused only while running', () => {
     expect(barInfo(facts(), none, at()).state).toBe('idle');
     expect(barInfo(play(), none, at()).state).toBe('playing');
-    expect(barInfo(play({ playing: false }), none, at()).state).toBe('paused');
-    expect(barInfo(play({ playing: false }), none, at()).text).toBe('Harbor strike ends');
-    expect(barInfo(play({ playing: false, running: false }), none, at()).state).toBe('idle');
-    expect(barInfo(play({ playing: false, blockCount: 0 }), none, at()).state).toBe('idle');
-    expect(barInfo(play({ playing: false, title: '' }), none, at()).state).toBe('idle');
+    expect(barInfo(play({ playing: false, paused: true }), none, at()).state).toBe('paused');
+    expect(barInfo(play({ playing: false, paused: true }), none, at()).text).toBe('Harbor strike ends');
+    expect(barInfo(play({ playing: false }), none, at()).state).toBe('idle');                   // loaded, and the deck says neither: nothing is guessed
+    expect(barInfo(play({ playing: false, paused: true, title: '' }), none, at()).state).toBe('idle');
+    expect(barInfo(play({ ready: false }), none, at())).toMatchObject({ state: 'idle', text: '', playing: false });   // the run has not answered (the contract's empty form): nothing plays
     expect(barInfo(play(), none, at()).text).toBe('Harbor strike ends');
   });
   test('B2 each engine phase has its state and words', () => {
@@ -119,13 +119,13 @@ describe('the bar state', () => {
     nextGeneration();
     expect(barInfo(play(), none, at(1)).state).toBe('playing');
   });
-  test('B7 progress along the programme', () => {
-    expect(barInfo(play({ blockIndex: 1, blockFraction: 0.5, blockCount: 4 }), none, at()).progress).toBeCloseTo(0.375, 9);
-    expect(barInfo(play({ blockIndex: 3, blockFraction: 0.99, blockCount: 4 }), none, at()).progress).toBeLessThanOrEqual(1);
-    expect(barInfo(play({ blockIndex: 9, blockFraction: 0.9, blockCount: 4 }), none, at()).progress).toBe(1);
-    expect(barInfo(play({ blockCount: 0, blockIndex: 2, blockFraction: 0.5 }), none, at()).progress).toBe(0);
-    expect(barInfo(play({ blockIndex: -3, blockFraction: -1, blockCount: 4 }), none, at()).progress).toBe(0);
-    expect(barInfo(play({ phase: 'candidate', blockIndex: 1, blockFraction: 0.5 }), none, at()).progress).toBeCloseTo(0.375, 9);   // carried in every state
+  test('B7 progress is the run\'s, clamped, and carried in every state', () => {
+    expect(barInfo(play({ progress: 0.375 }), none, at()).progress).toBeCloseTo(0.375, 9);
+    expect(barInfo(play({ progress: 7 }), none, at()).progress).toBe(1);
+    expect(barInfo(play({ progress: -1 }), none, at()).progress).toBe(0);
+    expect(barInfo(play({ progress: Number.NaN }), none, at()).progress).toBe(0);
+    expect(barInfo(play({ ready: false, progress: 0.5 }), none, at()).progress).toBe(0);
+    expect(barInfo(play({ phase: 'candidate', progress: 0.375 }), none, at()).progress).toBeCloseTo(0.375, 9);
   });
   test('B7 the facts the bar passes on: playing, hands-free', () => {
     expect(barInfo(play({ handsFree: true }), none, at())).toMatchObject({ playing: true, handsFree: true });
@@ -231,23 +231,18 @@ describe('a closed card stays closed (B12)', () => {
   });
 });
 
-describe('the run sheet overlay', () => {
+describe('what plays', () => {
   test('B9 an entry held for the audio session shows paused, not playing', () => {
-    expect(barInfo(play({ waiting: true, ready: true }), none, at())).toMatchObject({ state: 'paused', playing: false });
-    expect(barInfo(play({ waiting: true, ready: true, remote: true, remotePlaying: true, remoteTitle: 'Episode' }), none, at()).state).toBe('playing');   // remote audio is on its own
+    expect(barInfo(play({ playing: false, waiting: true }), none, at())).toMatchObject({ state: 'paused', playing: false, text: 'Harbor strike ends' });
   });
-  test('B9 nothing on air shows idle with nothing in it', () => {
-    expect(barInfo(play({ onAir: false, ready: true, progress: 0.7, blockIndex: 2 }), none, at())).toMatchObject({ state: 'idle', text: '', playing: false, progress: 0 });
-    expect(barInfo(play({ onAir: false, ready: true, playing: false }), none, at())).toMatchObject({ state: 'idle', text: '', progress: 0 });
-    expect(barInfo(play({ onAir: false, ready: true, phase: 'capturing' }), none, at()).state).toBe('talking');   // a turn is not the programme
-    expect(barInfo(play({ onAir: false, ready: true, errorAt: at(), errorStage: 'voice' }), none, at(1)).state).toBe('error');
+  test('B9 a voice phase wins over what plays, and what plays stays in `playing` underneath', () => {
+    expect(barInfo(play({ phase: 'capturing' }), none, at())).toMatchObject({ state: 'talking', playing: true });
+    expect(barInfo(play({ errorAt: at(), errorStage: 'voice' }), none, at(1))).toMatchObject({ state: 'error', playing: true });
   });
-  test('B9 remote audio shows as the radio: its play state, its title, its place', () => {
-    const f = facts({ remote: true, remotePlaying: true, remoteTitle: 'Episode 12', remoteFraction: 0.25, onAir: true, ready: true });
-    expect(barInfo(f, none, at())).toMatchObject({ state: 'playing', text: 'Episode 12', playing: true, progress: 0.25 });
-    expect(barInfo({ ...f, remotePlaying: false }, none, at())).toMatchObject({ state: 'paused', text: 'Episode 12', playing: false, progress: 0.25 });
-    expect(barInfo({ ...f, phase: 'capturing' }, none, at()).state).toBe('talking');            // a phase wins over the overlay
-    expect(barInfo({ ...f, remoteFraction: 7 }, none, at()).progress).toBe(1);
+  test('B9 a phone with no voice (the source\'s declared default) shows what plays', () => {
+    const none_ = { at: 0, phase: 'playing', transcript: '', message: '', handsFree: false, holding: '', revisedAt: 0, errorAt: 0, errorStage: '', errorMessage: '' };
+    expect(barInfo({ ...none_, ...facts({ playing: true, title: 'Episode 12', progress: 0.25 }) }, none)).toMatchObject({ state: 'playing', text: 'Episode 12', playing: true, progress: 0.25, handsFree: false, until: 0 });
+    expect(barInfo({ ...none_, ...facts({ paused: true, title: 'Episode 12', progress: 0.25 }) }, none)).toMatchObject({ state: 'paused', text: 'Episode 12', playing: false, progress: 0.25 });
   });
 });
 
@@ -287,9 +282,9 @@ describe('the native answer', () => {
 
 describe('B2 the review of the pages and the bar', () => {
   const read = (f: string): string => require('node:fs').readFileSync(new URL(f, import.meta.url), 'utf8');
-  test('B2-6 an empty run (not yet answered) never blanks a playing or paused bar; an answered one that says not on air does', () => {
-    expect(barInfo({ playing: true, title: 'A story', blockCount: 3, running: true, onAir: false }, { entries: [] }, 1).state).toBe('playing');       // no `ready`: the run has not answered
-    expect(barInfo({ playing: true, title: 'A story', blockCount: 3, running: true, onAir: false, ready: true }, { entries: [] }, 1).state).toBe('idle');
+  test('B2-6 an empty run (not yet answered) says nothing plays, and a run that answered says what the deck says', () => {
+    expect(barInfo({ playing: true, title: 'A story', onAir: false }, { entries: [] }, 1).state).toBe('idle');       // no `ready`: the run has not answered
+    expect(barInfo({ playing: true, title: 'A story', ready: true, onAir: true }, { entries: [] }, 1).state).toBe('playing');
   });
   test('B2-8 a streaming answer says so, so the card can offer Cancel', () => {
     const b = barInfo({}, { entries: [{ id: 'ask-1', question: 'q', status: 'answering', answer: 'Part of it', first: '', note: '' }] }, 1);

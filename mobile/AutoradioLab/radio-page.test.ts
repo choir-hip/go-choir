@@ -3,7 +3,7 @@
 //  R1 the sheet arrives as the store's wire JSON: it is read whole; empty, broken or mistyped is an empty ready page, never a throw.
 //  R2 the clock is the facts' own `at` (a data source may not read time); the greeting and the date follow it, in the listener's zone.
 //  R3 listening comes from the BAR's state: a turn open dims the page and shows the words; an error held on the bar beats it (the bar says error, not listening).
-//  R4 playing is the player's, or the bar's: either says the radio plays.
+//  R4 playing is the run's (the deck plays the entry on air); the bar's facts no longer say what plays.
 //  R5 remote audio shows its own clock labels from seconds, "-" before the remaining; no duration is no remaining.
 //  R6 "published" is when the story on air was updated, as words, from the facts' time; none known is "".
 //  R7 the versions of stories the phone holds come as two lists; a cite of another version is noted on its row; lists of different length are ignored whole.
@@ -75,10 +75,10 @@ describe('the bar', () => {
     const p = radioPage({ ...f }, b, none, 0);
     expect(p.dim).toBe(false); expect(p.state).not.toBe('listening');
   });
-  test('R4 playing is the player\'s or the bar\'s', () => {
+  test('R4 playing is the run\'s, not the bar\'s', () => {
     expect(radioPage(facts([air], { playing: true }), bar(), none, 0).playing).toBe(true);
     expect(radioPage(facts([air], { playing: false }), bar(), none, 0).playing).toBe(false);
-    expect(radioPage(facts([air], { playing: false }), bar({ playing: true, title: 'T', blockCount: 2, running: true }), none, 0).playing).toBe(true);
+    expect(radioPage(facts([air], { playing: false }), bar({ playing: true, title: 'T', blockCount: 2, running: true }), none, 0).playing).toBe(false);          // facts the bar no longer carries change nothing
     expect(radioPage(facts([entry('b')], { playing: true }), bar(), none, 0).playing).toBe(false);   // nothing on air is never playing
   });
 });
@@ -172,11 +172,12 @@ describe('spoken time with no estimate (the proof showed no elapsed label on a p
 });
 
 describe('B2-7 the page and the bar agree on playing (review)', () => {
-  test('a run that says the entry is held for the audio session or not on air is not "On air"', () => {
+  test('a run that says the entry is held for the audio session or not on air is not "On air"; one that says the deck plays it is (the bar\'s facts no longer say what plays)', () => {
     const f = (o: Record<string, unknown>) => facts([air], { playing: false, ready: true, onAir: true, ...o });
-    expect(radioPage(f({ waiting: true }), bar({ phase: 'playing', playing: true, title: 'x', blockCount: 2, running: true }), none, 0).state).toBe('paused');
-    expect(radioPage(f({}), bar({ playing: true, title: 'x', blockCount: 2, running: true }), none, 0).state).toBe('onair');
-    expect(radioPage(f({ onAir: false }), bar({ playing: true, title: 'x', blockCount: 2, running: true }), none, 0).state).not.toBe('onair');
+    expect(radioPage(f({ waiting: true }), bar(), none, 0).state).toBe('paused');
+    expect(radioPage(f({ playing: true }), bar(), none, 0).state).toBe('onair');
+    expect(radioPage(f({ onAir: false }), bar(), none, 0).state).not.toBe('onair');
+    expect(radioPage(f({}), bar({ playing: true, title: 'x', blockCount: 2, running: true }), none, 0).state).toBe('paused');       // a bar that still carried the old native fields cannot make the page play
   });
   test('B2-4 only a speech failure is labelled Can\'t speak; another message is shown as it is', () => {
     const p = radioPage(facts([air], { message: 'That address is too long to add.' }), bar({ playing: false }), none, 0);

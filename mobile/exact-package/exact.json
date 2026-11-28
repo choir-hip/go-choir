@@ -36,8 +36,6 @@
       "message": "string"
     },
     "RadioInfo": {
-      "title": "string",
-      "playing": "bool",
       "level": "string",
       "speedValue": "number",
       "micLevel": "number"
@@ -46,12 +44,6 @@
       "at": "number",
       "phase": "string",
       "transcript": "string",
-      "blockIndex": "number",
-      "blockCount": "number",
-      "blockFraction": "number",
-      "running": "bool",
-      "playing": "bool",
-      "title": "string",
       "message": "string",
       "handsFree": "bool",
       "holding": "string",
@@ -651,12 +643,6 @@
           "at": 0,
           "phase": "playing",
           "transcript": "",
-          "blockIndex": 0,
-          "blockCount": 0,
-          "blockFraction": 0,
-          "running": false,
-          "playing": false,
-          "title": "",
           "message": "",
           "handsFree": false,
           "holding": "",
@@ -676,8 +662,6 @@
       "answers": "RadioInfo",
       "substitute": {
         "default": {
-          "title": "",
-          "playing": false,
           "level": "play",
           "speedValue": 1,
           "micLevel": 0

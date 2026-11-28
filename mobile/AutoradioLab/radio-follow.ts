@@ -158,4 +158,18 @@ export function nowOf(rawDeck: unknown, rawAir: unknown): { sentence: string; pr
   return { sentence: sayingOf(p, air.handedText)?.text ?? '', progress: Math.min(1, (p.start + share * p.length) / air.handedText.length) };
 }
 
+/** What the bar says is playing, from the run sheet and the deck (`barRun`): the title of the entry on air, and whether the deck is playing it, paused (by the listener or the system), or held for the audio session. Every value is an argument:
+ *  `view` is what the sheet says of the entry on air (its title, whether it is audio), the deck's state and the on-air entry as the contract hands them. The deck speaks for the entry on air only when its item IS that entry's id: any other
+ *  deck state (an entry that just ended, one the sheet has not yet put on air) is no verdict about it, and the bar shows nothing playing. Progress: audio is the seconds over its length; spoken words are the place's share of the text handed
+ *  over (`nowOf`), 0 when the place is not that entry's. Nothing is kept. */
+export function runOf(view: { onAir: boolean; title: string; audio: boolean }, rawDeck: unknown, rawAir: unknown): { ready: boolean; onAir: boolean; waiting: boolean; playing: boolean; paused: boolean; title: string; progress: number } {
+  const ds = readState(rawDeck), air = readAir(rawAir);
+  const on = view.onAir && air.id !== '' && ds.item === air.id;
+  const playing = on && ds.why === 'playing', paused = on && (ds.why === 'paused_listener' || ds.why === 'paused_system'), waiting = on && ds.why === 'held_session';
+  let progress = 0;
+  if (on && view.audio) progress = ds.duration > 0 && Number.isFinite(ds.seconds) ? Math.min(1, Math.max(0, ds.seconds / ds.duration)) : 0;
+  else if (on) progress = nowOf(rawDeck, rawAir).progress;
+  return { ready: true, onAir: view.onAir, waiting, playing, paused, title: view.onAir ? view.title : '', progress };
+}
+
 export { NO_PLACE };

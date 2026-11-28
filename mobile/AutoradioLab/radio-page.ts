@@ -56,7 +56,7 @@ const zoneMinutes = (at: number): number => { try { return -new Date(at * 1000).
 export function radioPage(rawFacts: unknown, rawBar: unknown, rawEntries: unknown, offsetMinutes?: number): PageInfo {
   const f = obj(rawFacts);
   const at = num(f.at) > 0 ? num(f.at) : 0;   // a non-positive time is no clock (a host with no native facts): no date, no greeting, no relative time
-  const b = barInfo({ ...obj(rawBar), ready: f.ready === true, onAir: f.onAir === true, waiting: f.waiting === true }, rawEntries);       // the same run overlay the bar applies (bar.ts), so the page and the bar say the same about playing
+  const b = barInfo({ ...obj(rawBar), ready: false }, rawEntries);       // the voice's state only (a turn open, an error held): what plays is the run's, in `playing` below, the same `runOf` answer the bar reads
   const versions: Record<string, number> = {};
   const routes = strs(f.versionRoutes), numbers = Array.isArray(f.versionNumbers) ? f.versionNumbers.map(num) : [];
   if (routes.length === numbers.length) routes.forEach((r, i) => { versions[r] = numbers[i]; });
@@ -66,7 +66,7 @@ export function radioPage(rawFacts: unknown, rawBar: unknown, rawEntries: unknow
   return make({
     sheet: namedOnAir(readSheet(str(f.sheet)), str(f.airTitle), str(f.airRoute), remote),
     barState: b.state, heardWords: b.text,
-    playing: f.playing === true || b.state === 'playing',
+    playing: f.playing === true,
     sentence: str(f.sentence), progress: num(f.progress),
     remoteAudio: remote, elapsedLabel: remote ? clockLabel(elapsed) : '', remainingLabel: remote && duration > 0 ? '-' + clockLabel(Math.max(0, duration - elapsed)) : '',
     message: str(f.message), notice: str(f.notice), writing: f.writing === true, dry: f.dry === true, wants: f.wants === true,

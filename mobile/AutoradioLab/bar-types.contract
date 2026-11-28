@@ -19,13 +19,17 @@ shape BarInfo
   answering: bool
   until: number
 
-// What the run sheet says to the bar (radio-bridge.ts `barRun`): something on air, held for the audio session, audio of its own (a clip, an episode) and where it is.
+// What plays, as the bar shows it (radio-follow.ts `runOf`, source `barRun`): the run sheet's on-air entry and the deck's state. Native says none of it.
 shape BarRun
-  // The run sheet has answered (an empty one has not: the bar then trusts the player's own facts).
+  // The run has answered (the contract's empty form has not: the bar then says nothing is playing).
   ready: bool
   onAir: bool
+  // The deck is held for the audio session.
   waiting: bool
-  remote: bool
-  remotePlaying: bool
-  remoteTitle: string
-  remoteFraction: number
+  // The deck is playing the entry on air / paused on it (by the listener or the system).
+  playing: bool
+  paused: bool
+  // The entry on air's title.
+  title: string
+  // How far through the entry: 0 to 1.
+  progress: number

@@ -1,41 +1,22 @@
 import Foundation
 
-// The radio view as data, and the native FACTS the bar is made from. The bar's own page model (its state, words, timed windows, progress, answer card and the run
-// sheet overlay) is shared code now: AutoradioLab/bar.ts, from the facts this file keeps (`BarTracker.raw`) and the module hands over (`barFacts`).
-// What stays here, and why: the engine's events (holding line, revision, error) are only seen by native code, so they are kept raw with the device's time; the audio's
-// own position in the block (`clockProgress`) is the player's.
+// What only native can report about the bar, and nothing else. What plays (the title, playing or paused, the progress, the sentence) is shared code's, from the run sheet, the deck's state and
+// the place native reports in it (AutoradioLab/radio-follow.ts `runOf`), on both phones. Every field kept here is a FACT of the voice or the audio, with the reason beside it. The bar's own page
+// model (its state, words, timed windows, answer card) is AutoradioLab/bar.ts, from the facts below (`BarTracker.raw`) and the module's `barFacts`.
 //
-// Ways this can fail (the radio view's; the bar's list is in bar.test.ts):
-//  1. Pause/resume must not count paused time: elapsed time accumulates only while running at normal level (not paused, not yielded to "pause").
-//  5. A block index past the end (after a revision shortens it) clamps, not traps.
+// Ways this can fail (the bar's list is in bar.test.ts):
 //  6. The words from a former turn show in a new one: the holding line clears on the phase to "candidate".
+//  7. A sign-out leaves the old account's words (a holding line, a revision, an error) for the next account: `wipe` clears them.
 
-/// Everything the expanded player and the bar's extras need, in one source.
+/// What the radio view reports, all of it the voice's or the audio engine's to say (the title and whether it plays are shared code's now).
 public struct RadioInfo: Codable, Sendable, Equatable {
-    public var title = ""
-    public var playing = false
-    /// play | dip | pause: what the yield policy is doing to the programme right now.
+    /// play | dip | pause: what the yield policy is doing to the programme right now. Native only: the policy answers the microphone (the voice).
     public var level = "play"
-    /// The speed as a number, for the slider (0.5 to 3).
+    /// The speed as a number, for the slider (0.5 to 3). Native only: the audio engine applies it (time-pitch) and the saved value is read at launch.
     public var speedValue = 1.0
-    /// 0...1, the smoothed microphone level while the mic is open (the mark breathes with it); 0 when nothing is heard.
+    /// 0...1, the smoothed microphone level while the mic is open (the mark breathes with it); 0 when nothing is heard. Native only: it is made from the microphone's frames.
     public var micLevel = 0.0
     public init() {}
-}
-
-/// Elapsed play time inside the current block, for the sentence estimate. Pure: callers pass `now`.
-public struct BlockClock: Sendable, Equatable {
-    var index = -1
-    var elapsed = 0.0
-    var since: Date?
-    public init() {}
-
-    public mutating func update(index i: Int, running: Bool, now: Date) {
-        if i != index { index = i; elapsed = 0; since = running ? now : nil; return }
-        if running, since == nil { since = now }
-        if !running, let s = since { elapsed += now.timeIntervalSince(s); since = nil }
-    }
-    public func seconds(now: Date) -> Double { elapsed + (since.map { now.timeIntervalSince($0) } ?? 0) }
 }
 
 public final class BarTracker: @unchecked Sendable {
@@ -43,21 +24,19 @@ public final class BarTracker: @unchecked Sendable {
     public static let revisedWindow = 6.0, wordsPerSecond = 2.6
 
     private let lock = NSLock()
+    // The engine's events, kept raw with the device's time. Native only: only native code sees the engine's events (holding line, revision, error), and the time is the device's.
     private var holdingLine = ""
     private var revisedAt: Date?
     private var revisedSummary = ""
     private var errorAt: Date?
     private var errorStage = ""
     private var errorMessage = ""
-    private var clock = BlockClock()
     /// Sign-out: the held words (a message, a revision summary, the holding line) are the account's.
     public func wipe() {
         lock.lock(); holdingLine = ""; revisedAt = nil; revisedSummary = ""; errorAt = nil; errorStage = ""; errorMessage = ""; lock.unlock()
     }
     public private(set) var speed = 1.0
     private var level = 0.0
-    /// The audio's own position in the block (set by the runtime). Without one the estimate from play time is used.
-    public var positionSource: (@Sendable () -> RenderPosition?)?
     /// Told when the listener picks a speed, so the audio can apply it.
     public var speedSink: (@Sendable (Double) -> Void)?
     /// Others that follow the speed (remote audio).
@@ -125,36 +104,11 @@ public final class BarTracker: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         return Raw(holding: holdingLine, revisedAt: revisedAt?.timeIntervalSince1970 ?? 0, errorAt: errorAt?.timeIntervalSince1970 ?? 0, errorStage: errorStage, errorMessage: errorMessage)
     }
-    /// The audio's place in the block now, 0...1 (the audio's own position; an estimate from play time only without one).
-    public func blockFraction(_ s: LabSnapshot, now: Date = Date()) -> Double {
-        lock.lock(); defer { lock.unlock() }
-        return clockProgress(s, doc: nil, now: now)
-    }
-
-    func clockProgress(_ s: LabSnapshot, doc: ProgrammeDocument?, now: Date) -> Double {
-        // The real position: the audio that was rendered, for this block. A block with no audio yet (loading, just skipped) is at 0.
-        if let src = positionSource {
-            guard let p = src(), p.index == s.blockIndex else { return 0 }
-            return min(0.99, max(0, p.fraction))
-        }
-        let running = s.running && !s.paused && s.level == "play" && s.phase == "playing"
-        clock.update(index: s.blockIndex, running: running, now: now)
-        let words = max(1, (doc.flatMap { $0.blocks.indices.contains(s.blockIndex) ? $0.blocks[s.blockIndex].spokenText : nil } ?? s.blockText)
-            .split(separator: " ").count)
-        let duration = max(2.0, Double(words) / Self.wordsPerSecond / speed)
-        return min(0.99, clock.seconds(now: now) / duration)
-    }
-
-    public func radioInfo(player p: ChoirPlayerView, snapshot s: LabSnapshot, document d: ProgrammeDocument, now: Date = Date()) -> RadioInfo {
+    /// The radio view: the yield level (the snapshot's), the speed and the microphone's level. Nothing here says what plays.
+    public func radioInfo(level yieldLevel: String) -> RadioInfo {
         lock.lock(); defer { lock.unlock() }
         var r = RadioInfo()
-        let n = d.blocks.count
-        let idx = n == 0 ? 0 : min(max(s.blockIndex, 0), n - 1)
-        r.title = d.title
-        // The entry on air is one segment: its title heads the player.
-        if n > 0, d.segmentIndex(containingBlock: idx) != nil { r.title = ProgrammeNowPlaying.describe(document: d, blockIndex: idx).title }
-        r.playing = p.playing
-        r.level = s.level; r.speedValue = speed
+        r.level = yieldLevel; r.speedValue = speed
         r.micLevel = (level * 100).rounded() / 100
         return r
     }

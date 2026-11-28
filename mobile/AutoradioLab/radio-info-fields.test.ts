@@ -1,5 +1,5 @@
 // The native `RadioInfo` (interface/bar.json) carries only what shared code reads. A field nothing reads is native work for no one, so adding one back fails here.
-// Each field names where it is read: all five by the contracts (`ri.<field>`).
+// Each field names where it is read: all three by the contracts (`ri.<field>`). The title and whether it plays are shared code's (radio-follow.ts `runOf`), so they are not here.
 // The checks run on text with comments removed, and match whole words, so a comment or a longer name (`uri.title`, `ri.titleText`) does not count as a reader.
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -10,7 +10,7 @@ const read = (path: string) => stripped(readFileSync(path, 'utf8'));
 const contracts = readdirSync(here).filter((f) => f.endsWith('.contract')).map((f) => read(`${here}${f}`)).join('\n');
 
 export const readers: Record<string, (f: string) => boolean> = {
-  title: (f) => new RegExp(`\\bri\\.${f}\\b`).test(contracts), playing: (f) => new RegExp(`\\bri\\.${f}\\b`).test(contracts), level: (f) => new RegExp(`\\bri\\.${f}\\b`).test(contracts),
+  level: (f) => new RegExp(`\\bri\\.${f}\\b`).test(contracts),
   speedValue: (f) => new RegExp(`\\bri\\.${f}\\b`).test(contracts), micLevel: (f) => new RegExp(`\\bri\\.${f}\\b`).test(contracts),
 };
 
@@ -35,11 +35,24 @@ describe('RadioInfo carries only fields something reads', () => {
     expect(problems({ ...iface.shapes.RadioInfo, heard: 'string' })).toEqual(['RadioInfo.heard has no reader: delete it from interface/bar.json and BarState.swift']);
     expect(new RegExp('\\bri\\.title\\b').test(stripped('uri.title ri.titleText // ri.title\n'))).toBe(false);
   });
-  test('the shape is the five fields the contracts read, and no sentence or progress (the follow is shared code: docs/design/sentence-follow-in-shared-code-2026-11-28.md)', () => {
-    expect(fields).toEqual(['title', 'playing', 'level', 'speedValue', 'micLevel']);
+  test('the shape is the three fields the contracts read: no title, no playing, no sentence or progress (what plays is shared code: docs/design/sentence-follow-in-shared-code-2026-11-28.md)', () => {
+    expect(fields).toEqual(['level', 'speedValue', 'micLevel']);
   });
   test('the interface default for radioView has exactly the shape\'s fields', () => {
     const view = iface.names.find((n: { source?: string }) => n.source === 'radioView');
+    expect(Object.keys(view.substitute.default).sort()).toEqual([...fields].sort());
+  });
+});
+
+describe('BarFacts carries only what the voice alone reports, and bar.ts reads every field', () => {
+  const bar = read(`${here}bar.ts`);
+  const fields = Object.keys(iface.shapes.BarFacts);
+  test('the shape is the voice\'s facts: no title, no playing, no block numbers', () => {
+    expect(fields).toEqual(['at', 'phase', 'transcript', 'message', 'handsFree', 'holding', 'revisedAt', 'errorAt', 'errorStage', 'errorMessage']);
+  });
+  test('every field is read by bar.ts (`f.<field>`), and the default for barFacts has exactly the shape\'s fields', () => {
+    for (const f of fields) expect(new RegExp(`\\bf\\.${f}\\b`).test(bar), f).toBe(true);
+    const view = iface.names.find((n: { source?: string }) => n.source === 'barFacts');
     expect(Object.keys(view.substitute.default).sort()).toEqual([...fields].sort());
   });
 });

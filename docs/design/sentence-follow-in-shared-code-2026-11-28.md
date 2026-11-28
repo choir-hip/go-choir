@@ -1,6 +1,6 @@
 # The sentence follow in shared code: a plan
 
-Standing: built | kind: happened | scope: in part | settled-by: S1, S0 and S2+S3 are built (docs/changes/2026-11-28-readers-aim-in-shared-code.md, docs/changes/2026-11-28-sentence-follow-in-shared-code.md); S4 is not | note: built and tested (bun, Swift, Kotlin JVM, the contract build); no sentence timing was heard on a device, and the iPhone compile of the touched app-side Swift and the Android build are the landing's
+Standing: built | kind: happened | scope: in part | settled-by: S1, S0, S2+S3 and S4 are built (docs/changes/2026-11-28-readers-aim-in-shared-code.md, docs/changes/2026-11-28-sentence-follow-in-shared-code.md, docs/changes/2026-11-28-bar-facts-in-shared-code.md); the voice's own ops are not | note: built and tested (bun, Swift, the contract build); nothing heard on a device, and the iPhone compile of the touched app-side Swift and the Android build are the landing's
 
 Station E5 of [finishing the move to Exact](../definitions/choir-finish-the-move-to-exact-2026-11-27.md).
 The parked attempt is `origin/lane/bar-facts` and
@@ -321,15 +321,7 @@ S1 and S3, `ReaderFollow.swift` is gone (83 lines). `HeldPages` stays, smaller,
 only for the voice turn's page text (`pageTextProvider`, AutoradioModule+Spine.swift:44)
 until the voice owns its page text.
 
-**S4. The bar's facts.** `barFacts` stops carrying `blockIndex`, `blockCount`,
-`blockFraction`; `bar.ts` takes the progress from `progressOf`. Swift removed:
-`BlockClock` (BarState.swift:31-43), `positionSource` (:64) and its wiring
-(LabRuntime.swift:136), `blockFraction` and `clockProgress` (:133-150), the
-words-per-second estimate, about 45 lines. `BarState.swift` goes from 192 to
-about 120: what stays is the engine's events, the microphone level and the
-speed, which are voice. Ops made unnecessary: none whole; `barFacts` is
-smaller. Android needs `barFacts` still for phase and transcript (voice facts);
-that is a different slice and not this plan.
+**S4. The bar's facts (built 2026-11-28).** `barRun(rpulse.tick, posKey, ds, rair)` is made by `runOf` (radio-follow.ts): title, playing, paused, waiting and progress of the entry on air, from the sheet, the deck's state and the place. `barFacts` lost `blockIndex`, `blockCount`, `blockFraction`, `running`, `playing` and `title`; `radioView` lost `title` and `playing`. Swift removed: `BlockClock`, `positionSource` and its wiring, `blockFraction`, `clockProgress`, the radio view's player and document, and the 0.4 s touch. `BarState.swift` 161 to 115. What stays is the voice's: see docs/changes/2026-11-28-bar-facts-in-shared-code.md for each field and the remaining ops with their Android answers.
 
 **Not in this chain:** `SourceLink.swift` (23 lines) is the web page view's
 URL router; it is used by the native `web-page` view and the Android copy is
@@ -360,7 +352,7 @@ supported" on Android.
 
 ## What was built (2026-11-28)
 
-S1, S0 and S2+S3 are built; S4 (the bar's block facts) is not. Differences from the plan above, each a detail and each decided while building:
+S1, S0, S2+S3 and S4 are built. Differences from the plan above, each a detail and each decided while building:
 
 - S0 took the three fields off the wire and out of the Swift struct's encoding (`CodingKeys`) and left the values held natively until S2+S3 deleted them: `radioFacts` and `ReaderFeed` still read them until then.
 - The page's blocks are arguments, not a `with` on a version. `ReaderDoc` has no `version`; `rfollow = readerFollowShared(ds, rair, rdoc.address, <block ids>, <block texts>)` passes what `followOf` reads, so no value is read from outside the input list. `rair` is a new resource, `radioAir(rpulse.tick, posKey)`: the on-air entry's id and page address, and the id and text last handed to the deck (`RadioRuntime.handed`).
@@ -369,6 +361,8 @@ S1, S0 and S2+S3 are built; S4 (the bar's block facts) is not. Differences from 
 - The page position is by occurrence, not search: the k-th copy in the entry of the sentence at the reported offset is the k-th copy on the page, when both have the same number of copies (`locateAt`); else nothing. An earlier build searched by text and lit the earlier of a repeated sentence; a second tried a longest-common-run alignment and could jump back to an earlier copy; review caught both.
 - The reader's page numbers sentences with `sentenceEnds` over each block's text, as `reader-parse.ts` does; a block over the reader's size is one sentence.
 - `radioFacts` lost `sentences`, `sentenceIndex`, `progress` and its `peek` argument (the page facts no longer ask native for anything); `HeldBlock.sentences` and the `sentences` of the `pageText` hand-over are gone.
+
+S4, built after the rest, decided while building: `progressOf` is `runOf`, which makes the whole of what the bar shows of what plays (not only progress), so `barFacts` also lost `running`, `playing` and `title`, and `RadioInfo` lost `title` and `playing`. The run overlay in `bar.ts` (remote audio, held, nothing on air) is gone: `runOf` gives one answer for audio and spoken entries alike, and the deck speaks for the entry on air only when its item is that entry's id. `rair` moved from members-radio.contract to spine.contract because `brun` reads it. `brun` and `rpfacts` take `ds`, so while the phone is locked and sounding they are asked on the slow clock (every 5 s), not each second (radio-churn.test.ts C3 says so; its model of `rpfacts` had left out `ds`). The bar's microphone, the typed question and the speed row stay native and unsupported on Android: a decision for the owner, in the change entry.
 
 Not done and listed for a device: see (f), and for Android that `exo.duration` is known for the chunk on air and that `currentMediaItemIndex` moves with the sound.
 
