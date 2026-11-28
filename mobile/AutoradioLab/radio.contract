@@ -214,7 +214,7 @@ component RadioPage
               if tp.state == "idle"
                 button press=takesDo("record", "") testId="radio-take-start" appearance="none" aria-label="Record a take"
                   row min-height=44 padding="0px 4px" align-items="center" gap=6
-                    image "symbol:sf/mic.fill" color=th.accent pointer-events="none"
+                    image "symbol:microphone" color=th.accent pointer-events="none"
                     text "Take" font-family=th.fontAction font-size="-exact-subheadline" font-weight=600 color=th.accent
             if showWhy
               column gap=4 width="100%" testId="radio-why-panel"

@@ -50,7 +50,7 @@ component BarGlyph
       // the state is in the shape as well as the colour: the microphone is solid when on and crossed out when off
       if glyph == "mic"
         if on
-          image "symbol:sf/mic.fill" color=tone
+          image "symbol:microphone" color=tone
         else
           image "symbol:sf/mic.slash" color=tone
       if glyph == "stop"

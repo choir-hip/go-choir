@@ -190,7 +190,7 @@ component NoPreview
       Card(level=1, testId="nopreview-card", minHeight=0)
         column padding=18 gap=14
           row gap=14 align-items="center"
-            image (fvInfo.address == address ? "symbol:sf/doc" : "symbol:sf/hourglass") width=40 height=40 color=th.muted
+            image (fvInfo.address == address ? "symbol:document" : "symbol:sf/hourglass") width=40 height=40 color=th.muted
             text message testId="nopreview-message" font-family=th.fontLabel font-size="-exact-callout" color=th.fg flex=1 min-width=0
           if fvInfo.address == address and fvInfo.name.length > 0
             FactRow(label="Type", value=fvInfo.kindLabel)
