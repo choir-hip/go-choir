@@ -14,7 +14,7 @@ members Autoradio
   // record | stop | preview | rerecord | discard | publish | delete | mute | unmute | refresh; arg is a take id or a publisher handle
   action takesDo(op: string, arg: string)
     // A take needs the microphone, and the microphone is asked only of a signed-in person (owner, 2026-11-23): signed out, recording opens the sign-in sheet and starts nothing.
-    if (op == "record" or op == "rerecord") and offerSignIn
+    if (op == "record" or op == "rerecord") and au.signedIn == false
       gate = "signin"
     // The plain line comes before the system's prompt (micask.ts): Continue (spine.contract micContinue) records.
     if (op == "record" or op == "rerecord") and au.signedIn and micperm.gate != ""

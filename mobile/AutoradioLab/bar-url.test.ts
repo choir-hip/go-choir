@@ -34,7 +34,7 @@ describe('the bar sends an address or an ask', () => {
     expect(sendAsk.indexOf('ask = ""')).toBeGreaterThan(a);          // none before the first send
   });
   test('S4 signed out opens the sign-in sheet and keeps the text', () => {
-    expect(sendAsk).toContain('if offerSignIn and (canAsk or askUrl != "")\n      gate = "signin"');
+    expect(sendAsk).toContain('if au.signedIn == false and (canAsk or askUrl != "")\n      gate = "signin"');
   });
   test('S5 the Swift module and the radio verbs', () => {
     expect(read('../exact-package/apple/AutoradioModule+Spine.swift')).not.toContain('BarURL');

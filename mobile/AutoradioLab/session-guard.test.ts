@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 
 const ALLOWED: Record<string, string> = {
   'account-delete.ts': 'the run takes the key as present / absent / locked / unknown (keyAnswer) and words the unreadable two with the shared words; nothing is posted',
-  'account-state.ts': 'choirAuthState: signedIn is false for a key that could not be read, status is `locked` (the store failed) or `unknown` (no store here, or a read that threw), `idle` otherwise; accountState gives the locked and unknown views with NO action, and the contracts open the sign-in sheet only under `offerSignIn` (acs.action), pinned by contract-signin-pin.test.ts; nothing reads au.status',
+  'account-state.ts': 'choirAuthState: signedIn is false for a key that could not be read, status is `locked` (the store failed) or `unknown` (no store here, or a read that threw), `idle` otherwise; accountState gives the locked and unknown views with NO action; the contracts still open the sign-in sheet on the plain flag (an open problem, docs/problems/the-sign-in-sheet-is-offered-while-the-key-cannot-be-read-2026-11-28.md)',
   'account.ts': 'reconcile, sign-out and the pending revoke act only on present or absent; unreadable never wipes, adopts or reports a sign-out done (decide table, session-unreadable.test.ts U4 to U6)',
   'activity.ts': 'plain() asks the shared unreadableWords first',
   'api.ts': 'defines SignedOutError and the shared helpers (isUnreadable, unreadableWords, signedOutStatus); keptSession throws unknown or locked, never none, for a failed read',
