@@ -1,5 +1,7 @@
 # Storage pressure: one computer stored many times (2026-11-12)
 
+Standing: undecided | kind: wanted | settled-by: nothing; a frame, not a ruling (ACTIVE.md names it as the frame of storage solutions part 2, a mission now parked) | note: the live storage mission is definitions/choir-storage-efficiency-2026-11-22.md; whether this frame still stands beside it is not settled
+
 Class: green (design frame; nothing changed by this file). Inputs:
 [clustering assessment 2026-11-11](../problems/node-b-storage-clustering-assessment-2026-11-11.md),
 [storage review 2026-11-12](../evidence/node-b-storage-review-2026-11-12.md),

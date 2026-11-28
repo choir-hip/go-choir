@@ -1,5 +1,7 @@
 # D2 design: memory snapshots that survive a platform deploy (2026-10-26)
 
+Standing: built | kind: happened | scope: in part | settled-by: docs/system-map.md section 2 (a wake resumes the snapshot only if floor digest, security epoch and ABI match and the release is inside a 168 h window) and 727bb979e (D2 S3, release-bound launch, hibernate and wake) | note: replaces the L20 section of fp10-snapshot-levers-and-host-slab-2026-10-22.md; later slices not individually verified
+
 Station D (density), item D2 of
 [choir-density-2026-10-26.md](../archive/definitions/choir-density-2026-10-26.md).
 It supersedes the L20 section of

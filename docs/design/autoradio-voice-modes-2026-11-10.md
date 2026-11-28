@@ -1,6 +1,6 @@
 # Autoradio voice: three modes and a hybrid (2026-11-10)
 
-Standing: superseded | kind: wanted | settled-by: its own line 3 says design, not built; the owner confirmed hands-free only and removed tap to talk (docs/problems/autoradio-owner-phone-review-2026-11-15.md:80,83; fd9448be4) | replaced-by: docs/problems/autoradio-owner-phone-review-2026-11-15.md
+Standing: superseded | kind: decided | scope: in part | settled-by: owner phone review 2026-11-15: hands-free confirmed as the target and tap to talk removed (docs/problems/autoradio-owner-phone-review-2026-11-15.md:80,83; fd9448be4) | replaced-by: docs/problems/autoradio-owner-phone-review-2026-11-15.md | note: the three-modes and hybrid choice only; its audio-session and Bluetooth findings still serve the native voice code and are not replaced; not a SwiftUI design
 
 Status: design, not built. Research only; nothing here is measured on a
 phone. Mutation class of this document: green. Rollback: revert.

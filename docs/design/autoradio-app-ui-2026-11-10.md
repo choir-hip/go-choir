@@ -1,6 +1,6 @@
 # Autoradio app: one bar, many pages (2026-11-10)
 
-Standing: built | kind: happened | scope: in part | settled-by: Autoradio 1.0 build 473021 WAITING_FOR_REVIEW (docs/current-architecture.md:27); pages run as shared Exact (rows 113, 143); plan added in 3b23b6714 | note: header line 3 says design not built; the whole-app plan was built as Exact not as written, per-ruling status unchecked
+Standing: superseded | kind: decided | scope: in part | settled-by: owner 2026-11-18 and 2026-11-20, CLAUDE.md Product (the phone app is Exact, only voice is native) | replaced-by: docs/problems/autoradio-app-logic-is-swift-not-exact-2026-11-18.md | note: the lane plan that puts page logic in Kit/*.swift and AutoradioModule+*.swift (about lines 1297 to 1350) is replaced; the product design of pages, one bar and a deck of cards is built as shared Exact in part (current-architecture.md rows 113 and 143) and is not replaced
 
 Status: design, not built; the plan for a whole-app build. Mutation class:
 green (a document). Rollback: revert. Lane: `lane/ar-ui`. Companions:

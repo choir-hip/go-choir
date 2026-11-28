@@ -1,6 +1,6 @@
 # Releasing a computer's key to the owner's Mac (stage 2, S1)
 
-Standing: undecided | kind: wanted | settled-by: nothing; accepted by a review seat (Devin round 3, this file line 5), no owner ruling found | note: vault group in docs/standing.md
+Standing: undecided | kind: wanted | settled-by: nothing; accepted by a review seat (Devin round 3, this file line 5), no owner ruling found | note: releases a computer's key to the owner's Mac, which is a third thing beside the two vaults (design/secrets-vault-design-2026-10-28.md and provider-vault-and-model-policy-design-2026-10-22.md); its goal choir-mac-sync-stage2-2026-11-01.md is itself undecided and no key-release code was found in internal/
 
 Date: 2026-11-01. Status: design v3, accepted by Devin round 3 (red; the build is tier 2).
 v1 (c153b24f8) was sent back by Devin and DeepSeek, v2 (aef02845a) by Devin;

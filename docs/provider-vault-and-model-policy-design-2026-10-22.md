@@ -1,6 +1,6 @@
 # Provider key vault, host model policy and agentic model onboarding: design
 
-Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): proposal, not owner-ratified | note: vault group in docs/standing.md
+Standing: undecided | kind: wanted | settled-by: nothing; status line 5: proposal, not owner-ratified (the owner rulings R1 to R5 of 2026-10-23 in its section 9 answer five open questions, they do not ratify the design) | note: overlaps design/secrets-vault-design-2026-10-28.md, both keep the platform's secrets; owner 2026-11-27 'we need two vaults' (docs/inbox.md lines 167-169); which design serves the platform vault is open; no vault service was found in internal/, cmd/ or nix/
 
 Date: 2026-10-22. Status: proposal (FP0 design worker; not owner-ratified).
 Mutation class of this document: green (docs only). The slices it plans

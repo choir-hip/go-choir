@@ -1,6 +1,6 @@
 # Autoradio: the first app is a lab (2026-11-10)
 
-Standing: built | kind: happened | scope: in part | settled-by: mobile/AutoradioLab exists (29e01354f, the Autoradio iOS app on Exact); docs/current-architecture.md:115 names the lab app variants | note: header line 3 says not built; the lab's runtime-configuration and replay stages not verified
+Standing: built | kind: happened | scope: in part | settled-by: mobile/AutoradioLab exists (29e01354f, the Autoradio iOS app on Exact); docs/current-architecture.md:115 names the lab app variants; owner 2026-11-10 in its own line 31: 'no swiftui please. lets do all exact' | note: not a SwiftUI design; its Swift kit modules stand only for voice, the rest is narrowed by the 2026-11-18 Exact rule (CLAUDE.md Product); runtime-configuration and replay stages not verified
 
 Status: design, not built. Mutation class of this document: green.
 Rollback: revert. It frames the first build of the

@@ -1,5 +1,7 @@
 # Snapshot in one pass: no scratch copy, no logical witness at capture (2026-11-22)
 
+Standing: governing | kind: decided | settled-by: owner 2026-11-22 in the authority field of definitions/choir-storage-efficiency-2026-11-22.md (stations S2 and S3 are this design); stage A1 landed as 9e3e2060f (restore verifies a version 2 record by its page digest) | note: replaces snapshot-without-scratch-copy-2026-11-20.md; the capture half (station S3, no scratch copy) is not built, docs/changes.md says no capture writes the version 2 record yet
+
 Class of this file: green (a design). It supersedes
 [snapshot-without-scratch-copy-2026-11-20.md](snapshot-without-scratch-copy-2026-11-20.md),
 which kept the witness inside the read transaction; a witness of the paper

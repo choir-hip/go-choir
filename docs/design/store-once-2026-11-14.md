@@ -1,5 +1,7 @@
 # Store once: where a computer's bytes should live
 
+Standing: undecided | kind: wanted | settled-by: nothing; status line: design, nothing built; the owner request in its header is a question, not a ruling | note: its mission, definitions/choir-storage-solutions-3-store-once-2026-11-14.md, is listed as superseded by the storage efficiency mission in evidence/mission-closing-verdicts-2026-11-27.md, which the owner has not read; run-memory retirement (d46fb88b7) landed from its R-rows; sibling restore-bases-store-once-2026-11-15.md was set aside
+
 Written 2026-11-14T00:07Z by the lead (not delegated), on the owner's
 request: "we are storing stuff redundantly, and it's not strategic ... what
 are some strategic refactors that would make the system much more

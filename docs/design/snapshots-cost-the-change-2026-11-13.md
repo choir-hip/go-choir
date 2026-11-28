@@ -1,5 +1,7 @@
 # Snapshots that cost the change (2026-11-13)
 
+Standing: superseded | kind: decided | scope: in part | settled-by: design/snapshot-one-pass-2026-11-22.md, which drops the logical witness this file's section 7 keeps (governing, owner 2026-11-22 mission) | replaced-by: docs/design/snapshot-one-pass-2026-11-22.md | note: section 7 (why the witness stays) only; the changed-chunks and keep-two parts are not shown built or set aside
+
 Status: revised after review round 1 (both seats REPAIR). The round-1
 dispositions are in section 10.
 

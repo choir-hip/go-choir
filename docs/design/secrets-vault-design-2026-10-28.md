@@ -1,6 +1,6 @@
 # Secrets vault design (draft, 2026-10-28; revision 2)
 
-Standing: undecided | kind: wanted | settled-by: nothing; this file's status (line 5): draft for re-review, nothing authorized to execute | note: line 386 says 'design accepted; execution held by the owner' in review notes; no owner ruling found; see docs/standing.md, vault group
+Standing: undecided | kind: wanted | settled-by: nothing; status line 5: draft for re-review, nothing authorized to execute; line 386 says 'design accepted; execution held by the owner' but quotes no owner ruling | note: overlaps provider-vault-and-model-policy-design-2026-10-22.md, which also plans a platform key vault; owner 2026-11-27 'we need two vaults' (docs/inbox.md lines 167-169); which design serves the platform vault, and whether people's credentials get a new design, is open; no vault service was found in internal/, cmd/ or nix/
 
 Status: draft for re-review. Not built; nothing in this document is authorized
 to execute. Owner requirement, 2026-10-28 (goal
