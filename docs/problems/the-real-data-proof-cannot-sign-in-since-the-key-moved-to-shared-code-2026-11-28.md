@@ -39,6 +39,10 @@ What the run did show, signed out, on main `bb10f2d21`: the app builds,
 installs and launches; the paper loads real stories; a story opens in the
 reader; the radio plays and the bar shows the entry on air.
 
+## Correction (2026-11-28)
+
+The Keychain item is the same item in a normal launch, but an agent drive does not read the Keychain: its secret store is memory or files in the drive's scratch tree (`EXACT_STORE=real` is needed for the Keychain, and `exact-env.sh` drops it). See [the plan](../design/proof-sign-in-after-the-key-moved-2026-11-28.md). Also: shared sign-out now revokes the held key on the server, so a signed-in drill would revoke the QA key.
+
 ## Remaining error
 
 - The proof needs a way to sign in a simulator that shared code will read. It
