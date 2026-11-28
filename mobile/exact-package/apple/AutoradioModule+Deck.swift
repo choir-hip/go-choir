@@ -45,7 +45,7 @@ extension AutoradioModule {
     }
 
     func registerDeck() {
-        Deck.shared.boot() // a kill leaves no item open when the first package state is read
+        _ = onMainThread { Deck.shared.boot() } // a kill leaves no item open when the first package state is read
         onMainThread { Deck.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.touch(["deckState"]) } } }
         handle("deckState") { [unowned self] _, reply in reply(self.json(onMainThread { Deck.shared.snapshot() })) }
         handle("deckPlay") { [unowned self] args, reply in self.deckSend("deckPlay", args, reply) }
