@@ -175,7 +175,6 @@ public final class LabRuntime: @unchecked Sendable {
                             voiceProcessing: coordinator.current == .talking, virtual: virtual)
             if virtual { log.emit(.note("virtual audio: no hardware is opened; mic frames are injected")) }
             started = true
-            LaunchTimings.shared.mark("engine"); LaunchTimings.shared.mark("session")
             let mic = bus.mic()
             let echo = audio.voiceProcessing
             let on = handsFreeOverride ?? HandsFreeSwitch.shared.isOn

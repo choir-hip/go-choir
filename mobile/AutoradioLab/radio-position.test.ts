@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { adoptNative } from './api.ts';
 import { forgetOnboarding } from './onboarding.ts';
 import { radioPage } from './radio-page.ts';
-import { airAddressOf, respondsOf } from './voice-facts.ts';
+import { respondsOf } from './voice-facts.ts';
 import type { Entry } from './runsheet-model.ts';
 import { barRun, getRadio, radioHold, queueAct, queueView, radioMove, radioPageFacts, radioPlayAudio, radioPlayStory, radioPulse, wipeRadio } from './radio-bridge.ts';
 
@@ -318,8 +318,7 @@ describe('P11 a pulse begun before sign-out and delivered after it changes nothi
     expect(set).toBeDefined();
     const facts = set!.facts as { id: string; state: string }[];
     expect(facts.some((x) => x.state === 'on_air')).toBe(true);
-    expect(set!.airAddress).toBe('');                                              // an episode on air is no page: an empty address, not a made-up one
-    expect(typeof set!.airAddress).toBe('string'); expect(typeof set!.respondsRoute).toBe('string'); expect(typeof set!.respondsTitle).toBe('string');
+    expect(typeof set!.respondsRoute).toBe('string'); expect(typeof set!.respondsTitle).toBe('string');
     expect(set!.sheet).toBeUndefined(); expect(set!.onAir).toBeUndefined();
   });
   test('V5b a story on air: radioSet names its page (the reader\'s follow-along) and what a take responds to', async () => {
@@ -331,7 +330,7 @@ describe('P11 a pulse begun before sign-out and delivered after it changes nothi
     const set = pushed.filter((p) => Array.isArray(p.facts)).pop();
     const r = await getRadio(undefined, spy as never);
     const air = r.rt.store.onAir();                                                   // whatever is on air, the push names ITS page and ITS story (voice-facts.test.ts V3, V6 hold the rules)
-    expect(set!.airAddress).toBe(airAddressOf(air)); expect(set!.respondsRoute).toBe(respondsOf(air)?.route ?? '');
+    expect(set!.airAddress).toBeUndefined(); expect(set!.respondsRoute).toBe(respondsOf(air)?.route ?? '');
   });
   test('the stamped calls: radioSet, editionMirror and the sign-out calls carry gen', () => {
     const c = (f: string): string => readFileSync(new URL(f, import.meta.url), 'utf8');

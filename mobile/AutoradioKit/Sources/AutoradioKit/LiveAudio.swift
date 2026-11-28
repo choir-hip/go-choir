@@ -733,18 +733,11 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     public func setConfiguration(_ c: LabConfiguration) { lock.lock(); configuration = c; lock.unlock() }
     /// The chosen voice, as the cache keys it: a changed voice is another key.
     public var voiceKey: String { lock.lock(); defer { lock.unlock() }; return String(describing: configuration.setting(.voice)) }
-    /// Load the chosen voice by making one short line (never played, never timed into the launch line).
+    /// Load the chosen voice by making one short line (never played).
     public func warmVoice() async -> Bool {
         lock.lock(); let cfg = configuration; lock.unlock()
         var why = ""
-        return await synthesize("Ready.", with: cfg, why: &why, timed: false) != nil
-    }
-    /// Make the audio of one block for the cache: only the chosen voice belongs under its cache key.
-    public func synthesizeForCache(_ text: String) async -> PreparedAudio? {
-        lock.lock(); let cfg = configuration; lock.unlock()
-        var why = ""
-        guard let m = await synthesize(text, with: cfg, why: &why, timed: false, allowFallback: false) else { return nil }
-        return PreparedAudio(text: text, samples: m.samples, rate: m.rate)
+        return await synthesize("Ready.", with: cfg, why: &why) != nil
     }
     /// Per-document state dies with the document: the block index and where the loop ran dry (`resumeAt`).
     public func setDocument(_ d: ProgrammeDocument) {
@@ -996,7 +989,6 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
             if tag == firstTag {
                 let ms = Int((Date().timeIntervalSince(startedAt)) * 1000)
                 print("AUTORADIO on air \(st.read { $0.document.id }) voice=\(current.setting(.voice)?.id ?? "") samples=\(made.samples.count) first_audio_ms=\(ms)")
-                LaunchTimings.shared.printLine(source: "live")
             } else {
                 print("AUTORADIO on air \(st.read { $0.document.id }) block=\(tag) samples=\(made.samples.count)")
             }
@@ -1055,13 +1047,10 @@ public final class ProgrammePlayer: PlaybackControl, @unchecked Sendable {
     /// True while a block of speech is being made (the vector job waits on it).
     public var synthesisBusy: Bool { synthDepth.read { $0 > 0 } }
     private let synthDepth = Locked(0)
-    private func synthesize(_ text: String, with cfg: LabConfiguration, why: inout String, timed: Bool = true, allowFallback: Bool = true) async -> Synthesized? {
+    private func synthesize(_ text: String, with cfg: LabConfiguration, why: inout String, allowFallback: Bool = true) async -> Synthesized? {
         synthDepth.write { $0 += 1 }; defer { synthDepth.write { $0 -= 1 } }
         let voice: Voice
-        let t0 = Date()
-        var loaded = t0
-        defer { if timed { LaunchTimings.shared.mark("synth", ms: Date().timeIntervalSince(loaded) * 1000) } }
-        do { voice = try registry.makeSpeaker(cfg, log: log, allowFallback: allowFallback); loaded = Date(); if timed { LaunchTimings.shared.mark("voice_load", ms: loaded.timeIntervalSince(t0) * 1000) } } catch {
+        do { voice = try registry.makeSpeaker(cfg, log: log, allowFallback: allowFallback); } catch {
             why = "the voice \(cfg.setting(.voice)?.id ?? "") could not be made: \(error)"
             log.emit(.error(stage: "voice", message: why)); return nil
         }

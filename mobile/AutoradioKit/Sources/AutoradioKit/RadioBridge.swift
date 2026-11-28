@@ -14,7 +14,6 @@ public final class RadioBridge: @unchecked Sendable {
     private var factsJSON: Data?
     private var respondsValue: TakeResponds?
     private var hasOnAirEntry = false
-    private var airAddressValue = ""
     private var candidateList: [(route: String, title: String)] = []
     private var signedOutAck = false
     /// Set by the app module: asks shared code to look again (touches `radioNote`).
@@ -47,8 +46,8 @@ public final class RadioBridge: @unchecked Sendable {
     /// `gen` is the account generation shared code computed this under (`SharedGeneration`): a push for an account that has since signed out is dropped, not stored where the next account's voice turn would carry it.
     /// `facts`: the entries on air and ahead as the voice's retrieval reads them (JSON text, AutoradioLab/voice-facts.ts); `responds`: the story on air, for a take's provenance (nil when none).
     @discardableResult
-    public func set(gen: Int, snapshot: Data?, facts: Data?, responds: TakeResponds?, onAir: Bool = false, airAddress: String = "", candidates: [(route: String, title: String)] = []) -> Bool {
-        SharedGeneration.admit(gen) { lock.lock(); queueJSON = snapshot; factsJSON = facts; respondsValue = responds; hasOnAirEntry = onAir; airAddressValue = airAddress; candidateList = candidates; lock.unlock() }
+    public func set(gen: Int, snapshot: Data?, facts: Data?, responds: TakeResponds?, onAir: Bool = false, candidates: [(route: String, title: String)] = []) -> Bool {
+        SharedGeneration.admit(gen) { lock.lock(); queueJSON = snapshot; factsJSON = facts; respondsValue = responds; hasOnAirEntry = onAir; candidateList = candidates; lock.unlock() }
     }
     /// The paper's list the desk may add from, as shared code last said (the turn's `candidates`, up to 40; empty before the first pump).
     public func candidates() -> [(route: String, title: String)] { lock.lock(); defer { lock.unlock() }; return candidateList }
@@ -56,12 +55,10 @@ public final class RadioBridge: @unchecked Sendable {
     public func facts() -> [[String: Any]] { lock.lock(); let d = factsJSON; lock.unlock(); return d.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [[String: Any]] } ?? [] }
     /// The story on air as shared code last said (nil when none): what a take's "responds to" reads.
     public func responds() -> TakeResponds? { lock.lock(); defer { lock.unlock() }; return respondsValue }
-    /// The page the entry on air is reading (`pub:<route>` or `texture:<id>`), as shared code last said; empty when none. The reader's follow-along matches the spoken sentence against it.
-    public func airAddress() -> String { lock.lock(); defer { lock.unlock() }; return airAddressValue }
     /// Is an entry on air, as shared code last said?
     public func hasOnAir() -> Bool { lock.lock(); defer { lock.unlock() }; return hasOnAirEntry }
     /// Sign-out: nothing of the old account is kept.
-    public func wipe() { lock.lock(); inbox = []; queueJSON = nil; factsJSON = nil; respondsValue = nil; hasOnAirEntry = false; airAddressValue = ""; candidateList = []; lock.unlock() }
+    public func wipe() { lock.lock(); inbox = []; queueJSON = nil; factsJSON = nil; respondsValue = nil; hasOnAirEntry = false; candidateList = []; lock.unlock() }
 }
 
 /// The account generation shared code stamps on what it pushes to a native mirror (`radioSet`, `editionMirror`, `pageText`): the `OpenPageFacts.replace(gen:)` pattern for the mirrors that had none. A push is kept when its generation

@@ -50,7 +50,6 @@ public final class ChoirApp: @unchecked Sendable {
 
     public init(runtime: LabRuntime, keys: KeyStore, baseURL: String = ChoirEnvironment.defaultBaseURL) {
         self.runtime = runtime
-        LaunchTimings.shared.begin()
         ChoirEnvironment.shared.keys = keys
         ChoirEnvironment.shared.log = runtime.log
         signIn = ChoirSignIn(baseURL: baseURL)
@@ -183,13 +182,10 @@ public final class ChoirApp: @unchecked Sendable {
     func ensureEngine(reason: String = "play") async -> String? {
         if runtime.snapshot().running {
             let ok = await runtime.ensureSessionReady(reason: reason)
-            LaunchTimings.shared.mark("engine")
-            if ok { LaunchTimings.shared.mark("session") }
             return ok ? nil : "the audio session could not be taken"
         }
         if let go = runtime.startRequest { await go() } else { await runtime.start() }
         let s = runtime.snapshot()
-        if s.running { LaunchTimings.shared.mark("engine"); LaunchTimings.shared.mark("session") }
         return s.running ? nil : (s.message.isEmpty ? "the audio engine did not start" : s.message)
     }
 
