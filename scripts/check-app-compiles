@@ -64,6 +64,10 @@ COMMON = [  # what both builds read
     "mobile/scripts/stage-app.sh",
     "mobile/scripts/sync-exact-package.sh",
     "mobile/scripts/exact.sh",
+    "mobile/scripts/exact-guard.sh",  # every exact.sh run, on either platform, passes these
+    "mobile/scripts/exact-args.sh",
+    "mobile/scripts/check-exact-pin.sh",
+    "mobile/scripts/app-identity.sh",
 ]
 NEEDED_IOS = COMMON + [
     "mobile/exact-package/apple/",
@@ -81,10 +85,6 @@ NEEDED_ANDROID = COMMON + [
     "mobile/scripts/gen_android_model_catalog.py",
     "mobile/scripts/gen-exact-interface.py",  # stage-app.sh runs it for android
     "mobile/scripts/exact-env.sh",  # finds the JDK, the SDK and the model check
-    "mobile/scripts/exact-guard.sh",
-    "mobile/scripts/exact-args.sh",
-    "mobile/scripts/check-exact-pin.sh",
-    "mobile/scripts/app-identity.sh",
 ]
 JDK_DEFAULT = "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"  # the place exact-env.sh looks when JAVA_HOME is unset
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
