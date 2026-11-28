@@ -219,9 +219,9 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: E1 landed (b32112d53); E5 and E6 continue; the next moves are ranked in the iOS and Android difference audit
-  source_ref: origin/main b32112d53
-  deploy_identity: staging on b32112d53
+  slice: 'E5: the bar URL rule (d61b266cf) and the reader''s aim (ddb2d0f5c) are shared code; non-voice native is 3,006 lines and 13 names; the sentence follow is being built from the reviewed plan (docs/design/sentence-follow-in-shared-code-2026-11-28.md)'
+  source_ref: origin/main ddb2d0f5c
+  deploy_identity: staging on ddb2d0f5c
   candidate:
     id: none
     state: none
@@ -250,7 +250,7 @@ now:
     main_uncertainty: 'whether the owner counts the voice turn''s state as voice (it decides whether the gate can reach zero without rewriting the turn), and whether the build tree may move'
     next_observation: 'the contract build and bun test on the new pin, once the build tree may move'
   blocker_or_risk: 'The app-side Swift has no compile check that runs without a person: main did not compile as an iPhone app from ce79438a8 until e25afe05f, 31 hours (docs/problems/main-broke-the-iphone-app-build-for-a-day-and-no-check-saw-it-2026-11-28.md); the owner is asked which check closes it. The build tree was moved to main on 2026-11-28 on the owner''s word to land the Android work (its old state is on branch deck-build 4b46ca522); D5 is answered by that. Nothing of K3 has run on a device or a simulator.'
-  next_action: 'the next E5 slices and the moves ranked in the iOS and Android difference audit (model catalog and selection to shared code wait on D2); device checks are owed for everything landed'
+  next_action: 'land the sentence follow report and reader follow (plan slices S0 and S2+S3), then the bar facts (S4); a landing that touches app-side Swift now compiles the iPhone app (aaad08a1d); device checks are owed for everything landed'
 receipts: []
 ---
 
