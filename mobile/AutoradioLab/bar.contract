@@ -16,7 +16,8 @@
 // above it, so the bar stays visible and usable under them.
 // testIds: bar-stack, bar, bar-mark, bar-field, bar-mic, bar-send, bar-play, bar-text, bar-aim, bar-setup, bar-yield, bar-progress,
 // page-indicator, content-row (content.contract), bar-answer, bar-asked, bar-answer-text, bar-answer-working, bar-answer-note, bar-answer-retry, bar-answer-cancel, bar-answer-close.
-use Theme, PageList, RadioInfo, ReaderAimInfo, Onboarding from "@choir/autoradio"
+use Theme, PageList, RadioInfo, Onboarding from "@choir/autoradio"
+use ReaderAimInfo from "./reader-types.contract"
 use BarInfo from "./bar-types.contract"
 use MailMessageView from "./mail-types.contract"
 use BarMark from "./tetramark.contract"

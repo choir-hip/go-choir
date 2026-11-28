@@ -1,7 +1,7 @@
 import Foundation
 
-// What the voice shares with the shared reader: the block and sentence the radio is reading (set by the bar's voice turn, matched against the page the shared reader handed over) and what the
-// bar's prompt is aimed at (the voice turn reads it). The reader PAGE is shared code (AutoradioLab/reader.ts); the document fetch, the edition lookup and the address splitter that lived beside these
+// What the voice shares with the shared reader: the block and sentence the radio is reading (set by the bar's voice turn, matched against the page the shared reader handed over). What the bar's
+// prompt is aimed at is shared code's now (AutoradioLab/reader-aim.ts). The reader PAGE is shared code (AutoradioLab/reader.ts); the document fetch, the edition lookup and the address splitter that lived beside these
 // are gone with the Swift Texture editor and notebook.
 
 public struct ReaderFollowInfo: Codable, Sendable, Equatable {
@@ -45,25 +45,6 @@ public final class ReaderFollow: @unchecked Sendable {
         }
         return nil
     }
-}
-
-public struct ReaderAimInfo: Codable, Sendable, Equatable {
-    public var address: String
-    public var blockId: String
-    public var label: String
-    public init(address: String = "", blockId: String = "", label: String = "") { self.address = address; self.blockId = blockId; self.label = label }
-}
-
-/// What the bar's prompt is aimed at: a document, or one block of it. Cleared when the listener leaves the document.
-public final class ReaderAim: @unchecked Sendable {
-    public static let shared = ReaderAim()
-    private let lock = NSLock()
-    private var _info = ReaderAimInfo()
-    public init() {}
-    public var onChange: (@Sendable () -> Void)?
-    public var info: ReaderAimInfo { lock.lock(); defer { lock.unlock() }; return _info }
-    public func set(_ i: ReaderAimInfo) { lock.lock(); _info = i; lock.unlock(); onChange?() }
-    public func clear() { set(ReaderAimInfo()) }
 }
 
 /// The sentence the radio is saying, by address, so the reader lights it (the app module's `radioView` feeds it). Only a CHANGE is passed on; when nothing plays the follow is cleared. A follow that was

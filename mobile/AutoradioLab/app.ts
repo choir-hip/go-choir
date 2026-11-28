@@ -24,6 +24,7 @@ import { notebookShared } from './notebook-run.ts';
 import { syncContent } from './content-run.ts';
 import * as mail from './mail.ts';
 import { barInfo, dismissAnswer } from './bar.ts';
+import { aimView, setAim } from './reader-aim.ts';
 import { heartbeat } from './heartbeat.ts';
 import * as radioBridge from './radio-bridge.ts';
 import { radioPage } from './radio-page.ts';
@@ -212,6 +213,9 @@ const sources: Sources = {
   takesAct: ([op, arg], _s, storage) => takesAct(takesEnv(storage), takes(), op, arg),
   // The reader (reader.ts): the story or document in front, and what its page does to it.
   readerDocShared: ([address, acc, saved, _tick]) => readerDocShared(address, acc, saved),
+  // What the bar's prompt is aimed at (reader-aim.ts): shared code, so Android has it. The open pages and the document in front are arguments, so an aim at a page that closed or a block that went is dropped.
+  readerAimShared: ([_tick, open, docAddress, docStatus, blocks]) => aimView(open, docAddress, docStatus, blocks),
+  readerAimSetShared: ([address, blockId, label]) => setAim(address, blockId, label),
   readerStopShared: ([address]) => readerStop(address),
   readerRestoreShared: ([address, version]) => readerRestore(address, version),
   readerReloadShared: ([address]) => readerReload(address),

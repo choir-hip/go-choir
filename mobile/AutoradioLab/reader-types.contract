@@ -1,0 +1,7 @@
+// What the bar's prompt is aimed at. Declared here and answered by `app.ts` (reader-aim.ts: `aimView`, `setAim`); it was the Swift package's (interface/reader.json `ReaderAimInfo`, source `readerAim`)
+// before the aim moved to shared code. `blockId` is empty for a whole document.
+
+shape ReaderAimInfo
+  address: string
+  blockId: string
+  label: string

@@ -355,11 +355,6 @@
       "blockId": "string",
       "sentence": "number"
     },
-    "ReaderAimInfo": {
-      "address": "string",
-      "blockId": "string",
-      "label": "string"
-    },
     "ReaderAck": {
       "ok": "bool"
     },
@@ -855,27 +850,6 @@
           "sentence": -1
         }
       }
-    },
-    {
-      "source": "readerAim",
-      "live": true,
-      "answers": "ReaderAimInfo",
-      "substitute": {
-        "default": {
-          "address": "",
-          "blockId": "",
-          "label": ""
-        }
-      }
-    },
-    {
-      "send": "readerAimSet",
-      "options": {
-        "address": "string",
-        "blockId": "string",
-        "label": "string"
-      },
-      "answers": "ReaderAimInfo"
     },
     {
       "send": "readerOpenExternal",

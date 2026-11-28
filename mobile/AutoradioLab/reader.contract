@@ -10,7 +10,8 @@
 //          reader-card-source-<anchor>, reader-card-open-<anchor>, reader-source-<n>, reader-sources, reader-related-<address>,
 //          reader-sheet(-layer, -scrim), reader-web(-view; the host, close, read, add and safari are in content.contract), reader-revising, reader-stop, reader-aim, reader-aim-clear, reader-md, reader-newer.
 use Theme, ReaderDoc, ReaderBlock, ReaderRun, ReaderCite from "@choir/autoradio"
-use ReaderFollowInfo, ReaderAimInfo from "@choir/autoradio"
+use ReaderFollowInfo from "@choir/autoradio"
+use ReaderAimInfo from "./reader-types.contract"
 use PageScroll, Card, Layer, Btn, BarClear, RowRule from "./ui.contract"
 use ClipRow from "./clips.contract"   // lane autoradio-joins
 use ClipRows from "./podcast-types.contract"

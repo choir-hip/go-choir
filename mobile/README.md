@@ -741,7 +741,7 @@ Files: `reader.contract`, `textures.contract`, `members-reader.contract`; Kit `T
 - `pub:<route>` and `texture:<doc>[@rev]` both become a `ReaderDoc` (flat blocks of runs; no body_doc falls back to Markdown). Citations are tappable
   runs (`reader-cite-<anchor>`), cards open in place (`reader-card-<anchor>`), "Open source" opens a sheet with the quote highlighted in its block; a
   Texture transclusion is a nested card with "Open as page". Sources list, More on this, versions sheet, page menu, revising banner (`agent_revision_pending`).
-- Read along: lane 1 calls `ReaderFollow.shared.set(address:spoken:)`; matched by text. Aim: `ReaderAim.shared` / `raim` resource (long-press a paragraph, or the menu).
+- Read along: lane 1 calls `ReaderFollow.shared.set(address:spoken:)`; matched by text. Aim: shared code (`AutoradioLab/reader-aim.ts`, the `raim` resource; long-press a paragraph, or the menu).
 - Experiments with no control now (the demo menu that offered them is gone): side notes (textflow) and Markdown with atom pills.
 
 ## Files and the viewers (lane 5)
@@ -777,7 +777,7 @@ Decisions made at the seams:
   applies (the setup no longer forces "open"). Gesture meanings: Settings' `swipeLeft`/`swipeRight`, handed to lane 4's `Preferences`
   (`syncGestureMeanings`), and lane 4's own buttons write back to Settings. "What the paper has learned": `PreferencesLearned`, over lane 4's acts.
 - **Signed out** the paper is the root; sign-in is the passkey screen the paper's Sign in button opens (`app-signin.ts`; the old device-code screen and `au.status == "pending"` are gone, and `ChoirAuth` has no `userCode` or `verificationURL`).
-- **Bar**: a page-colour backing under the glass (`th.paper`, 0.82), the aim reads `readerAim` (a block of the open document) and `ob.aim` before setup;
+- **Bar**: a page-colour backing under the glass (`th.paper`, 0.82), the aim reads `raim` (reader-aim.ts; a block of the open document) and `ob.aim` before setup;
   the mic level (`RadioInfo.micLevel`, from the audio bus) reaches `MarkAt(level=)`; lane 1 feeds `ReaderFollow` with the sentence being spoken.
 - **Proof state.** `defaults write` from `simctl spawn` does not override what the app itself has written (theme, mode, talk mode, gestures live in
   the app's own preferences file): `proof-real.sh` removes the app's plist.
