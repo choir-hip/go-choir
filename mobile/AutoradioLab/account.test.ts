@@ -17,6 +17,7 @@
 //      store of the old account is left, shared or Swift, and a new account is adopted clean. Findings 1 to 4 of the round are rows here.
 //  S10 a different account's key at launch (the stamp) wipes the old data first; the same account, or a phone with no key, keeps it.
 import { describe, expect, test } from 'bun:test';
+import { setAim, aimView, forgetAim } from './reader-aim.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { accountSignOut, accountNative, adoptKey, retryPendingRevoke, PENDING_REVOKE_FILE, REVOKE_PENDING_NOTE, REVOKE_NOID_NOTE, WIPES, DATA_WIPES, wipeAll, wipedPaths, settleAccount, resetSettled, reconcile, decide, nativeOf, PENDING_FILE, STAMP_FILE, type Facts } from './account.ts';
 import { createHash } from 'node:crypto';
@@ -526,6 +527,23 @@ describe('S19 a key that replaces the key of another account in the same launch'
     const r = await settleAccount(m.storage, undefined);
     expect(r.action).toBe('account-change');
     expect(W.native).toEqual(['wipe']); expect(dataLeft(m)).toEqual([]); expect(W.swift).toBe(false);
+  });
+  test('S19-aim a different account\'s key in a running app leaves nothing of the old account\'s aim: the wipe moves the generation before any source answers', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); forgetAim();
+    setAim('pub:a', 'b1', 'A paragraph of the first account\'s document');
+    expect(aimView('pub:a', 'pub:a', 'ready', 'b1')).toEqual({ address: 'pub:a', blockId: 'b1', label: 'A paragraph of the first account\'s document' });
+    adoptKey(store(), 'choir_sk_test-key-B-not-real', 'ak_b');
+    const r = await settleAccount(m.storage, undefined);                  // what every source's first answer awaits (app.ts)
+    expect(r.action).toBe('account-change');
+    expect(aimView('pub:a', 'pub:a', 'ready', 'b1')).toEqual({ address: '', blockId: '', label: '' });      // the page is still open and the block still there: only the account moved
+  });
+  test('the same account signing in again keeps its aim', async () => {
+    W = newWorld('present'); const m = memFs(SEED);
+    await launch(m); forgetAim(); setAim('pub:a', '', 'Doc');
+    adoptKey(store(), W.value, 'ak_a');
+    expect((await settleAccount(m.storage, undefined)).action).toBe('nothing');
+    expect(aimView('pub:a', '', '', '').label).toBe('Doc');
   });
   test('the same account signing in again keeps its data', async () => {
     W = newWorld('present'); const m = memFs(SEED);

@@ -20,7 +20,7 @@ members Autoradio
   // The block and sentence the radio is reading (set by the radio); what the bar's prompt is aimed at.
   resource rfollow = readerFollow() as shape ReaderFollowInfo else empty()
   // The aim is shared code (reader-aim.ts): the open pages and the document in front are given, so an aim at a page that closed or a block that went is dropped.
-  resource raim = readerAimShared(signedOutTick, pg.rows.map(p => p.address).join("\n"), rdoc.address, rdoc.status, rdoc.blocks.map(b => b.id).join("\n")) as shape ReaderAimInfo else empty()
+  resource raim = readerAimShared(`${signedOutTick}|${acs.state}`, pg.rows.map(p => p.address).join("\n"), rdoc.address, rdoc.status, rdoc.blocks.map(b => b.id).join("\n")) as shape ReaderAimInfo else empty()
   mutation rack as shape ReaderAck refreshes tlist, rdoc
   // Opening a link outside the app changes no document: it does not refresh the Textures list.
   mutation rext as shape ReaderAck

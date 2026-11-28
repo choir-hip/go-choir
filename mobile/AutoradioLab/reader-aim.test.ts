@@ -86,7 +86,7 @@ describe('the reader aim', () => {
     const members = read('./members-reader.contract');
     expect(members).toMatch(/resource raim = readerAimShared\(([^\n]*)\) as shape/);
     const args = /resource raim = readerAimShared\(([^\n]*)\) as shape/.exec(members)?.[1] ?? '';
-    for (const need of ['signedOutTick', 'pg.rows', 'rdoc.address', 'rdoc.status', 'rdoc.blocks']) expect(args).toContain(need);
+    for (const need of ['signedOutTick', 'acs.state', 'pg.rows', 'rdoc.address', 'rdoc.status', 'rdoc.blocks']) expect(args).toContain(need);
     expect(members).toMatch(/mutation raimm as shape ReaderAimInfo refreshes raim/);
     expect(members).toContain('readerAimSetShared(');
     expect(members).not.toMatch(/use [^\n]*readerAim\b[^\n]*from "@choir\/autoradio"/);
