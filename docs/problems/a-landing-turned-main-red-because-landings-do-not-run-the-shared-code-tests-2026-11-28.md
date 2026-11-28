@@ -1,6 +1,6 @@
 # A landing turned main red because landings do not run the phone app's shared-code tests
 
-Standing: governing | kind: happened | settled-by: CI run 46105470562 on f0fc8c7f4 (red) and the landing of 992bb1881 (green, staging serves it), 2026-11-28 | note: the landing path still does not run these tests
+Standing: governing | kind: happened | settled-by: CI run 46105470562 on f0fc8c7f4 (red) and the landing of 992bb1881 (green, staging serves it), 2026-11-28 | note: the landing path runs the CI-shaped run (no Exact); the run with Exact is open
 
 ## Problem
 
@@ -32,7 +32,7 @@ Two things are wrong, and only the first is fixed.
 
 ## Remaining error
 
-- The symbol test no longer runs in CI, so CI does not guard against a new
-  blank icon. Only a `bun test` in a lane or the build tree does.
-- The suite takes about six minutes locally with Exact. Whether both runs
-  belong in every mobile landing, or only the CI-shaped one, is not decided.
+- Repaired for the CI shape: `scripts/check-shared-code-tests` runs in `scripts/land` after the gates when a path the tests read changes (`docs/changes/2026-11-28-landings-run-the-shared-code-tests.md`).
+- Seen on the first real run: the CI-shaped suite takes about six minutes here (365 s of tests), not the 20 s `ci.yml` says. Whether a runner is faster is not checked.
+- Open: the run with Exact present, as a lane runs it. It needs the build tree's Exact checkout and `scripts/sync-exact-package.sh` in the copy, and would add those minutes to a landing or need the Mac build lock to run beside the suites. A test that fails only where Exact is present still reaches main unseen.
+- The symbol test no longer runs in CI, so CI does not guard against a new blank icon. Only a `bun test` in a lane or the build tree does. The open run above is what would catch it.

@@ -11,7 +11,8 @@
 #        7 fetch again, rebase if main moved (rerun once if it touched a tested
 #          package or its dependencies), push, report Ring-Expedite status.
 #        Step 4 also compiles the iPhone app in the build tree when the train touches
-#        app-side Swift or what it compiles against (scripts/check-app-compiles).
+#        app-side Swift or what it compiles against (scripts/check-app-compiles), and runs
+#        the phone-app shared-code tests as CI does (scripts/check-shared-code-tests).
 #
 # A conflict only in docs/changes.md or the calibration ledger (every lane adds
 # at the top) keeps both sides; any other conflict stops. A changed agentcore or
@@ -64,7 +65,7 @@ if [ -z "${LAND_STAGE_DIR:-}" ]; then
   stage=$(mktemp -d "${TMPDIR:-/tmp}/land-stage.XXXXXX") || exit 1
   echo $$ >"$stage/.stage-owner" || exit 1
   src=$(cd "$(dirname "$0")" && pwd -P)
-  cp "$src/land" "$stage/land" && { cp "$src/gates" "$stage/gates" 2>/dev/null || true; cp "$src/check-app-compiles" "$stage/check-app-compiles" 2>/dev/null || true; }
+  cp "$src/land" "$stage/land" && { cp "$src/gates" "$stage/gates" 2>/dev/null || true; cp "$src/check-app-compiles" "$stage/check-app-compiles" 2>/dev/null || true; cp "$src/check-shared-code-tests" "$stage/check-shared-code-tests" 2>/dev/null || true; }
   cp "$src/land-timing.sh" "$stage/land-timing.sh" 2>/dev/null || true
   LAND_STAGE_DIR=$stage exec bash "$stage/land" "$@"
 fi
@@ -292,9 +293,11 @@ make_plan() { # $1 = base
   PKGS_ALL=$(printf '%s\n' "$SEL" | awk -F'\t' '$1=="PKG"{print $2}' | tr '\n' ' ')
   PKGS_CHANGED=$(printf '%s\n' "$SEL" | awk -F'\t' '$1=="PKG" && ($3=="changed"||$3=="test"){print $2}' | tr '\n' ' ')
   files=$(git diff --name-only --no-renames "$1" HEAD)
-  NIX=0; FE=0; GH=0; DOCS=0; APP=0
+  NIX=0; FE=0; GH=0; DOCS=0; APP=0; SCT=0
   # app-side Swift, or what the app compiles against, changed: the app is compiled in the build tree (verify, below)
   python3 -I "$SELF_DIR/check-app-compiles" --needed --changed-from "$1" >/dev/null 2>&1 && APP=1
+  # a path the shared-code tests read changed: they run as CI runs them (verify, below)
+  python3 -I "$SELF_DIR/check-shared-code-tests" --needed --changed-from "$1" >/dev/null 2>&1 && SCT=1
   printf '%s\n' "$files" | grep -qE '^(nix/|flake\.)' && NIX=1
   printf '%s\n' "$files" | grep -q '^frontend/' && FE=1
   printf '%s\n' "$files" | grep -q '^\.github/' && GH=1
@@ -313,6 +316,7 @@ print_plan() {
   [ "$FE" = 1 ] && echo "  frontend/ changed: will run the frontend build (pnpm install --frozen-lockfile && pnpm run build)"
   [ "$GH" = 1 ] && echo "  .github/ changed: will run .github/scripts/*-test"
   [ "$APP" = 1 ] && echo "  app-side Swift (or what it compiles against) changed: will compile the iPhone app in the build tree (about 10 min, under the Mac build lock; refused if that tree is dirty)"
+  [ "$SCT" = 1 ] && echo "  the phone-app shared-code tests read a changed path: will run them as CI does (pinned Bun, no Exact checkout, scratch copy; several minutes)"
   if [ "$LOCAL" = 1 ]; then echo "  suites run: locally ($(pwd -P))"; else echo "  suites run: on $VM (ssh), -race only for changed packages"; fi
 }
 make_plan "$BASE"
@@ -479,6 +483,10 @@ verify() { # $1 = run suites (1/0)
   # gates and before anything is pushed; it prints one line and passes when no path it cares about changed.
   lt_step "app compile"; say "app compile (scripts/check-app-compiles)"
   python3 -I "$SELF_DIR/check-app-compiles" --changed-from "$BASE" >"$out" 2>&1 || fail_step "app compile (the iPhone app does not compile, or the build tree is not free: see below)" "$out"
+  tail -n1 "$out"
+  # The phone-app shared-code tests, as CI runs them (scripts/check-shared-code-tests; docs/problems/a-landing-turned-main-red-because-landings-do-not-run-the-shared-code-tests-2026-11-28.md).
+  lt_step "shared-code tests"; say "shared-code tests (scripts/check-shared-code-tests)"
+  python3 -I "$SELF_DIR/check-shared-code-tests" --changed-from "$BASE" >"$out" 2>&1 || fail_step "shared-code tests (the phone-app bun test fails as CI runs it: the failing tests are named below)" "$out"
   tail -n1 "$out"
   rm -f "$out"
   [ "$1" = 1 ] || return 0

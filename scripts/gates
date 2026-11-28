@@ -246,6 +246,8 @@ run python3 -I scripts/check-native-stores --selftest
 run python3 -I scripts/check-native-stores
 # the landing step that compiles the iPhone app in the build tree (the landing script runs the real one; its selftest uses a fake tree and a fake build)
 run python3 -I scripts/check-app-compiles --selftest
+# the landing step that runs the phone app's shared-code tests as CI does (fake tree, fake runner; the landing script runs the real one)
+run python3 -I scripts/check-shared-code-tests --selftest
 # the guest floor list covers what the floor commands import (CI: Vocabulary
 # Gates); a new package imported by guest code fails here, not after the push
 run scripts/check-guest-floor-paths
