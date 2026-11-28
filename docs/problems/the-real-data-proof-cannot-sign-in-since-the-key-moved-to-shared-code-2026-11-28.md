@@ -1,0 +1,54 @@
+# The app's real-data proof has not been able to sign in since the key moved to shared code
+
+Standing: governing | kind: happened | settled-by: a run of mobile/scripts/proof-real.sh on origin/main bb10f2d21 in a slim simulator against staging, 2026-11-28, and a reading of 5721a63cd | note: whether anyone ran the proof between 2026-11-23 and this run is not known
+
+## Problem
+
+`mobile/scripts/proof-real.sh` is the app's deployed proof: the iPhone app in
+a simulator, signed in to the test computer on staging. It signs in by copying
+a key file into the app's Documents. `ProofKey.swift` (simulator only) reads
+that file into the native Keychain at launch.
+
+Since `5721a63cd` (2026-11-23) the account key lives in Exact's secret store
+and shared code is its only reader (`api.ts`, `app-signin.ts`). Nothing reads
+the native Keychain item any more. So the proof's key is imported and never
+used. The app stays signed out for the whole proof.
+
+## Evidence
+
+- The run on 2026-11-28: every drive's tree holds "You are signed out"; the
+  account page reads "Signed in: No"; the console says
+  `api: session found=false key=false computer=false` at each launch.
+- The proof still got through eleven drives (warm, survey, system dark,
+  migrate, takes, imported, pick and read, reader three times, tour) because
+  the paper and the radio work signed out. It failed at the edition picks
+  drive: the signed-out banner covers the "Culture" row, so the tap is refused.
+- `ProofKey.importIfPresent` writes `KeyAccount.apiKey` in the native Keychain
+  (`AutoradioModule.swift:129`, `ModelsEntry.swift:38`). `api.ts:117-118` reads
+  the key from the secret store only.
+
+## Belief
+
+Every signed-in check in the proof has been unreachable for five days: Files,
+Mail, the account page, sign-out and its wipe, the notebook, takes for a
+signed-in listener. Landings since then that touched those were proved by
+tests and review only. That includes the sign-out order (`4f5e66020`) and the
+one native reader of "signed in" (`48dde9e32`).
+
+What the run did show, signed out, on main `bb10f2d21`: the app builds,
+installs and launches; the paper loads real stories; a story opens in the
+reader; the radio plays and the bar shows the entry on air.
+
+## Remaining error
+
+- The proof needs a way to sign in a simulator that shared code will read. It
+  must stay out of device and store builds, as `ProofKey` is. Key custody is
+  owner decision D6, so the seam must not decide it.
+- Nothing fails when the proof cannot sign in: it runs signed-out drives and
+  reports them ok. Its first act after launch should be to assert the account
+  page says signed in, and stop there if not.
+- The signed-out banner covers a row of the topics list. Whether that is a
+  layout defect for a real signed-out person is not checked.
+- `mobile/scripts/sim-device.sh` could not create a simulator: it picks the
+  newest runtime (iOS 27.1), which refuses the iPhone 18 Pro device type. The
+  run reused an existing slim simulator.
