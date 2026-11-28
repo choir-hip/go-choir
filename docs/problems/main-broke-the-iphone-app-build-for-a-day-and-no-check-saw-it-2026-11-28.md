@@ -45,8 +45,13 @@ two did not here.
 - Still open: CI does not build the app (no Mac runner), so a push that bypasses `scripts/land` is not
   checked. The step needs the build tree clean and free, and about ten minutes under the one Mac build lock,
   so landings on this Mac queue behind it. The Swift package tests still do not compile the two directories.
-- Android is not compiled by that step. The same method fits: `exact.sh android --no-install` builds an APK
-  without adb (Exact's reference, `bun exact.mjs android --release --no-install --json`), and exact-guard.sh
-  allows it for a development app in the build tree. How long it takes is not known: no log of an Android
-  build was found, and none was run.
+- Built 2026-11-28, after the first step: the same step now compiles the Android app too
+  (`build-lab.sh android --no-install` with `AR_VARIANT=lab-one`, judged by Gradle's `BUILD SUCCESSFUL`, no
+  `BUILD FAILED` and no `e: ` line; [change](../changes/2026-11-28-landings-compile-the-iphone-app.md)). The lead
+  ran that build by hand: about 80 s warm. It has never run through the step. Which build runs depends on the
+  paths the train touches; the shared ones (pin, patches, interface, `exact.json`, the four build scripts) run both.
+- Still open for Android: the path list for it is my reading of what the build reads (the Gradle lock and
+  verification files, the model runtime pin and its scripts, `exact-env.sh` and the rest); a file the build
+  reads that is not listed would not trigger it. The shared Exact code under `mobile/AutoradioLab/` is compiled
+  by neither platform's check unless a listed path moves with it.
 - The Android build was not re-run after the fix.

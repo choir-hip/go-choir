@@ -10,8 +10,8 @@
 #        5 suites (VM by default, --local here)  6 fail loud, push nothing
 #        7 fetch again, rebase if main moved (rerun once if it touched a tested
 #          package or its dependencies), push, report Ring-Expedite status.
-#        Step 4 also compiles the iPhone app in the build tree when the train touches
-#        app-side Swift or what it compiles against (scripts/check-app-compiles), and runs
+#        Step 4 also compiles the iPhone and Android apps in the build tree when the train touches
+#        app-side Swift or Kotlin or what it compiles against (scripts/check-app-compiles), and runs
 #        the phone-app shared-code tests as CI does (scripts/check-shared-code-tests).
 #
 # A conflict only in docs/changes.md or the calibration ledger (every lane adds
@@ -295,7 +295,7 @@ make_plan() { # $1 = base
   files=$(git diff --name-only --no-renames "$1" HEAD)
   NIX=0; FE=0; GH=0; DOCS=0; APP=0; SCT=0
   # app-side Swift, or what the app compiles against, changed: the app is compiled in the build tree (verify, below)
-  python3 -I "$SELF_DIR/check-app-compiles" --needed --changed-from "$1" >/dev/null 2>&1 && APP=1
+  APP_PLATFORMS=$(python3 -I "$SELF_DIR/check-app-compiles" --needed --changed-from "$1" 2>/dev/null) && APP=1 || APP_PLATFORMS=""
   # a path the shared-code tests read changed: they run as CI runs them (verify, below)
   python3 -I "$SELF_DIR/check-shared-code-tests" --needed --changed-from "$1" >/dev/null 2>&1 && SCT=1
   printf '%s\n' "$files" | grep -qE '^(nix/|flake\.)' && NIX=1
@@ -315,7 +315,7 @@ print_plan() {
   [ "$NIX" = 1 ] && echo "  nix/flake changed: will nix eval both nixosConfigurations"
   [ "$FE" = 1 ] && echo "  frontend/ changed: will run the frontend build (pnpm install --frozen-lockfile && pnpm run build)"
   [ "$GH" = 1 ] && echo "  .github/ changed: will run .github/scripts/*-test"
-  [ "$APP" = 1 ] && echo "  app-side Swift (or what it compiles against) changed: will compile the iPhone app in the build tree (about 10 min, under the Mac build lock; refused if that tree is dirty)"
+  [ "$APP" = 1 ] && echo "  app-side native code (or what it compiles against) changed: will compile the $(printf '%s' "$APP_PLATFORMS" | sed 's/ios/iPhone/; s/android/Android/; s/ / and /') app in the build tree (iPhone about 10 min, Android about 2 min, under the Mac build lock; refused if that tree is dirty)"
   [ "$SCT" = 1 ] && echo "  the phone-app shared-code tests read a changed path: will run them as CI does (pinned Bun, no Exact checkout, scratch copy; several minutes)"
   if [ "$LOCAL" = 1 ]; then echo "  suites run: locally ($(pwd -P))"; else echo "  suites run: on $VM (ssh), -race only for changed packages"; fi
 }
@@ -478,11 +478,11 @@ verify() { # $1 = run suites (1/0)
       nix eval '.#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-gateway.serviceConfig.Environment' >"$out" 2>&1 || fail_step "nix eval go-choir-b" "$out"
     else say "WARNING: nix changed but nix is not installed here; evals SKIPPED (CI evaluates them)"; fi
   fi
-  # The iPhone app is compiled only by the app build, in the one build tree (scripts/check-app-compiles;
+  # The iPhone and Android apps are compiled only by the app build, in the one build tree (scripts/check-app-compiles;
   # docs/problems/main-broke-the-iphone-app-build-for-a-day-and-no-check-saw-it-2026-11-28.md). It runs after the
   # gates and before anything is pushed; it prints one line and passes when no path it cares about changed.
   lt_step "app compile"; say "app compile (scripts/check-app-compiles)"
-  python3 -I "$SELF_DIR/check-app-compiles" --changed-from "$BASE" >"$out" 2>&1 || fail_step "app compile (the iPhone app does not compile, or the build tree is not free: see below)" "$out"
+  python3 -I "$SELF_DIR/check-app-compiles" --changed-from "$BASE" >"$out" 2>&1 || fail_step "app compile (the iPhone or Android app does not compile, or the build tree is not free: see below)" "$out"
   tail -n1 "$out"
   # The phone-app shared-code tests, as CI runs them (scripts/check-shared-code-tests; docs/problems/a-landing-turned-main-red-because-landings-do-not-run-the-shared-code-tests-2026-11-28.md).
   lt_step "shared-code tests"; say "shared-code tests (scripts/check-shared-code-tests)"
