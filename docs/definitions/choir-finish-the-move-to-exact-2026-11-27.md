@@ -101,8 +101,8 @@ stations:
   class: orange
   review: one seat
   depends_on: [E0]
-  carrier: 'origin/lane/exact-pin-upstream e2722cd6f: the pin at 8552d20f9 (1,366 commits on), patches 0002 and 0003 re-made and applying, one contract line respelled (swipeleft); prepared by reading, nothing compiled or run'
-  status: working
+  carrier: 'b32112d53 (the pin at 8552d20f9, patches 0002 and 0003 re-made, Android locks rewritten, the web toolchain in setup-exact), CI green; verified in the build tree on 2026-11-28: contract build, bun test 1,841 pass, test web with the two failures main has, the iOS compile, the Android lab-one build; nothing driven on a simulator or a phone'
+  status: landed
 - id: E2
   name: what counts as voice
   scope: 'a list, for the owner to rule on, of the files the voice list covers that the audit of 2026-11-24 says could move (turn policy, model configuration and choice, setup, the server-turn stages ChoirDesk and AutoradioDesk); until the ruling the list stands as it is'
@@ -219,9 +219,9 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: E1 (the pin move) is being verified in the build tree; E6.2 and both deck journal fixes are on main; the iPhone app compiles again (e25afe05f)
-  source_ref: origin/main 20e3e0e1c
-  deploy_identity: staging on 20e3e0e1c
+  slice: E1 landed (b32112d53); E5 and E6 continue; the next moves are ranked in the iOS and Android difference audit
+  source_ref: origin/main b32112d53
+  deploy_identity: staging on b32112d53
   candidate:
     id: none
     state: none
@@ -250,7 +250,7 @@ now:
     main_uncertainty: 'whether the owner counts the voice turn''s state as voice (it decides whether the gate can reach zero without rewriting the turn), and whether the build tree may move'
     next_observation: 'the contract build and bun test on the new pin, once the build tree may move'
   blocker_or_risk: 'The app-side Swift has no compile check that runs without a person: main did not compile as an iPhone app from ce79438a8 until e25afe05f, 31 hours (docs/problems/main-broke-the-iphone-app-build-for-a-day-and-no-check-saw-it-2026-11-28.md); the owner is asked which check closes it. The build tree was moved to main on 2026-11-28 on the owner''s word to land the Android work (its old state is on branch deck-build 4b46ca522); D5 is answered by that. Nothing of K3 has run on a device or a simulator.'
-  next_action: 'land the pin move once the Android build passes at the new pin; then the next E5 slices and the moves ranked in the iOS and Android difference audit (model catalog and selection to shared code wait on D2); device checks are owed for everything landed'
+  next_action: 'the next E5 slices and the moves ranked in the iOS and Android difference audit (model catalog and selection to shared code wait on D2); device checks are owed for everything landed'
 receipts: []
 ---
 
