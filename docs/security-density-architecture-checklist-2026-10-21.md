@@ -238,7 +238,7 @@ item below:
 - [x] **SEC-07 · P0 · red — Address guard on browser and Obscura fetches**
   (red, corrected 2026-10-21: an egress boundary on untrusted URLs, like
   SEC-03 and NET-01)
-  - Done: FP6 batch 1, 53a691be6, deploy CI 39692787991 (2026-10-21 23:36 UTC), evidence docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md (23:36: GET /api/browser/capabilities and POST /api/browser/sessions answer 404; the unguarded browsercontrol and Obscura fetch routes are deleted; import-url still serves). Capability 4 is the Web Lens launcher.
+  - Done: FP6 batch 1, 53a691be6, deploy CI 39692787991 (2026-10-21 23:36 UTC), evidence docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md (23:36: GET /api/browser/capabilities and POST /api/browser/sessions answer 404; the unguarded browsercontrol and Obscura fetch routes are deleted; import-url still serves). Capability 4 is the Web Lens launcher.
   - Now: browser navigate checks only the scheme
     (`internal/browsercontrol/handler.go:79-93, 272`); the follow fetch uses
     a plain client (`:817-826, 920-930`); the alternate fetch pre-checks

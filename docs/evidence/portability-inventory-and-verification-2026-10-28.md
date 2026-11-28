@@ -2,7 +2,7 @@
 
 Status 2026-10-30: Store A escrow and Dolt references are stale (escrow is in the PostgreSQL control database); the ranked blockers remain valid. Design source for the new data system: [the data system frame](../design/choir-data-system-frame-2026-10-30.md).
 
-Status: evidence for docs/definitions/choir-data-architecture-selection-2026-10-28.md.
+Status: evidence for docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md.
 Owner, 2026-10-28: "one of the major proof points is that we could easily
 recover and restore a user's VM on a remote machine... from our NixOS host to
 running on a Mac to running on a different NixOS host, to running on an

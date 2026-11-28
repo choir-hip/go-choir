@@ -64,7 +64,7 @@ The thing to remember: we didn't make the backup faster by tuning it. We deleted
 
 ## Names and receipts
 
-- Goal: docs/definitions/choir-memory-optimization-2026-11-01.md, ledger beside it, checkpoint 53ca87c54.
+- Goal: docs/archive/definitions/choir-memory-optimization-2026-11-01.md, ledger beside it, checkpoint 53ca87c54.
 - Backup unsharded: 06731745d, deployed 15:46Z. Runtime drop-in reverted; unit at MemoryHigh 4G, MemoryMax 6G.
 - Proof run: 15:46:57 to 15:58:37Z, snapshot eea3daea, 45,531,568,875 bytes added, memory.max events 0.
 - Segment rule 16f7b5d01; derived-key marks c99e5ce3c; census read order 2c2d3515e.

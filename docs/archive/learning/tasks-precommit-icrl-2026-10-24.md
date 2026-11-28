@@ -24,7 +24,7 @@ The review rounds:
   review history.
 
 Authority: the owner's rulings of 2026-10-24 in the launch first pass ledger
-(`docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`):
+(`docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`):
 
 - 18:2x: tasks, precommits, ICRL, references, files;
 - 19:0x: the five decisions;

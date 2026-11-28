@@ -1,7 +1,7 @@
 # Calibration experiment E1: the model or the harness (protocol, rewritten 2026-11-19, round 3)
 
 Status: design (green). Station L2 of
-[the night's goal file](../definitions/choir-night-exact-vectors-learning-2026-11-19.md).
+[the night's goal file](../archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md).
 Round 2 answered seat 1's review (four blocking findings) and the lead's
 eleven decisions. Round 3 answers the second review (nineteen findings): the
 driver `scripts/e1` and its self-test were **written by this change**, and

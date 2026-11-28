@@ -617,7 +617,7 @@ natural pairing; it is not done here.
   `MUL` to empty and with it the content witness (see "The kind index is now
   load-bearing for the witness" in the index diet section below). *Forward note
   (2026-10-23): the rollback lines in
-  `docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`
+  `docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`
   that call `DROP INDEX` the whole kind-index rollback predate the diet; the
   ledger is append-only history and is not edited, this paragraph supersedes
   them.*

@@ -297,7 +297,7 @@ boundaries:
     canonical writes, the boot path, store schema, deletion and key
     delivery. Deleting the old data after the rollback week is black.
   authority_sources:
-    - "owner rulings 2026-10-28..30, recorded in docs/definitions/choir-data-architecture-selection-2026-10-28.md (owner sections) and the frame"
+    - "owner rulings 2026-10-28..30, recorded in docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md (owner sections) and the frame"
     - CLAUDE.md (mutation classes, review tiers, landing loop, restart rules, No Blocking Asks)
     - docs/choir-doctrine.md (I26 desks, I27 one home per kind)
     - the frame, once frozen in D0
@@ -448,7 +448,7 @@ now:
 receipts:
   - id: selection-superseded
     boundary: define
-    identity: docs/definitions/choir-data-architecture-selection-2026-10-28.md (terminal receipt 2026-10-30)
+    identity: docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md (terminal receipt 2026-10-30)
     proof_refs: [docs/design/choir-data-system-frame-2026-10-30.md]
     rollback_ref: git revert of this file's commit
     disposition: the selection goal is superseded by this build; hard gates, the ledger and the differential carry forward
@@ -484,5 +484,5 @@ Owner, 2026-10-30 ~06:30 UTC: "Remember, we are working at agentic speed. We can
 
 Moves go to [`choir-data-system-build-2026-10-30.ledger.md`](choir-data-system-build-2026-10-30.ledger.md).
 Estimates go to the precommitment ledger,
-[`choir-data-architecture-selection-2026-10-28.precommit.md`](choir-data-architecture-selection-2026-10-28.precommit.md),
+[`choir-data-architecture-selection-2026-10-28.precommit.md`](../archive/definitions/choir-data-architecture-selection-2026-10-28.precommit.md),
 as new rounds. Earlier rounds are never edited.

@@ -7,7 +7,7 @@ Evidence tags: [C] read in code, [M] measured and written in a repo document,
 
 Files read: `internal/agentcore/snapshot_producer.go` (line numbers below are at
 718ea5ed4), `docs/design/capture-static-copy-2026-11-15.md`,
-`docs/design/restore-bases-store-once-2026-11-15.md`,
+`docs/archive/design/restore-bases-store-once-2026-11-15.md`,
 `docs/definitions/choir-storage-solutions-2-2026-11-12.ledger.md`,
 `docs/calibration/claude-ledger.md` (C99, read only).
 

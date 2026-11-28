@@ -199,7 +199,7 @@ public edge (`nix/node-b.nix:771-773`).
   the sole model for the paper". FP0 did it as a computer-owned config
   write: the paper's `System/model-policy.toml` names chatgpt/gpt-6-luna
   for the defaults and every role, marked `# owner-edited`
-  (`docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md:875`,
+  (`docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md:875`,
   and the 21:53 line that confirms traffic moved).
 - This pin is **soft**. `Assign` gives a concrete model that is a member
   of the default pool the rest of that pool as fallbacks

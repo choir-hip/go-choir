@@ -38,7 +38,7 @@ by path or title only), superseded (with its replacement); the newest date in th
 
     $ scripts/docs restore bases
     unmarked   docs/problems/restore-bases-design-three-review-rounds-structural-assessment-2026-11-15.md  Restore bases design: three review rounds without…  (no S
-    superseded docs/design/restore-bases-store-once-2026-11-15.md  Restore bases that cost the change (2026-11-15)  -> replaced-by: none
+    superseded docs/archive/design/restore-bases-store-once-2026-11-15.md  Restore bases that cost the change (2026-11-15)  -> replaced-by: none
 
     $ scripts/docs --show docs/design/one-tape-durability-2026-10-31.md
     path:       docs/design/one-tape-durability-2026-10-31.md
@@ -173,23 +173,23 @@ Documents whose work was carried out in part; the note names what was not.
 
 Documents the triage called built that are headed superseded.
 
-- `definitions/choir-autopaper-improvement-2026-11-09.ledger.md`: the ledger of choir-autopaper-improvement-2026-11-09.md, now.status superseded at line 286 (only D13 landed, 36534be53; S2 to S5 deferred)
-- `definitions/choir-autopaper-improvement-2026-11-09.md`: now.status superseded at line 286 of the goal file (merged into the overnight goal; only D13 landed, S2 to S5 deferred)
-- `definitions/choir-autoradio-overnight-2026-11-17.md`: docs/ACTIVE.md line 206 heads it Superseded (2026-11-17 night); its own now.status is working (line 219)
-- `definitions/choir-consolidate-and-scale-metamission-2026-10-26.ledger.md`: the ledger of choir-consolidate-and-scale-metamission-2026-10-26.md, now.status superseded at line 246; docs/ACTIVE.md:439 heads it Superseded
-- `definitions/choir-data-architecture-selection-2026-10-28.md`: docs/ACTIVE.md line 427 heads it Superseded (2026-10-30); the data system build goal carries its decision (PostgreSQL on the host, SQLite in computers)
-- `definitions/choir-data-architecture-selection-2026-10-28.precommit.md`: the ledger of choir-data-architecture-selection-2026-10-28.md, headed Superseded at docs/ACTIVE.md line 427
-- `definitions/choir-guest-isolation-2026-11-01.ledger.md`: this ledger line 49 (owner made it a throughline, superseding; I1 to I6 landed, I0 closing report not written) and docs/ACTIVE.md line 406
-- `definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`: the ledger of choir-launch-first-pass-metamission-2026-10-21.md, now.status superseded at line 284 of the mission file (owner order 2026-10-24); docs/ACTIVE.md:472
+- `archive/definitions/choir-autopaper-improvement-2026-11-09.ledger.md`: the ledger of choir-autopaper-improvement-2026-11-09.md, now.status superseded at line 286 (only D13 landed, 36534be53; S2 to S5 deferred)
+- `archive/definitions/choir-autopaper-improvement-2026-11-09.md`: now.status superseded at line 286 of the goal file (merged into the overnight goal; only D13 landed, S2 to S5 deferred)
+- `archive/definitions/choir-autoradio-overnight-2026-11-17.md`: docs/ACTIVE.md line 206 heads it Superseded (2026-11-17 night); its own now.status is working (line 219)
+- `archive/definitions/choir-consolidate-and-scale-metamission-2026-10-26.ledger.md`: the ledger of choir-consolidate-and-scale-metamission-2026-10-26.md, now.status superseded at line 246; docs/ACTIVE.md:439 heads it Superseded
+- `archive/definitions/choir-data-architecture-selection-2026-10-28.md`: docs/ACTIVE.md line 427 heads it Superseded (2026-10-30); the data system build goal carries its decision (PostgreSQL on the host, SQLite in computers)
+- `archive/definitions/choir-data-architecture-selection-2026-10-28.precommit.md`: the ledger of choir-data-architecture-selection-2026-10-28.md, headed Superseded at docs/ACTIVE.md line 427
+- `archive/definitions/choir-guest-isolation-2026-11-01.ledger.md`: this ledger line 49 (owner made it a throughline, superseding; I1 to I6 landed, I0 closing report not written) and docs/ACTIVE.md line 406
+- `archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`: the ledger of choir-launch-first-pass-metamission-2026-10-21.md, now.status superseded at line 284 of the mission file (owner order 2026-10-24); docs/ACTIVE.md:472
 - `definitions/choir-launch-fp1-a1-boot-alter-2026-10-21.md`: docs/problems/boot-alters-og-objects-when-older-columns-missing-2026-10-21.md line 3 (Dolt EnsureRecordIndexes is gone; the problem stays open as a boot-migration concern of PostgreSQL and SQLite); own status done (lane) at line 113
-- `definitions/choir-launch-fp10-net-05-2026-10-21.md`: a18568ee4 deleted internal/egressgrant (landed unwired as b52a4c026) as never wired; the package no longer exists on origin/main
-- `definitions/choir-launch-fp10-net10-2026-10-22.md`: a18568ee4 deleted internal/appnet and internal/egressgrant, never wired (appnet landed unwired as 54ded1675); file now.status checkpoint_incomplete line 97
-- `definitions/choir-memory-optimization-2026-11-01.ledger.md`: docs/definitions/choir-memory-optimization-2026-11-01.md:71-72 (now.status superseded by the guest isolation goal, owner: I'll drop the current goal)
-- `definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.ledger.md`: ledger line 79 and the mission file now.status superseded at line 117
-- `definitions/choir-selfdev-apps-side-by-side-2026-11-02.ledger.md`: mission file now.status superseded at docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.md:155
-- `definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md`: ledger entry 2026-10-26 12:1x (settled checkpoint_incomplete, ordering superseded) and mission file lines 462-464
+- `archive/definitions/choir-launch-fp10-net-05-2026-10-21.md`: a18568ee4 deleted internal/egressgrant (landed unwired as b52a4c026) as never wired; the package no longer exists on origin/main
+- `archive/definitions/choir-launch-fp10-net10-2026-10-22.md`: a18568ee4 deleted internal/appnet and internal/egressgrant, never wired (appnet landed unwired as 54ded1675); file now.status checkpoint_incomplete line 97
+- `archive/definitions/choir-memory-optimization-2026-11-01.ledger.md`: docs/archive/definitions/choir-memory-optimization-2026-11-01.md:71-72 (now.status superseded by the guest isolation goal, owner: I'll drop the current goal)
+- `archive/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.ledger.md`: ledger line 79 and the mission file now.status superseded at line 117
+- `archive/definitions/choir-selfdev-apps-side-by-side-2026-11-02.ledger.md`: mission file now.status superseded at docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.md:155
+- `archive/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md`: ledger entry 2026-10-26 12:1x (settled checkpoint_incomplete, ordering superseded) and mission file lines 462-464
 - `design/autoradio-voice-modes-2026-11-10.md`: its own line 3 says design, not built; the owner confirmed hands-free only and removed tap to talk (docs/problems/autoradio-owner-phone-review-2026-11-15.md:80,83; fd9448be4)
-- `design/egress-grant-object-2026-10-21.md`: its own line 3-4: built unwired in internal/egressgrant, never wired, code removed November 2026
+- `archive/design/egress-grant-object-2026-10-21.md`: its own line 3-4: built unwired in internal/egressgrant, never wired, code removed November 2026
 
 ### Undecided (10)
 
@@ -335,16 +335,16 @@ Skim bucket, path, standing set here, basis, replaced-by, reason when not headed
 | D | docs/conjecture-assertion-ledger-2026-06.md | superseded | status (line 5): historical ancestor, no longer updated; CLAUDE.md Proof names the live ledger | docs/calibration/claude-ledger.md |  |
 | D | docs/definitions/choir-autoradio-learning-engine-2026-11-14.md | unverified |  |  | no statement of supersession found; docs/ACTIVE.md lists it as a live station and choir-autoradio-learning-loop-2026-11-18.md does not say it replaces it (skim was wrong or unproved) |
 | D | docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.md | superseded | docs/ACTIVE.md 'Superseded (2026-10-28): consolidate and scale', dropped by the owner; terminal receipt in the file | none |  |
-| D | docs/definitions/choir-exact-search-entities-2026-11-20.md | superseded | the successor's supersedes field (its line 4) | docs/definitions/choir-exact-cutover-and-ontology-2026-11-20.md |  |
-| D | docs/definitions/choir-guest-isolation-2026-11-01.md | superseded | this file's now.status (line 145); the successor names it as baseline source | docs/definitions/choir-store-header-body-split-2026-11-02.md |  |
-| D | docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md | superseded | successor header line 6 'Supersedes'; docs/ACTIVE.md 'Superseded (2026-10-24)' | docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.md |  |
-| D | docs/definitions/choir-memory-optimization-2026-11-01.md | superseded | owner 2026-11-01, this file's now.superseded_by (line 72); docs/ACTIVE.md says guest isolation supersedes it | docs/definitions/choir-guest-isolation-2026-11-01.md |  |
-| D | docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md | superseded | the successor's supersedes field (its line 4) and line 257 | docs/definitions/choir-exact-search-entities-2026-11-20.md |  |
+| D | docs/archive/definitions/choir-exact-search-entities-2026-11-20.md | superseded | the successor's supersedes field (its line 4) | docs/definitions/choir-exact-cutover-and-ontology-2026-11-20.md |  |
+| D | docs/archive/definitions/choir-guest-isolation-2026-11-01.md | superseded | this file's now.status (line 145); the successor names it as baseline source | docs/definitions/choir-store-header-body-split-2026-11-02.md |  |
+| D | docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md | superseded | successor header line 6 'Supersedes'; docs/ACTIVE.md 'Superseded (2026-10-24)' | docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.md |  |
+| D | docs/archive/definitions/choir-memory-optimization-2026-11-01.md | superseded | owner 2026-11-01, this file's now.superseded_by (line 72); docs/ACTIVE.md says guest isolation supersedes it | docs/archive/definitions/choir-guest-isolation-2026-11-01.md |  |
+| D | docs/archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md | superseded | the successor's supersedes field (its line 4) and line 257 | docs/archive/definitions/choir-exact-search-entities-2026-11-20.md |  |
 | D | docs/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md | superseded | owner 2026-11-04 ~20:55Z 'Let's supersede the current metamission' (line 173); successor line 12 | docs/definitions/choir-modular-architecture-2026-11-04.md |  |
 | D | docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md | unverified |  |  | skim was wrong: it is on hold (owner 2026-11-03) and choir-modular-architecture wave P8 resumes it; not superseded |
 | D | docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.md | superseded | this file's readiness note (line 15) and now.status (line 155); successor line 7 | docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.md |  |
 | D | docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.md | unverified |  |  | closed checkpoint_incomplete (docs/ACTIVE.md); choir-consolidate-and-scale supersedes only its ordering, and was itself dropped |
-| D | docs/definitions/choir-t1a-app-self-development-2026-10-26.md | superseded | this file's readiness note (line 18): 'SUPERSEDED 2026-11-02 ... do not execute'; successor line 7 | docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.md |  |
+| D | docs/archive/definitions/choir-t1a-app-self-development-2026-10-26.md | superseded | this file's readiness note (line 18): 'SUPERSEDED 2026-11-02 ... do not execute'; successor line 7 | docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.md |  |
 | D | docs/design/autoradio-learning-engine-2026-11-14.md | superseded | this file's header (line 5) and the successor's line 6 | docs/design/autoradio-learned-document-2026-11-17.md |  |
 | D | docs/design/autoradio-mission-handoff-2026-11-09.md | unverified |  |  | a handoff for the Swift era; no document says it is superseded (skim inferred it) |
 | D | docs/design/autoradio-swift-test-map-2026-11-18.md | unverified |  |  | no document says it is superseded; it is a station record of the Exact cutover |
@@ -355,12 +355,12 @@ Skim bucket, path, standing set here, basis, replaced-by, reason when not headed
 | D | docs/design/ideal-form-draft-2026-11-23.md | superseded | owner 2026-11-24 'the new design superseded' (header line 5; system-map section 10) | docs/design/desks-and-engine-2026-11-24.md |  |
 | D | docs/design/library-package-propagation-2026-10-26.md | superseded | owner ruling 2026-11-03 'published releases mean published' (line 11) | docs/problems/published-release-visible-only-to-publisher-2026-11-03.md |  |
 | D | docs/design/progressive-delivery-2026-10-26.md | superseded | owner 2026-11-03 'no switches at all' (line 9; rulings at line 785) | docs/definitions/choir-progressive-delivery-2026-11-03.md |  |
-| D | docs/design/restore-bases-store-once-2026-11-15.md | superseded | header line 5: set aside 2026-11-15 after three review rounds (docs/problems/restore-bases-design-three-review-rounds-structural-assessment-2026-11-15.md) | none |  |
+| D | docs/archive/design/restore-bases-store-once-2026-11-15.md | superseded | header line 5: set aside 2026-11-15 after three review rounds (docs/problems/restore-bases-design-three-review-rounds-structural-assessment-2026-11-15.md) | none |  |
 | D | docs/design/semantic-layer-2026-11-20.md | superseded | owner 2026-11-24 'the new design superceded' (header line 5; system-map section 10) | docs/design/desks-and-engine-2026-11-24.md |  |
-| D | docs/design/snapshot-without-scratch-copy-2026-11-20.md | superseded | this file's header line 5; the replacing file's line 3 ('It supersedes') | docs/design/snapshot-one-pass-2026-11-22.md |  |
+| D | docs/archive/design/snapshot-without-scratch-copy-2026-11-20.md | superseded | this file's header line 5; the replacing file's line 3 ('It supersedes') | docs/design/snapshot-one-pass-2026-11-22.md |  |
 | D | docs/design/store-once-2026-11-14.md | unverified |  |  | its own header says design, nothing built; only the skim says it was set aside (restore-bases-store-once was, this one was not shown to be) |
 | D | docs/platform-os-app-state.md | unverified |  |  | its status says canonical and stale as of 2026-09-22; stale is not superseded and nothing replaces it |
-| D | docs/world-wire-mission-stack-2026-09-22.md | superseded | this file's status (line 6): SUPERSEDED roadmap, retained as a record (2026-10-14 prune) | docs/ACTIVE.md |  |
+| D | docs/archive/world-wire-mission-stack-2026-09-22.md | superseded | this file's status (line 6): SUPERSEDED roadmap, retained as a record (2026-10-14 prune) | docs/ACTIVE.md |  |
 | C | docs/big-picture.md | undecided | nothing; this file's status (line 5): draft for the owner to cut down |  |  |
 | C | docs/definitions/choir-autoradio-in-the-desktop-2026-11-23.md | governing | owner 2026-11-23, quoted in this file's authority field (line 4); deferred in docs/ACTIVE.md |  |  |
 | C | docs/design/autopaper-learning-materiality-2026-11-04.md | undecided | nothing; this file's status (line 5): design note, not decided |  |  |
@@ -389,23 +389,23 @@ Skim bucket, path, standing set here, basis, replaced-by, reason when not headed
 | C | docs/provider-vault-and-model-policy-design-2026-10-22.md | undecided | nothing; this file's status (line 5): proposal, not owner-ratified |  |  |
 | C | docs/signal-is-sparse-not-the-learner-2026-08-01.md | unverified |  |  | skim was wrong: a foundational memo, not a proposal; its status says memo, not doctrine |
 | B | docs/autopaper-sw-design-2026-10-09.md | not assessed |  |  | bucket B is not headed in this station; skim said: built / describes the live system |
-| B | docs/definitions/choir-autopaper-improvement-2026-11-09.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
-| B | docs/definitions/choir-autopaper-improvement-2026-11-09.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
+| B | docs/archive/definitions/choir-autopaper-improvement-2026-11-09.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
+| B | docs/archive/definitions/choir-autopaper-improvement-2026-11-09.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
 | B | docs/definitions/choir-autopaper-overnight-2026-11-09.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-autopaper-overnight-2026-11-09.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
 | B | docs/definitions/choir-autoradio-exact-cutover-2026-11-18.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
 | B | docs/definitions/choir-autoradio-full-experience-overnight-2026-11-15.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-autoradio-full-experience-overnight-2026-11-15.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
 | B | docs/definitions/choir-autoradio-learning-engine-2026-11-14.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
-| B | docs/definitions/choir-autoradio-overnight-2026-11-17.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
+| B | docs/archive/definitions/choir-autoradio-overnight-2026-11-17.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
 | B | docs/definitions/choir-autoradio-pass1-2026-11-10.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
-| B | docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
-| B | docs/definitions/choir-data-architecture-selection-2026-10-28.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
-| B | docs/definitions/choir-data-architecture-selection-2026-10-28.precommit.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
+| B | docs/archive/definitions/choir-consolidate-and-scale-metamission-2026-10-26.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
+| B | docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
+| B | docs/archive/definitions/choir-data-architecture-selection-2026-10-28.precommit.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-data-system-build-2026-10-30.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-data-system-build-2026-10-30.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
-| B | docs/definitions/choir-guest-isolation-2026-11-01.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
-| B | docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
+| B | docs/archive/definitions/choir-guest-isolation-2026-11-01.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
+| B | docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-launch-fp0-density-bench-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
 | B | docs/definitions/choir-launch-fp0-proof-scripts-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
 | B | docs/definitions/choir-launch-fp0-vm-retention-2026-10-22.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
@@ -415,10 +415,10 @@ Skim bucket, path, standing set here, basis, replaced-by, reason when not headed
 | B | docs/definitions/choir-launch-fp10-arch-09-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
 | B | docs/definitions/choir-launch-fp10-arch-11-12-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
 | B | docs/definitions/choir-launch-fp10-net-03-04-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
-| B | docs/definitions/choir-launch-fp10-net-05-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
+| B | docs/archive/definitions/choir-launch-fp10-net-05-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
 | B | docs/definitions/choir-launch-fp10-net01-host-fetch-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
 | B | docs/definitions/choir-launch-fp10-net02-mirrors-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
-| B | docs/definitions/choir-launch-fp10-net10-2026-10-22.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
+| B | docs/archive/definitions/choir-launch-fp10-net10-2026-10-22.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
 | B | docs/definitions/choir-launch-fp10-p2-small-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
 | B | docs/definitions/choir-launch-fp10-res-08-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
 | B | docs/definitions/choir-launch-fp10-res-10-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: sub-lane of the superseded launch first pass; executed |
@@ -437,18 +437,18 @@ Skim bucket, path, standing set here, basis, replaced-by, reason when not headed
 | B | docs/definitions/choir-lean-system-2026-10-30.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
 | B | docs/definitions/choir-lp-s6-commit-gate-2026-10-20.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
 | B | docs/definitions/choir-mac-sync-stage2-2026-11-01.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
-| B | docs/definitions/choir-memory-optimization-2026-11-01.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
+| B | docs/archive/definitions/choir-memory-optimization-2026-11-01.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-modular-architecture-2026-11-04.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-modular-architecture-2026-11-04.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
 | B | docs/definitions/choir-modular-architecture-2026-11-04.precommit.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-ordinary-prompt-path-2026-11-09.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-ordinary-prompt-path-2026-11-09.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
-| B | docs/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
+| B | docs/archive/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-progressive-delivery-2026-11-03.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-progressive-delivery-2026-11-03.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
 | B | docs/definitions/choir-selfdev-apps-feature-complete-2026-11-03.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
-| B | docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
-| B | docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
+| B | docs/archive/definitions/choir-selfdev-apps-side-by-side-2026-11-02.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
+| B | docs/archive/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-storage-solutions-2-2026-11-12.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
 | B | docs/definitions/choir-storage-solutions-2-2026-11-12.md | not assessed |  |  | bucket B is not headed in this station; skim said: executed mission goal file |
 | B | docs/definitions/choir-storage-solutions-3-store-once-2026-11-14.ledger.md | not assessed |  |  | bucket B is not headed in this station; skim said: log/ledger of a finished mission (history, not design) |
@@ -484,7 +484,7 @@ Skim bucket, path, standing set here, basis, replaced-by, reason when not headed
 | B | docs/design/density-d6-page-cache-return-2026-10-26.md | not assessed |  |  | bucket B is not headed in this station; skim said: header says built/landed |
 | B | docs/design/derived-key-marks-2026-11-01.md | not assessed |  |  | bucket B is not headed in this station; skim said: header says built/landed |
 | B | docs/design/desk-shots-and-review-2026-11-07.md | not assessed |  |  | bucket B is not headed in this station; skim said: header says built/landed |
-| B | docs/design/egress-grant-object-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: header says built/landed |
+| B | docs/archive/design/egress-grant-object-2026-10-21.md | not assessed |  |  | bucket B is not headed in this station; skim said: header says built/landed |
 | B | docs/design/email-sign-in-2026-10-31.md | not assessed |  |  | bucket B is not headed in this station; skim said: owner 2014-10-14/10-31 ask; email sign-in code and deployed e2e exist (commit 0cff2f27a) |
 | B | docs/design/enforce-flip-2026-11-08.md | not assessed |  |  | bucket B is not headed in this station; skim said: header says built/landed |
 | B | docs/design/engineer-reuse-2026-11-04.md | not assessed |  |  | bucket B is not headed in this station; skim said: header says built/landed |

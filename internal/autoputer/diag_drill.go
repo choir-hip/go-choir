@@ -3,7 +3,7 @@ package autoputer
 // The isolation drill load (diag_drill_test.go lists its failure modes): a
 // host-peer-only POST that makes this guest a bounded noisy neighbour, so the
 // guest isolation drills read a real guest's disk and CPU load through the
-// host's per-VM bounds (docs/definitions/choir-guest-isolation-2026-11-01.md).
+// host's per-VM bounds (docs/archive/definitions/choir-guest-isolation-2026-11-01.md).
 // The operator runs it on d@e only; the paper and owners' computers are never
 // drill targets. The guest is told no computer class, so the bounds here, not
 // a class check, keep it small: one drill at a time, at most five minutes and

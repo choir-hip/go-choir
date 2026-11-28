@@ -377,7 +377,7 @@ receipts:
     boundary: terminal
     identity: main@e2d8fca61 (the last first-pass landing); staging c72cc2e07 (D44)
     proof_refs:
-      - docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md (every deploy's proof, D1 to D44)
+      - docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md (every deploy's proof, D1 to D44)
       - docs/reports/overnight-first-pass-2026-10-24.md
     rollback_ref: per deploy, in the ledger
     disposition: >-

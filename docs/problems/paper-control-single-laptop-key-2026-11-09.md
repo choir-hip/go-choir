@@ -7,7 +7,7 @@ section 5.
 
 ## Evidence
 
-- Ledger, 2026-11-09 (`docs/definitions/choir-autopaper-improvement-2026-11-09.ledger.md`):
+- Ledger, 2026-11-09 (`docs/archive/definitions/choir-autopaper-improvement-2026-11-09.ledger.md`):
   "Paper control: the only way to act on the paper is a 7-day key minted from
   a saved browser session on one laptop; no sign-in, no policy verbs, no
   validation, no kept revision, no record on the tape."

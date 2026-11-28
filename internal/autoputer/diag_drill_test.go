@@ -16,7 +16,7 @@ import (
 
 // The isolation drill load (/internal/diag/drill): a host-peer-only route
 // that makes this guest a noisy neighbour on demand, for the guest isolation
-// drills (docs/definitions/choir-guest-isolation-2026-11-01.md), run on d@e
+// drills (docs/archive/definitions/choir-guest-isolation-2026-11-01.md), run on d@e
 // only. Ways it can fail, written before the code:
 //
 //  D1. an in-guest caller (or anything not the host peer) starts a load;

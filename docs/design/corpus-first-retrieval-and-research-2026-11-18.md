@@ -54,7 +54,7 @@ Evidence tags used below: **M** measured (in the docs named), **C** read from co
 **Passages are the key.** `lane/capture-fulltext-2` holds one SQLite FTS5 file per computer, owned by corpusd. Passages are about 300 tokens, and their ids are never reused (C, `CAPTURE-FULLTEXT.md` §2, §5). A vector is stored against (scope, passage id). Liveness always comes from the `passages` table, so a vector of a deleted page is never returned.
 
 **Amended 2026-11-19 (owner's rulings R2 and R3 in
-[the night's goal file](../definitions/choir-night-exact-vectors-learning-2026-11-19.md)).**
+[the night's goal file](../archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md)).**
 - Vectors live in **pgvector**, in corpusd's Postgres (owner: "we need to get vectors in pgvector, using embeddinggemma2"). The flat file below and "Not pgvector now" are withdrawn; they stay as the record of what was weighed.
 - The unit is **every passage of every published story version, and one vector per public captured page** (its title and lead passage), not every passage of every page. That is about 61,000 story passages and 215,000 page vectors at 256 dimensions and half precision, about 140 MB, which removes the size objection to Postgres. A story hit walks to the pages the story cites. One vector per page is the lead's proposal; the owner asked and has not ruled.
 - Still true from below: HNSW filters a window after the search, so a windowed search over-asks and falls back to an exact scan of the window; the embedder refuses no request and counts none; the work list is derived; the ranking is vector order with BM25's top three kept.

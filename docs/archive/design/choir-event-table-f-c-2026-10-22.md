@@ -1265,7 +1265,7 @@ both tables (section 3.5).
 
 The doctrine rule for this pass is: no boot step scans or rewrites all of
 `og_objects`, and schema changes are online and rollback-safe
-(`docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md:270`).
+(`docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md:270`).
 Round 2 makes "rollback-safe" precise for this change. Each deploy can be
 rolled back to the one before it. Deploy 1 can be rolled back to the
 previous build only until the first op is stamped; after that, deploy 1 is

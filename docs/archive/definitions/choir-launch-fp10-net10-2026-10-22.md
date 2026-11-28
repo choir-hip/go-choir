@@ -79,7 +79,7 @@ boundaries:
   authority_sources:
     - SDC NET-10, NET-01, NET-05, ARCH-02, ARCH-03, ARCH-09 and "Networking must enable, not starve" (owner, 2026-10-21)
     - docs/archive/design/app-agent-network-policy-2026-10-21.md (the earlier NET-10 design; this file supersedes its §2 field list and §7 order)
-    - docs/design/egress-grant-object-2026-10-21.md (NET-05)
+    - docs/archive/design/egress-grant-object-2026-10-21.md (NET-05)
     - docs/archive/design/app-package-carries-app-desk-2026-10-21.md (ARCH-03)
     - lane/fp10-net01-host-fetch, docs/definitions/choir-launch-fp10-net01-host-fetch-2026-10-21.md (NET-01, not on main)
   must_preserve:
@@ -117,7 +117,7 @@ now:
       - internal/appnet/appnet.go
       - internal/appnet/appnet_test.go
       - docs/problems/app-package-cannot-declare-network-2026-10-22.md
-      - docs/definitions/choir-launch-fp10-net10-2026-10-22.md
+      - docs/archive/definitions/choir-launch-fp10-net10-2026-10-22.md
       - docs/archive/design/app-agent-network-policy-2026-10-21.md (one status line)
   conjecture:
     id: C-declare-is-a-grant-request
@@ -188,8 +188,8 @@ receipts:
 
 Standing: superseded | kind: wanted | settled-by: a18568ee4 deleted internal/appnet and internal/egressgrant, never wired (appnet landed unwired as 54ded1675); file now.status checkpoint_incomplete line 97 | replaced-by: none
 
-Problem: [app-package-cannot-declare-network-2026-10-22.md](../problems/app-package-cannot-declare-network-2026-10-22.md).
-Earlier design: [app-agent-network-policy-2026-10-21.md](../archive/design/app-agent-network-policy-2026-10-21.md)
+Problem: [app-package-cannot-declare-network-2026-10-22.md](../../problems/app-package-cannot-declare-network-2026-10-22.md).
+Earlier design: [app-agent-network-policy-2026-10-21.md](../design/app-agent-network-policy-2026-10-21.md)
 (its rules §1, approval §3 and ingress flow §4 stand; its §2 field list and
 §7 order are replaced by §2 and §7 here, because the code they anticipated
 now exists).

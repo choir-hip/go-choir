@@ -275,7 +275,7 @@ now:
     status: proposed
     evidence_refs:
       - docs/design/library-package-propagation-2026-10-26.md
-      - docs/definitions/choir-t1a-app-self-development-2026-10-26.md (now.candidate.scope)
+      - docs/archive/definitions/choir-t1a-app-self-development-2026-10-26.md (now.candidate.scope)
   decision:
     what: >-
       the unit is a package tree, not a patch; platform changes keep the

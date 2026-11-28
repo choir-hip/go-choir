@@ -1,7 +1,7 @@
 # The paper's snapshot will soon take longer than its budget, and then none will finish
 
 Recorded 2026-11-20 06:35Z by the lead, from the snapshot design's reading
-(`docs/design/snapshot-without-scratch-copy-2026-11-20.md`). Not fixed.
+(`docs/archive/design/snapshot-without-scratch-copy-2026-11-20.md`). Not fixed.
 
 ## Problem
 

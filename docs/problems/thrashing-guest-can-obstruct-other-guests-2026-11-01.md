@@ -1,7 +1,7 @@
 # A thrashing guest can obstruct other guests through the shared disk
 
 Date: 2026-11-01. Found while closing the memory mission
-(docs/definitions/choir-memory-optimization-2026-11-01.md). No fix yet.
+(docs/archive/definitions/choir-memory-optimization-2026-11-01.md). No fix yet.
 
 ## The requirement
 

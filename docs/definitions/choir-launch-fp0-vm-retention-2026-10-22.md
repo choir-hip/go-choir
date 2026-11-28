@@ -2,7 +2,7 @@
 definition_version: 4
 readiness: executable
 # Authority to execute: the launch first pass metamission
-# (docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md), FP0's
+# (docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md), FP0's
 # disk work after deploy R was refused by the disk floor (2026-10-22).
 ---
 

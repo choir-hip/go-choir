@@ -1,6 +1,6 @@
 # The paper's runs fail together when every model is out of quota (2026-11-09)
 
-Status: partly fixed (36534be53, 7334daf86); see the evening investigation below. Mission: docs/definitions/choir-autopaper-improvement-2026-11-09.md (S1).
+Status: partly fixed (36534be53, 7334daf86); see the evening investigation below. Mission: docs/archive/definitions/choir-autopaper-improvement-2026-11-09.md (S1).
 
 ## Evidence
 

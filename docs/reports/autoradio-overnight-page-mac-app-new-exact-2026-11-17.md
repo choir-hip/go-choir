@@ -62,7 +62,7 @@ After that I would run the embedding trial on the phone, which needs one launch 
 - Server run sheet, from Monday night: `6ba3e1080`, deployed, ledger C114 true.
 - EmbeddingGemma on the Mac: GGUF loads in 0.5 seconds, 23.5 passages a second, 161 megabytes; Core AI loads in about 8 seconds, 26.8 passages a second, 1,110 megabytes. Recall at five on thirty questions: vectors 1.00, keyword search 0.77. Numbers and commands in `docs/reference/EMBEDDINGGEMMA.md`.
 - The trial lane vendors a third party's Swift runner under Apache-2.0. It stays off main until you say.
-- Goal file: `docs/definitions/choir-autoradio-overnight-2026-11-17.md`. Its claim, ledger C115, is still open and needs your verdict on the phone by 14:00 Universal Time.
+- Goal file: `docs/archive/definitions/choir-autoradio-overnight-2026-11-17.md`. Its claim, ledger C115, is still open and needs your verdict on the phone by 14:00 Universal Time.
 - Installed on your Mac by me: Rust targets `aarch64-apple-ios` and `aarch64-apple-ios-sim` for toolchain 1.99.1, and three Hermes engine bundles under the cargo folder.
 - Known and not fixed: one "extend" answer from the server began with an opening; the page's mid-day tour fails at a later step; the listening state is not photographed; the greeting said "Good evening" at one in the morning; mail size on the phone is an assumption; the scorecard in the calibration ledger has not been recounted.
 - My wrong statements this night: that all five lanes merged cleanly; that the radio stopping after its opening was probably the test data.

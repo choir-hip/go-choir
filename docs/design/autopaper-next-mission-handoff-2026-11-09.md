@@ -22,7 +22,7 @@ Revised the same day after a review and further owner rulings. What changed:
 ## 1. Where this sits
 
 - The current mission
-  ([choir-autopaper-improvement-2026-11-09.md](../definitions/choir-autopaper-improvement-2026-11-09.md),
+  ([choir-autopaper-improvement-2026-11-09.md](../archive/definitions/choir-autopaper-improvement-2026-11-09.md),
   S1 source audit through S5 renderers) finishes its live station first.
 - This mission comes next. Its lead chain is Texture revisions, the ledger
   and op-eds. Jev parallelism runs beside it.
@@ -552,7 +552,7 @@ Not built in this mission. The mission itself is drafted in
 The owner closed the main session here and asked for a new session for the
 next mission. This section is the state that session starts from. Evidence
 for each line is in the
-[mission ledger](../definitions/choir-autopaper-improvement-2026-11-09.ledger.md).
+[mission ledger](../archive/definitions/choir-autopaper-improvement-2026-11-09.ledger.md).
 
 ### Landed and deployed
 

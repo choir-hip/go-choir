@@ -58,7 +58,7 @@ Evidence, not re-derived here:
 paper disk and base liveness,
 [research, object-store section](../evidence/data-architecture-research-2026-10-28.md),
 [data rearchitecture](../archive/design/data-rearchitecture-2026-10-28.md),
-[selection, 2026-10-29 sections](../definitions/choir-data-architecture-selection-2026-10-28.md),
+[selection, 2026-10-29 sections](../archive/definitions/choir-data-architecture-selection-2026-10-28.md),
 [more than one home](../problems/data-has-more-than-one-home-2026-10-24.md),
 [secrets vault](secrets-vault-design-2026-10-28.md),
 [restore and audit](computer-history-restore-audit-2026-10-30.md),
@@ -1440,7 +1440,7 @@ pass.
 ## 8. Precommitted expectations
 
 Round 0g (R0g-01..07) was committed to
-`docs/definitions/choir-data-architecture-selection-2026-10-28.precommit.md`
+`docs/archive/definitions/choir-data-architecture-selection-2026-10-28.precommit.md`
 by FP0 on 2026-10-29 about 23:37 UTC (commit 3294bce10). Revision 1 said "not
 committed by this note, so not yet records"; that stopped being true at
 that commit. The ledger's records are never edited. The original text is

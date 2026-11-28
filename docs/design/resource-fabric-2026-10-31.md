@@ -1253,7 +1253,7 @@ These come before most of the builds, and need almost nothing new:
   protocol is a replication protocol; keys in the Keychain.
 - [data system frame](choir-data-system-frame-2026-10-30.md): single writer,
   fenced.
-- [data architecture selection](../definitions/choir-data-architecture-selection-2026-10-28.md):
+- [data architecture selection](../archive/definitions/choir-data-architecture-selection-2026-10-28.md):
   the owner notes on Choir in Choir, oversubscription, the desktop as the
   main host, credits and fallback offload.
 - [outboard capsules](outboard-capsules-arch-11-12-2026-10-22.md): leased

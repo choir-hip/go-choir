@@ -1,6 +1,6 @@
 # Data architecture consensus panel, 2026-10-28
 
-Status: evidence for docs/definitions/choir-data-architecture-selection-2026-10-28.md.
+Status: evidence for docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md.
 It is not a ratification. The goal's decision rule still governs, meaning the
 census, the bake-off and the d@e differential. Owner request: "Run agentic
 consensus — Devin and DeepSeek — in divergent, lateral, then convergent...

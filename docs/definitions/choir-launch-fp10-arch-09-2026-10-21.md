@@ -2,7 +2,7 @@
 definition_version: 4
 
 # Station FP10, ARCH-09 (P2, red): a compute capsule kind for app desks.
-# Spine: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md
+# Spine: docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md
 # (FP10). Item: docs/security-density-architecture-checklist-2026-10-21.md
 # ARCH-09. Problem: docs/problems/app-desks-have-no-compute-chamber-2026-10-21.md.
 # Design: docs/design/app-desk-compute-capsule-2026-10-21.md.

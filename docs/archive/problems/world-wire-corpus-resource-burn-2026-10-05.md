@@ -84,7 +84,7 @@ there, almost all file-cas-chunks.
 - S0-1 storage lifecycle: docs/archive/problems/s0-storage-lifecycle-gaps-2026-10-05.md
 - GC live-set code: internal/platform/artifact_gc.go:150-213
 - Rearchitecture analysis: docs/archive/world-wire-rearchitecture-2026-10-05.md
-- WW stack: docs/world-wire-mission-stack-2026-09-22.md (Phase 5)
+- WW stack: docs/archive/world-wire-mission-stack-2026-09-22.md (Phase 5)
 
 ## Director review (2026-10-05) — corrections, one confirmed bug, decisions
 

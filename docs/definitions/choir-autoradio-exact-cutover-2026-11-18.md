@@ -284,7 +284,7 @@ decisions_for_the_owner:
   question: The owner signs in again once when sign-in moves, and mail is fetched again once when mail moves. Everything else the owner would miss (podcast subscriptions and positions, book positions, settings, voice, speed, theme) is carried across by a one-time read that is deleted afterwards. Acceptable?
   why: each Swift store dies with its Swift; what is not carried is lost on the owner's phone
   options: as stated; carry nothing and set the phone up again; migrate the key and mail in place too
-  default: 'as stated, each loss announced the day before. Superseded for the night of 2026-11-19 by decision D1 of docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md: the owner is asleep, so the stored key is read in place (on the owner''s phone only under the night file''s decision D1), sign-in and sign-out stay Swift, nothing signs the phone out, and no store''s loss is taken without the owner awake'
+  default: 'as stated, each loss announced the day before. Superseded for the night of 2026-11-19 by decision D1 of docs/archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md: the owner is asleep, so the stored key is read in place (on the owner''s phone only under the night file''s decision D1), sign-in and sign-out stay Swift, nothing signs the phone out, and no store''s loss is taken without the owner awake'
 - id: D4
   question: Where is the text of a PDF read?
   why: Exact has no PDF text reader, and the phone is an interface into the listener's computer, which can read any file

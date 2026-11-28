@@ -123,7 +123,7 @@ and steps 3-4 should begin by finishing R7 rather than new storage code.
 
 ## Working hypothesis after the owner discussion (2026-10-28 afternoon)
 
-To be tested by docs/definitions/choir-data-architecture-selection-2026-10-28.md,
+To be tested by docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md,
 not yet decided. The owner's aim: intelligibility (hold the whole system in
 one head), resource efficiency, stability and security; storage designed
 and operated in-house on proven open-source parts, not novel engines.

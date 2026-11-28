@@ -2,7 +2,7 @@
 
 Date: 2026-10-22. Class: design gap, red when built. Checklist item: NET-10
 in the [security, density and architecture checklist](../security-density-architecture-checklist-2026-10-21.md).
-Station: [FP10 NET-10](../definitions/choir-launch-fp10-net10-2026-10-22.md).
+Station: [FP10 NET-10](../archive/definitions/choir-launch-fp10-net10-2026-10-22.md).
 
 ## Observed (code at main 51cb3a8cd)
 

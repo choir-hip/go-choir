@@ -32,7 +32,7 @@ accepts any clean repository path.
   `frontend/src/packages/reader`, `frontend/src/app.css`,
   `frontend/src/reader.js`, `frontend/reader-chrome.css`,
   `frontend/read.html` and `frontend/src/lib/theme.ts`
-  (docs/definitions/choir-t1a-app-self-development-2026-10-26.md, the `now`
+  (docs/archive/definitions/choir-t1a-app-self-development-2026-10-26.md, the `now`
   card). Two of the files are shell files shared by every app:
   `frontend/src/app.css` and `frontend/src/lib/theme.ts`. The mission lists
   app.css as a protected surface ("shared overrides") and records that it

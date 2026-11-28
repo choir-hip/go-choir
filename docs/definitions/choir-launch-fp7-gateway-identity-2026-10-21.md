@@ -2,7 +2,7 @@
 definition_version: 4
 
 # Station FP7 of the launch first pass
-# (docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md), batch
+# (docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md), batch
 # B7. Owner 2026-10-21 (owner notes section 36 and 37): the Claude delegate
 # stays on its one test computer; before any wider use the key is held by the
 # gateway; every security and density item that can land before launch does.

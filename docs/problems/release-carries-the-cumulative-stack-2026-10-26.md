@@ -35,7 +35,7 @@ desks (internal/agentcore/release_adoption.go:336-351).
 
 - The Reader candidate on the test computer (selfdev-aae30fb7) has a scope
   of six entries, the Reader package and five files outside it
-  (docs/definitions/choir-t1a-app-self-development-2026-10-26.md, the `now`
+  (docs/archive/definitions/choir-t1a-app-self-development-2026-10-26.md, the `now`
   card). With U1 on, a release of it would carry that whole scope, and
   every earlier unpromoted change under it.
 - `release.Record.Validate` (internal/release/record.go:194-200) checks only

@@ -13,7 +13,7 @@ this repo; **[I]** inferred, settled by the probes and predictions in
 section 11.
 
 Owner direction this answers (2026-10-30, the last three entries of
-[the selection definition](../definitions/choir-data-architecture-selection-2026-10-28.md)):
+[the selection definition](../archive/definitions/choir-data-architecture-selection-2026-10-28.md)):
 "We need to be able to restore arbitrarily (within something like a 7, 14,
 or 30 day window for users) so anything bad that happens to a user vm can
 rewind. I think this requires host side encrypted tape and/or
@@ -822,7 +822,7 @@ receipt copy; the record-batch tag.
 ## 11. Precommitted expectations
 
 Round 0k is appended in full to
-`docs/definitions/choir-data-architecture-selection-2026-10-28.precommit.md`;
+`docs/archive/definitions/choir-data-architecture-selection-2026-10-28.precommit.md`;
 this list is its index. Each record there states its estimate with an 80% interval or a probability, a
 falsifier, the resolving artifact, and what is hard to measure.
 

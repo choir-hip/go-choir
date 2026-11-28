@@ -447,7 +447,7 @@ are corrected in place above. The rest:
   decision_rule, now.next_action), read: precommitted expectations with
   intervals, falsifiers, named measurement difficulties and mitigations,
   recorded in the companion precommitment ledger
-  docs/definitions/choir-data-architecture-selection-2026-10-28.precommit.md
+  docs/archive/definitions/choir-data-architecture-selection-2026-10-28.precommit.md
   before the evidence that resolves them exists, scored when it arrives,
   and followed by new predictions. The decision rule's weights are set by the owner at plan step 2 and frozen with the tape head and receipt key before any candidate run (correction, Devin plan review 2, N3: an earlier wording froze them "with the first predictions", which round 0 already passed without weights); each phase's predictions cite them. Hard gates stay gates.
 - Byte deletions (B3): event_json out of the tape index, and content-hash
@@ -646,9 +646,9 @@ MySQL/MariaDB on the host and LMDB/bbolt/RocksDB in guests, plus adjacent
 options. This authorizes comparative research and documentation, not runtime
 code, production experiments, engine ratification or the migration.
 
-The [expanded comparison](../evidence/storage-engine-alternatives-2026-10-29.md)
+The [expanded comparison](../../evidence/storage-engine-alternatives-2026-10-29.md)
 records primary sources, positive cases, failure mechanisms and qualitative
-falsifiers. The [direction note](../archive/design/data-rearchitecture-2026-10-28.md)
+falsifiers. The [direction note](../design/data-rearchitecture-2026-10-28.md)
 now distinguishes hypotheses from deployed properties and carries the review
 perspectives. Neither is a new execution design or consensus ratification.
 
@@ -699,7 +699,7 @@ Control should not share the corpus service's failure/maintenance domain.
 Security ranks first, stability second, scalability and simplicity jointly
 next. Additional setup is acceptable for long-term resource/stability gains.
 
-The [read-only control/corpus investigation](../evidence/control-corpus-resource-profile-2026-10-29.md)
+The [read-only control/corpus investigation](../../evidence/control-corpus-resource-profile-2026-10-29.md)
 maps what control actually stores and reconstructs hours of active Autopaper
 publishing alongside corpus database lifetimes and a confirmed OOM. It separates
 current state, accepted-event receipts and physical Dolt history. It also names
@@ -770,7 +770,7 @@ or performed in this review; documentation landing does not resolve them.
 
 ## Storage audit 2026-10-29 (FP0): what the disk holds, mapped to the plan
 
-Input: [Node B storage inventory](../archive/evidence/node-b-storage-inventory-2026-10-29.md)
+Input: [Node B storage inventory](../evidence/node-b-storage-inventory-2026-10-29.md)
 (read-only, Sonnet, 2026-10-29), after the owner asked for "a better
 accounting of what all our data is and where its saved and what is
 real/valuable/unique and what is junk". It is a host disk audit, not the
@@ -1139,7 +1139,7 @@ the kinks first ofc. All these reviews and design have been very fruitful.
 So keep going and then get to development."
 
 Status: **superseded**. Successor:
-[`choir-data-system-build-2026-10-30.md`](choir-data-system-build-2026-10-30.md).
+[`choir-data-system-build-2026-10-30.md`](../../definitions/choir-data-system-build-2026-10-30.md).
 
 The selection this goal set out to make was made by measurement and owner
 rulings rather than by the planned candidate bake-off:
