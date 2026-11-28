@@ -219,9 +219,9 @@ owner_rulings:
   read_as: an on-device turn completes with no account; anything that needs the person's computer still needs sign-in.
 now:
   status: working
-  slice: 'E5: the bar URL rule (d61b266cf), the reader''s aim (ddb2d0f5c) and the sentence follow (1e9788486, plan slices S0 and S2+S3) are shared code; non-voice native is 2,894 lines, 31 files, 12 names; next is the bar''s facts (S4)'
-  source_ref: origin/main 1e9788486
-  deploy_identity: staging on 1e9788486
+  slice: 'E5: the bar URL rule (d61b266cf), the reader''s aim (ddb2d0f5c), the sentence follow (1e9788486) and the bar''s facts (4eebdd26d) are shared code, so the sentence follow plan is built; non-voice native is 2,777 lines, 30 files; what remains waits on owner decisions D2, D4, D6, D7 or is Android voice'
+  source_ref: origin/main 4eebdd26d
+  deploy_identity: staging on 4eebdd26d
   candidate:
     id: none
     state: none
@@ -250,7 +250,7 @@ now:
     main_uncertainty: 'whether the owner counts the voice turn''s state as voice (it decides whether the gate can reach zero without rewriting the turn), and whether the build tree may move'
     next_observation: 'the contract build and bun test on the new pin, once the build tree may move'
   blocker_or_risk: 'The app-side Swift has no compile check that runs without a person: main did not compile as an iPhone app from ce79438a8 until e25afe05f, 31 hours (docs/problems/main-broke-the-iphone-app-build-for-a-day-and-no-check-saw-it-2026-11-28.md); the owner is asked which check closes it. The build tree was moved to main on 2026-11-28 on the owner''s word to land the Android work (its old state is on branch deck-build 4b46ca522); D5 is answered by that. Nothing of K3 has run on a device or a simulator.'
-  next_action: 'build the bar facts in shared code (plan slice S4), then delete the dead launch-timing and prepared-audio Swift; landings now compile the iPhone app (aaad08a1d) and run the shared-code tests (38170ab8e); Android is compiled by hand in the build tree; device checks are owed for everything landed'
+  next_action: 'the bar and radio page offer three controls that do nothing on Android (speed, hands-free toggle, typed question): hide them there or have Kotlin answer, an owner choice with hiding as the default; survey what non-voice Swift is left without an owner decision; device checks are owed for everything landed'
 receipts: []
 ---
 
