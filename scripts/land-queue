@@ -120,6 +120,7 @@ if [ -z "${LAND_QUEUE_STAGE:-}" ]; then
   src=$(cd "$(dirname "$0")" && pwd -P)
   cp "$0" "$stage/land-queue" && cp "$src/land" "$stage/land" || exit 1
   cp "$src/gates" "$stage/gates" 2>/dev/null || true
+  cp "$src/check-app-compiles" "$stage/check-app-compiles" 2>/dev/null || true
   cp "$src/land-timing.sh" "$stage/land-timing.sh" 2>/dev/null || true
   LAND_QUEUE_STAGE=$stage exec bash "$stage/land-queue" "$@"
 fi

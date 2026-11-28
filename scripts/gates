@@ -244,6 +244,8 @@ run python3 -I scripts/check-autoradio-native-boundary
 # every native persistence site is named in scripts/native-stores.txt with its sign-out ruling (design E6.4, G2); CI has no step for it yet
 run python3 -I scripts/check-native-stores --selftest
 run python3 -I scripts/check-native-stores
+# the landing step that compiles the iPhone app in the build tree (the landing script runs the real one; its selftest uses a fake tree and a fake build)
+run python3 -I scripts/check-app-compiles --selftest
 # the guest floor list covers what the floor commands import (CI: Vocabulary
 # Gates); a new package imported by guest code fails here, not after the push
 run scripts/check-guest-floor-paths

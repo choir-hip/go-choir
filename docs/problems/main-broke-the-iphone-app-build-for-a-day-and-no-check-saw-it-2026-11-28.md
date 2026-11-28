@@ -38,10 +38,15 @@ two did not here.
 
 - The second build passed, so the five landings of 2026-11-27 in those
   directories compile. Whether they behave is not known: nothing ran.
-- The gap is still open. Until a check compiles the app-side Swift on every
-  landing that touches it, this will recur. Options, none chosen: a Mac CI
-  runner; a gate in the landing queue that runs the simulator build in the
-  build tree when those paths change (about ten minutes, and it needs the
-  build tree free); moving the app-side Swift into the Swift package so the
-  package tests compile it.
+- Built 2026-11-28: the second option, a landing step (`scripts/check-app-compiles`, run by `scripts/land`
+  after the gates; [change](../changes/2026-11-28-landings-compile-the-iphone-app.md)). It compiles the
+  simulator app in the build tree when a train touches app-side Swift or what it compiles against, and refuses
+  when that tree is dirty. It has never run against a real build.
+- Still open: CI does not build the app (no Mac runner), so a push that bypasses `scripts/land` is not
+  checked. The step needs the build tree clean and free, and about ten minutes under the one Mac build lock,
+  so landings on this Mac queue behind it. The Swift package tests still do not compile the two directories.
+- Android is not compiled by that step. The same method fits: `exact.sh android --no-install` builds an APK
+  without adb (Exact's reference, `bun exact.mjs android --release --no-install --json`), and exact-guard.sh
+  allows it for a development app in the build tree. How long it takes is not known: no log of an Android
+  build was found, and none was run.
 - The Android build was not re-run after the fix.

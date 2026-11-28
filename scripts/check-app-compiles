@@ -1,0 +1,426 @@
+#!/usr/bin/env python3
+"""A landing that touches the iPhone app's Swift, or what it compiles against, compiles the app.
+
+The Swift under mobile/exact-package/apple/ and mobile/AutoradioLab/modules/apple/ is
+compiled only by the app build, which runs only in the one build tree on this Mac
+(mobile/scripts/build-tree.sh path). A landing broke it for 31 hours and nothing saw it
+(docs/problems/main-broke-the-iphone-app-build-for-a-day-and-no-check-saw-it-2026-11-28.md).
+
+  scripts/check-app-compiles --changed-from <ref>   the landing step (the landing script runs it after the gates)
+  scripts/check-app-compiles --needed --changed-from <ref>   exit 0 when the diff <ref>..HEAD needs it, 1 when not
+  scripts/check-app-compiles --selftest
+
+With --changed-from: when no changed path (the diff <ref>..HEAD) is one of NEEDED below it prints one line
+saying so and exits 0. Otherwise, in the build tree, under the Mac build lock
+(~/.cache/autoradio-mac-build.lock, the one build-lab.sh callers hold; 2 h wait):
+
+  1. REFUSES (exit 1, naming the dirty paths) when `git status --short` in the build tree is not empty or
+     its HEAD is not a detached commit it can return to. It never cleans, stashes or overwrites. It checks
+     this before waiting for the lock and again inside it.
+  2. records the tree's commit, checks out HEAD of this tree (the train being landed) detached, runs
+     `AR_VARIANT=lab-one mobile/scripts/build-lab.sh ios --no-install` with a 2400 s timeout, log captured,
+  3. ALWAYS checks the recorded commit back out (also after a failure, a timeout or a signal),
+  4. passes only when the log has Swift's `Build complete!` and no line matching `error:`.
+
+The verdict is read from the log, never from the exit code. Seen 2026-11-28 at Exact pin 8552d20f9: the `ios`
+verb also tries to install into any booted simulator and exits non-zero when that fails, after a good
+compile. `--no-install` (Exact's own flag, host/apple/build.mjs; exact-guard.sh lets a development app's
+build take it) skips that, but the log stays the evidence either way.
+
+No way to skip it. With no build tree named on this Mac it fails, it does not pass. CI has no Mac and does
+not run it. The fake build the selftest uses is a parameter of run_check, passed to the locked child as JSON;
+the command line has no way to name one.
+"""
+import fnmatch
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+
+TIMEOUT = 2400
+LOCK_WAIT = 7200
+
+# a changed path is one of these (prefixes end in /, the rest are whole paths or globs)
+NEEDED = [
+    "mobile/exact-package/apple/",
+    "mobile/AutoradioLab/modules/apple/",
+    "mobile/AutoradioKit/Sources/",  # the app compiles the kit
+    "mobile/exact-package/interface/",
+    "mobile/exact-patches/",
+    "mobile/exact-package/exact.json",
+    "mobile/exact.pin",
+    "mobile/scripts/build-lab.sh",
+    "mobile/scripts/stage-app.sh",
+    "mobile/scripts/sync-exact-package.sh",
+    "mobile/scripts/exact.sh",
+]
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+
+
+def needed(files):
+    return [f for f in files if any(f.startswith(p) if p.endswith("/") else fnmatch.fnmatchcase(f, p) for p in NEEDED)]
+
+
+def git(tree, *args, check=False):
+    return subprocess.run(["git", "-C", tree, *args], capture_output=True, text=True, check=check)
+
+
+def changed_files(ref, cand="HEAD", cwd=None):
+    r = subprocess.run(["git", "diff", "--name-only", "--no-renames", ref, cand], capture_output=True, text=True, cwd=cwd)
+    if r.returncode:
+        raise SystemExit("check-app-compiles: git diff %s %s failed: %s" % (ref, cand, r.stderr.strip()))
+    return [l for l in r.stdout.splitlines() if l]
+
+
+def judge(log):
+    """(ok, why) from the build log alone."""
+    lines = [ANSI.sub("", l) for l in log.splitlines()]
+    errs = [l for l in lines if "error:" in l]
+    if errs:
+        return False, "the build log has %d line(s) with `error:`; first: %s" % (len(errs), errs[0].strip()[:240])
+    if not any("Build complete!" in l for l in lines):
+        return False, "the build log has no `Build complete!` from Swift"
+    return True, "Build complete!"
+
+
+def tree_problem(tree):
+    """None when the tree is clean on a detached commit; else the message that refuses."""
+    st = git(tree, "status", "--short")
+    if st.returncode:
+        return "git status failed in the build tree %s: %s" % (tree, st.stderr.strip())
+    if st.stdout.strip():
+        paths = "\n".join("    " + l for l in st.stdout.splitlines()[:30])
+        return ("the build tree %s holds uncommitted work and this check will not clean, stash or overwrite it. Dirty paths:\n%s\n"
+                "  Commit or remove them there (or wait for whoever is using the tree), then land again." % (tree, paths))
+    if git(tree, "symbolic-ref", "-q", "HEAD").returncode == 0:
+        br = git(tree, "symbolic-ref", "-q", "--short", "HEAD").stdout.strip()
+        return ("the build tree %s is on the branch %s, not a detached commit it can return to; this check will not move a branch. "
+                "Detach it there (git checkout --detach) and land again." % (tree, br))
+    if git(tree, "rev-parse", "-q", "--verify", "HEAD^{commit}").returncode:
+        return "the build tree %s has no commit at HEAD" % tree
+    return None
+
+
+def lock_argv(lock):
+    if os.access("/usr/bin/lockf", os.X_OK):
+        return ["/usr/bin/lockf", "-k", "-t", str(LOCK_WAIT), lock]
+    if shutil.which("flock"):
+        return ["flock", "-w", str(LOCK_WAIT), lock]
+    return None
+
+
+def run_build(tree, argv, timeout, logpath):
+    """Run the build in its own process group; returns (exit code or None, timed out)."""
+    env = dict(os.environ, AR_VARIANT="lab-one")
+    with open(logpath, "wb") as log:
+        p = subprocess.Popen(argv, cwd=tree, env=env, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+        try:
+            return p.wait(timeout=timeout), False
+        except subprocess.TimeoutExpired:
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(p.pid, sig)
+                except ProcessLookupError:
+                    break
+                try:
+                    p.wait(timeout=10)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+            return None, True
+        except BaseException:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            raise
+
+
+def inner(a):
+    """Inside the lock: re-check the tree, build the candidate, put the recorded commit back. Returns the exit code."""
+    tree, cand, argv, timeout, logpath = a["tree"], a["cand"], a["argv"], a["timeout"], a["log"]
+    bad = tree_problem(tree)
+    if bad:
+        print("check-app-compiles: REFUSED: " + bad)
+        return 1
+    orig = git(tree, "rev-parse", "HEAD").stdout.strip()
+    if git(tree, "cat-file", "-e", cand + "^{commit}").returncode:
+        print("check-app-compiles: REFUSED: the commit %s is not in the build tree's repository %s (is it another clone?)" % (cand[:12], tree))
+        return 1
+
+    def _term(*_):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, _term)
+    code, timed_out, t0 = None, False, time.time()
+    try:
+        co = git(tree, "checkout", "-q", "--detach", cand)
+        if co.returncode:
+            print("check-app-compiles: FAILED: could not check out %s in the build tree: %s" % (cand[:12], co.stderr.strip()))
+            return 1
+        print("check-app-compiles: building %s in %s (was at %s; timeout %d s; log %s)" % (cand[:12], tree, orig[:12], timeout, logpath), flush=True)
+        code, timed_out = run_build(tree, argv, timeout, logpath)
+    except KeyboardInterrupt:
+        print("check-app-compiles: FAILED: interrupted")
+        return 1
+    finally:
+        back = git(tree, "checkout", "-q", "--detach", orig)
+        now = git(tree, "rev-parse", "HEAD").stdout.strip()
+        if back.returncode or now != orig:
+            print("check-app-compiles: WARNING: the build tree is NOT back at %s (it is at %s): %s\n"
+                  "  Put it back by hand: git -C %s checkout --detach %s" % (orig[:12], now[:12], back.stderr.strip(), tree, orig), flush=True)
+            restored = False
+        else:
+            restored = True
+        left = git(tree, "status", "--short").stdout.strip()
+        if left:
+            print("check-app-compiles: note: the build left these paths changed in the build tree; they are left as they are:\n"
+                  + "\n".join("    " + l for l in left.splitlines()[:20]), flush=True)
+    secs = int(time.time() - t0)
+    if timed_out:
+        print("check-app-compiles: FAILED: the build did not finish in %d s and was stopped (log %s)" % (timeout, logpath))
+        return 1
+    try:
+        text = open(logpath, errors="replace").read()
+    except OSError as e:
+        print("check-app-compiles: FAILED: cannot read the log %s: %s" % (logpath, e))
+        return 1
+    ok, why = judge(text)
+    if not ok:
+        print("check-app-compiles: FAILED: %s (build exit %s, %d s, log %s)" % (why, code, secs, logpath))
+        errs = [ANSI.sub("", l) for l in text.splitlines() if "error:" in l]
+        print("--- error lines" if errs else "--- last 30 lines of the log")
+        print("\n".join(errs[:30] if errs else [ANSI.sub("", l) for l in text.splitlines()[-30:]]))
+        return 1
+    if not restored:
+        print("check-app-compiles: FAILED: it compiled, but the build tree was not put back (see the warning above)")
+        return 1
+    print("check-app-compiles: ok: the app compiled at %s (%d s; build exit %s is not read, the log is)" % (cand[:12], secs, code))
+    return 0
+
+
+def run_check(tree, cand, argv, lock, timeout=TIMEOUT, logdir=None):
+    """Refuse early, take the lock, run inner() in a child that holds it. Returns the exit code."""
+    bad = tree_problem(tree)
+    if bad:
+        print("check-app-compiles: REFUSED: " + bad)
+        return 1
+    la = lock_argv(lock)
+    if la is None:
+        print("check-app-compiles: FAILED: neither /usr/bin/lockf nor flock exists here; the app builds on the Mac")
+        return 1
+    os.makedirs(os.path.dirname(lock), exist_ok=True)
+    fd, logpath = tempfile.mkstemp(prefix="app-compile-", suffix=".log", dir=logdir)
+    os.close(fd)
+    a = json.dumps({"tree": tree, "cand": cand, "argv": argv, "timeout": timeout, "log": logpath})
+    print("check-app-compiles: waiting for the Mac build lock %s (up to %d s)" % (lock, LOCK_WAIT), flush=True)
+    p = subprocess.Popen(la + [sys.executable, "-I", os.path.abspath(__file__), "--inner", a], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for line in p.stdout:  # streamed, through this process's stdout
+        sys.stdout.write(line)
+        sys.stdout.flush()
+    rc = p.wait()
+    if rc == 75 and la[0].endswith("lockf"):
+        print("check-app-compiles: FAILED: the Mac build lock was not free within %d s" % LOCK_WAIT)
+    return rc
+
+
+def build_tree(top):
+    r = subprocess.run([os.path.join(top, "mobile/scripts/build-tree.sh"), "path"], capture_output=True, text=True)
+    if r.returncode:
+        print("check-app-compiles: FAILED: this landing changes app-side Swift or what it compiles against, and this Mac names no build tree:\n  %s\n"
+              "  The app compiles only there (CLAUDE.md, build output lives in one place). Land from the Mac that has it, or have the lead run mobile/scripts/build-tree.sh set."
+              % (r.stderr.strip() or r.stdout.strip()))
+        return None
+    mobile = r.stdout.strip()
+    return git(mobile, "rev-parse", "--show-toplevel").stdout.strip() or os.path.dirname(mobile)
+
+
+def main(argv):
+    if "--inner" in argv:
+        return inner(json.loads(argv[argv.index("--inner") + 1]))
+    if argv == ["--selftest"]:
+        return selftest()
+    if "--changed-from" not in argv or argv.index("--changed-from") + 1 >= len(argv):
+        print("usage: scripts/check-app-compiles [--needed] --changed-from <ref> | --selftest", file=sys.stderr)
+        return 2
+    ref = argv[argv.index("--changed-from") + 1]
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+    if not top:
+        print("check-app-compiles: not in a git checkout", file=sys.stderr)
+        return 2
+    hit = needed(changed_files(ref, "HEAD", top))
+    if "--needed" in argv:
+        return 0 if hit else 1
+    if not hit:
+        print("check-app-compiles: not needed: no app-side Swift, or what the app compiles against, changed since %s" % ref[:12])
+        return 0
+    print("check-app-compiles: needed, changed: %s%s" % (", ".join(hit[:5]), " ..." if len(hit) > 5 else ""))
+    tree = build_tree(top)
+    if tree is None:
+        return 1
+    if os.path.realpath(tree) == os.path.realpath(top):
+        print("check-app-compiles: FAILED: this tree is the build tree (%s); land from a lane, the build tree is not a train's place" % tree)
+        return 1
+    cand = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=top).stdout.strip()
+    lock = os.environ.get("AUTORADIO_MAC_BUILD_LOCK") or os.path.expanduser("~/.cache/autoradio-mac-build.lock")
+    return run_check(tree, cand, [os.path.join(tree, "mobile/scripts/build-lab.sh"), "ios", "--no-install"], lock)
+
+
+# ------------------------------------------------------------------ selftest
+def selftest():
+    passed = failed = 0
+
+    def check(name, cond, detail=""):
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+        else:
+            failed += 1
+            print("FAIL: %s %s" % (name, detail))
+
+    T = tempfile.mkdtemp(prefix="app-compile-selftest.")
+    try:
+        # the path list
+        check("apple dir needs it", needed(["mobile/exact-package/apple/A.swift"]))
+        check("lab module needs it", needed(["mobile/AutoradioLab/modules/apple/X.swift"]))
+        check("kit sources need it", needed(["mobile/AutoradioKit/Sources/K/k.swift"]))
+        check("exact.json/interface/pin/patches need it", all(needed([f]) for f in ["mobile/exact-package/exact.json", "mobile/exact-package/interface/a.json", "mobile/exact.pin", "mobile/exact-patches/0001.patch"]))
+        check("the four scripts need it", all(needed(["mobile/scripts/%s.sh" % s]) for s in ["build-lab", "stage-app", "sync-exact-package", "exact"]))
+        check("other paths do not", not needed(["docs/a.md", "internal/x.go", "mobile/AutoradioKit/Tests/t.swift", "mobile/scripts/sim-slim.sh", "mobile/exact-package/android/a.kt", "mobile/AutoradioLab/modules/android/a.kt"]))
+
+        def sh(cwd, *a):
+            return subprocess.run(a, cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+
+        def mkrepo(path):
+            os.makedirs(path)
+            sh(path, "git", "init", "-q")
+            for k, v in (("user.email", "t@example.invalid"), ("user.name", "t"), ("commit.gpgsign", "false")):
+                sh(path, "git", "config", k, v)
+
+        def commit(path, name, text, msg):
+            os.makedirs(os.path.dirname(os.path.join(path, name)) or path, exist_ok=True)
+            open(os.path.join(path, name), "w").write(text)
+            sh(path, "git", "add", "-A")
+            sh(path, "git", "commit", "-q", "-m", msg)
+            return sh(path, "git", "rev-parse", "HEAD")
+
+        # a fake build tree: c0 (what it holds), c1 (the candidate train)
+        tree = os.path.join(T, "tree")
+        mkrepo(tree)
+        c0 = commit(tree, "a.txt", "0\n", "c0")
+        cand = commit(tree, "a.txt", "1\n", "c1")
+        lock = os.path.join(T, "lock", "build.lock")
+        marker = os.path.join(T, "head-during-build")
+
+        def fresh():
+            sh(tree, "git", "checkout", "-q", "-f", "--detach", c0)  # the selftest's own tree
+            sh(tree, "git", "clean", "-fdq")
+
+        def build(body):  # a fake build command: a shell snippet that records the HEAD it ran at
+            return ["sh", "-c", 'git rev-parse HEAD > "%s"; %s' % (marker, body)]
+
+        def go(argv, timeout=20):
+            if os.path.exists(marker):
+                os.remove(marker)
+            fresh()
+            out = sys.stdout
+            import io
+            buf = io.StringIO()
+            sys.stdout = buf
+            try:
+                rc = run_check(tree, cand, argv, lock, timeout, T)
+            finally:
+                sys.stdout = out
+            return rc, buf.getvalue()
+
+        head = lambda: sh(tree, "git", "rev-parse", "HEAD")
+        built_at = lambda: open(marker).read().strip() if os.path.exists(marker) else None
+
+        rc, out = go(build('echo "Build complete! (3.2 sec)"'))
+        check("a pass: exit 0", rc == 0, out)
+        check("a pass: built at the candidate", built_at() == cand, str(built_at()))
+        check("a pass: original commit back", head() == c0 and git(tree, "symbolic-ref", "-q", "HEAD").returncode != 0)
+
+        rc, out = go(build('echo "A.swift:48:21: error: call to main actor-isolated instance method"; exit 1'))
+        check("a fail: exit 1 and says error", rc == 1 and "error:" in out, out)
+        check("a fail: original commit back", head() == c0)
+
+        rc, out = go(build('echo "x.swift:1:1: error: nope"; echo "Build complete! (1 sec)"; exit 0'))
+        check("error: with exit 0 and Build complete fails", rc == 1 and "FAILED" in out, out)
+        check("error: line: original commit back", head() == c0)
+
+        rc, out = go(build('echo "[1/2] x"; exit 0'))
+        check("exit 0 without Build complete! fails", rc == 1 and "no `Build complete!`" in out, out)
+
+        rc, out = go(build('echo "Build complete! (3 sec)"; echo "no booted simulator" >&2; exit 3'))
+        check("Build complete! with a non-zero exit (install failed) passes", rc == 0, out)
+        check("install-failure pass: original commit back", head() == c0)
+
+        t0 = time.time()
+        rc, out = go(build("sleep 60; echo 'Build complete!'"), timeout=2)
+        check("a timeout fails", rc == 1 and "did not finish" in out, out)
+        check("a timeout is quick and kills the build", time.time() - t0 < 40, "%d s" % (time.time() - t0))
+        check("a timeout: original commit back", head() == c0)
+
+        # a dirty tree is refused, touched by nothing
+        for what, setup in (("untracked file", lambda: open(os.path.join(tree, "mine.txt"), "w").write("x")),
+                            ("modified tracked file", lambda: open(os.path.join(tree, "a.txt"), "w").write("mine\n"))):
+            if os.path.exists(marker):
+                os.remove(marker)
+            fresh()
+            setup()
+            before = sh(tree, "git", "status", "--short")
+            import io
+            buf, out0 = io.StringIO(), sys.stdout
+            sys.stdout = buf
+            try:
+                rc = run_check(tree, cand, build('echo "Build complete!"'), lock, 20, T)
+            finally:
+                sys.stdout = out0
+            check("dirty (%s): refused" % what, rc == 1 and "REFUSED" in buf.getvalue() and ("mine.txt" in buf.getvalue() or "a.txt" in buf.getvalue()), buf.getvalue())
+            check("dirty (%s): no build ran, tree untouched" % what, built_at() is None and sh(tree, "git", "status", "--short") == before and head() == c0)
+        fresh()
+
+        # a branch checkout is refused, not moved
+        sh(tree, "git", "checkout", "-q", "-B", "work", c0)
+        import io
+        buf, out0 = io.StringIO(), sys.stdout
+        sys.stdout = buf
+        try:
+            rc = run_check(tree, cand, build('echo "Build complete!"'), lock, 20, T)
+        finally:
+            sys.stdout = out0
+        check("on a branch: refused, not moved", rc == 1 and "branch work" in buf.getvalue() and sh(tree, "git", "symbolic-ref", "--short", "HEAD") == "work", buf.getvalue())
+        fresh()
+        sh(tree, "git", "branch", "-q", "-D", "work")
+
+        # the command line: a landing that touches nothing listed, and one that needs a tree Mac does not have
+        repo = os.path.join(T, "repo")
+        mkrepo(repo)
+        base = commit(repo, "docs/a.md", "a\n", "base")
+        os.makedirs(os.path.join(repo, "mobile/scripts"))
+        shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mobile/scripts/build-tree.sh"), os.path.join(repo, "mobile/scripts/build-tree.sh"))
+        commit(repo, "docs/b.md", "b\n", "docs only")
+        env = dict(os.environ, AUTORADIO_BUILD_TREE_FILE=os.path.join(T, "no-such-marker"))
+        me = [sys.executable, "-I", os.path.abspath(__file__)]
+        r = subprocess.run(me + ["--changed-from", base], cwd=repo, env=env, capture_output=True, text=True)
+        check("docs only: one line, not needed, exit 0", r.returncode == 0 and "not needed" in r.stdout and len(r.stdout.strip().splitlines()) == 1, r.stdout + r.stderr)
+        r = subprocess.run(me + ["--needed", "--changed-from", base], cwd=repo, env=env, capture_output=True, text=True)
+        check("--needed: 1 for docs only", r.returncode == 1)
+        commit(repo, "mobile/exact.pin", "abc\n", "pin")
+        r = subprocess.run(me + ["--needed", "--changed-from", base], cwd=repo, env=env, capture_output=True, text=True)
+        check("--needed: 0 for the pin", r.returncode == 0)
+        r = subprocess.run(me + ["--changed-from", base], cwd=repo, env=env, capture_output=True, text=True)
+        check("no build tree on this Mac fails, never passes", r.returncode == 1 and "no build tree" in r.stdout, r.stdout + r.stderr)
+    finally:
+        shutil.rmtree(T, ignore_errors=True)
+    print("selftest: %d passed, %d failed" % (passed, failed))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
