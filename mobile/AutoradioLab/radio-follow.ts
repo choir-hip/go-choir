@@ -24,16 +24,34 @@ export function digestOf(text: string): string {
   return `${text.length}:${(h >>> 0).toString(16).padStart(8, '0')}`;
 }
 
-/** The trimmed, non-empty sentences of a text as [start, end) offsets, cut by the reader's own rule (`sentenceEnds`) so the radio's sentence and the page's are the same. */
-function spansOf(text: string): { s: number; e: number }[] {
+/** The pieces the reader numbers a text into: every end of `sentenceEnds` is one (none dropped), and a text over the reader's size is one piece. The page's blocks and the entry's paragraphs are cut by this one function. */
+function piecesOf(text: string): { s: number; e: number }[] {
+  if (text.length > MAX_SENTENCE_CHARS) return [{ s: 0, e: text.length }];
+  const out: { s: number; e: number }[] = []; let from = 0;
+  for (const end of sentenceEnds(text)) { out.push({ s: from, e: end }); from = end; }
+  return out;
+}
+
+/** The trimmed, non-empty sentences of a text as [start, end) offsets, from `piecesOf`, so the radio's sentence and the page's are the same. */
+function spansOf(text: string, base = 0): { s: number; e: number }[] {
   const out: { s: number; e: number }[] = [];
-  let from = 0;
-  for (const end of sentenceEnds(text)) {
-    const raw = text.slice(from, end), lead = raw.length - raw.trimStart().length, trimmed = raw.trim();
-    if (trimmed !== '') out.push({ s: from + lead, e: from + lead + trimmed.length });
-    from = end;
+  for (const p of piecesOf(text)) {
+    const raw = text.slice(p.s, p.e), lead = raw.length - raw.trimStart().length, trimmed = raw.trim();
+    if (trimmed !== '') out.push({ s: base + p.s + lead, e: base + p.s + lead + trimmed.length });
   }
   return out;
+}
+
+/** The entry's sentences: each paragraph (a blank line ends one) is cut by `spansOf`, as each page block is. */
+function entrySpans(text: string): { s: number; e: number }[] {
+  const out: { s: number; e: number }[] = [];
+  let from = 0;
+  for (;;) {
+    const cut = text.indexOf('\n\n', from), end = cut < 0 ? text.length : cut;
+    out.push(...spansOf(text.slice(from, end), from));
+    if (cut < 0) return out;
+    from = cut + 2;
+  }
 }
 
 /** The sentences of a unit's words, each trimmed, none empty. Words with no stop are one sentence; no words, none. */
@@ -70,23 +88,21 @@ export function owns(ds: DeckState, air: Air, whys: readonly DeckWhy[]): boolean
   return e !== '' && e === ds.item && e === air.id && e === air.handedId && whys.includes(ds.why);
 }
 
-/** Lower-cased, curly quotes and dashes straightened, runs of white space collapsed and trimmed: what the spoken words and the page's text are compared through. */
+const isSpace = (c: number): boolean => c === 32 || (c >= 9 && c <= 13) || c === 0xa0 || c === 0x1680 || (c >= 0x2000 && c <= 0x200a) || c === 0x2028 || c === 0x2029 || c === 0x202f || c === 0x205f || c === 0x3000 || c === 0xfeff;
+
+/** Lower-cased, curly quotes and dashes straightened, runs of white space collapsed and trimmed: what two sentences are compared through. One pass over the code units (it is called for every sentence of the entry and the page). */
 export function normalised(s: string): string {
   let out = '', lastSpace = true;
-  for (const ch of s) {
-    let c = ch;
-    if (c === '‘' || c === '’') c = "'"; else if (c === '“' || c === '”') c = '"'; else if (c === '–' || c === '—') c = '-';
-    if (/\s/.test(c)) { if (!lastSpace) { out += ' '; lastSpace = true; } } else { out += c.toLowerCase(); lastSpace = false; }
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (isSpace(c)) { if (!lastSpace) { out += ' '; lastSpace = true; } continue; }
+    lastSpace = false;
+    if (c < 128) { out += c >= 65 && c <= 90 ? String.fromCharCode(c + 32) : s[i]; continue; }
+    if (c === 0x2018 || c === 0x2019) out += "'"; else if (c === 0x201c || c === 0x201d) out += '"'; else if (c === 0x2013 || c === 0x2014) out += '-';
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) { out += s.slice(i, i + 2).toLowerCase(); i++; }
+    else out += s[i].toLowerCase();
   }
   return out.endsWith(' ') ? out.slice(0, -1) : out;
-}
-
-/** The sentences of a page block as the reader numbers them (every end of `sentenceEnds` is one, none dropped; a block over the reader's size is one). */
-function pageSentences(text: string): string[] {
-  if (text === '' || text.length > MAX_SENTENCE_CHARS) return [text];
-  const out: string[] = []; let from = 0;
-  for (const end of sentenceEnds(text)) { out.push(text.slice(from, end)); from = end; }
-  return out;
 }
 
 /** The sentence being said, and where it begins in the entry's text: the unit's own range plus the sentence's offset in the unit. Nothing when the place is not valid for `text`. */
@@ -98,38 +114,29 @@ function sayingOf(p: Place, text: string): { text: string; at: number } | undefi
   return { text: unit.slice(x.s, x.e), at: p.start + x.s };
 }
 
-/** The most sentences either side may have for the alignment below (its tables are one cell per pair); past it nothing is lit. */
-const MAX_ALIGN_CELLS = 1_500_000;
 const MIN_SENTENCE = 6;
 
 /**
- * The block and sentence of the page that the entry's sentence at offset `at` is: by ORDER, never by search. The entry's sentences and the page's sentences (normalised) are aligned as two sequences, the longest
- * run of equal sentences in the same order (the page may have blocks the entry lacks, such as headings and captions, and the entry may have words the page lacks). The page sentence matched to the entry sentence
- * that holds `at` is the answer, and only when that match is the only one of the best alignments (a sentence repeated where the order cannot say which is lit on neither). A target under 6 characters, one the page does
- * not have, a text too long to align and a tie all give none.
+ * The block and sentence of the page that the entry's sentence at offset `at` is, by this one rule: let K be the normalised entry sentence holding `at`, and k its number among the entry's sentences equal to K (1-based, in order).
+ * Light the k-th sentence equal to K on the page, if and only if the page has exactly as many sentences equal to K as the entry has; otherwise light nothing. It cannot light another copy (same count, same ordinal), costs one pass
+ * over each text, and gives up a sentence the page shows more or fewer times than the entry has, one under 6 characters, and one the page does not have.
  */
 export function locateAt(entry: string, at: number, blocks: { id: string; text: string }[]): { block: string; sentence: number } | undefined {
-  const spans = spansOf(entry);
-  const k = spans.findIndex((x) => at >= x.s && at < x.e);
-  if (k < 0) return undefined;
-  const ekeys = spans.map((x) => normalised(entry.slice(x.s, x.e)));
-  if ([...ekeys[k]].length < MIN_SENTENCE) return undefined;
-  const pkeys: string[] = [], where: { block: string; sentence: number }[] = [];
-  for (const b of blocks) pageSentences(b.text).forEach((t, i) => { pkeys.push(normalised(t)); where.push({ block: b.id, sentence: i }); });
-  const n = pkeys.length, m = ekeys.length;
-  if (n === 0 || (n + 1) * (m + 1) > MAX_ALIGN_CELLS) return undefined;
-  const w = m + 1;
-  const fwd = new Int32Array((n + 1) * w), bwd = new Int32Array((n + 1) * w);          // fwd[i][j]: the best run in page[0..i) and entry[0..j); bwd[i][j]: in page[i..n) and entry[j..m)
-  for (let i = 1; i <= n; i++) for (let j = 1; j <= m; j++) fwd[i * w + j] = pkeys[i - 1] === ekeys[j - 1] && pkeys[i - 1] !== '' ? fwd[(i - 1) * w + j - 1] + 1 : Math.max(fwd[(i - 1) * w + j], fwd[i * w + j - 1]);
-  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) bwd[i * w + j] = pkeys[i] === ekeys[j] && pkeys[i] !== '' ? bwd[(i + 1) * w + j + 1] + 1 : Math.max(bwd[(i + 1) * w + j], bwd[i * w + j + 1]);
-  const best = fwd[n * w + m];
-  let found = -1;
-  for (let i = 0; i < n; i++) {
-    if (pkeys[i] !== ekeys[k] || fwd[i * w + k] + 1 + bwd[(i + 1) * w + k + 1] !== best) continue;
-    if (found >= 0) return undefined;
-    found = i;
+  const spans = entrySpans(entry);
+  const at0 = spans.findIndex((x) => at >= x.s && at < x.e);
+  if (at0 < 0) return undefined;
+  const key = normalised(entry.slice(spans[at0].s, spans[at0].e));
+  if ([...key].length < MIN_SENTENCE) return undefined;
+  let k = 0, total = 0;
+  spans.forEach((x, j) => { if (normalised(entry.slice(x.s, x.e)) === key) { total++; if (j <= at0) k++; } });
+  let seen = 0, hit: { block: string; sentence: number } | undefined;
+  for (const b of blocks) {
+    piecesOf(b.text).forEach((p, i) => {
+      if (normalised(b.text.slice(p.s, p.e)) !== key) return;
+      if (++seen === k) hit = { block: b.id, sentence: i };
+    });
   }
-  return found < 0 ? undefined : where[found];
+  return seen === total ? hit : undefined;
 }
 
 /** What the reader lights: the block and sentence of the page at `address` that the radio is saying, or none. `ids` and `texts` are the page's blocks (ids one a line; texts joined by U+001F). Lit only while the deck plays the entry on air, which reads that page. */

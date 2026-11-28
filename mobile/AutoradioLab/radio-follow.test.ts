@@ -237,11 +237,11 @@ describe('the page position is the reported range, mapped by order and never sea
     expect(run(B, B, [['b1', B]], 0.9)).toEqual({ address: 'pub:/p/x', blockId: 'b1', sentence: 1 });
     expect(run(B, B, [['b1', B]], 0.1).sentence).toBe(0);
   });
-  test('a block the page has and the entry lacks, whose sentence is also in the entry: it is not lit', () => {
+  test('a block the page has and the entry lacks, whose sentence is also in the entry: the counts differ, so nothing is lit (changed from round one: the occurrence rule gives these up)', () => {
     const E = 'Real paragraph start. Same words repeated here.';
-    expect(run(E, E, [['x1', 'Same words repeated here. Filler one.'], ['x2', E]], 0.9)).toEqual({ address: 'pub:/p/x', blockId: 'x2', sentence: 1 });
+    expect(run(E, E, [['x1', 'Same words repeated here. Filler one.'], ['x2', E]], 0.9)).toEqual(NO_FOLLOW);
   });
-  test('two page sentences that fit the entry equally well light nothing (the order cannot say which)', () => {
+  test('two page sentences where the entry has one light nothing (the counts differ)', () => {
     const S = 'Same words repeated here.';
     expect(run(S, S, [['b1', S], ['b2', S]], 0.5)).toEqual(NO_FOLLOW);
   });
@@ -277,5 +277,53 @@ describe('skip, then the follow before the next pulse: never the previous item\'
     const E2 = 'Second entry words come first. Then more words follow here.';
     const d = { ...EMPTY_STATE, why: 'playing', item: 'e2', place: { entry: 'e2', digest: digestOf(E2), start: 0, length: E2.length, seconds: 0, total: 10 } };
     expect(follow(d, air({ id: 'e2', handedId: 'e2', handedText: E2 }), 'pub:/p/x', blocks([['c1', E2]])).blockId).toBe('c1');
+  });
+});
+
+describe('the occurrence rule: the k-th copy in the entry is the k-th copy on the page, when both have the same number of copies', () => {
+  const A = 'Alpha opens the story here.', S = 'Same words repeated here.', B = 'Beta follows along now.', C = 'Gamma closes it all.';
+  const each = (e: string[], pg: string[][], fraction: number, pick = e.length - 1) => {
+    const entry = e.join(' ');
+    const at = e.slice(0, pick).reduce((n, x) => n + x.length + 1, 0);
+    const page = blocks(pg.map((b, i) => [`p${i + 1}`, b.join(' ')] as [string, string]));
+    return followOf({ ...EMPTY_STATE, why: 'playing', item: 'e1', place: { entry: 'e1', digest: digestOf(entry), start: at, length: e[pick].length, seconds: fraction * 10, total: 10 } }, { id: 'e1', address: 'pub:/p/x', handedId: 'e1', handedText: entry }, 'pub:/p/x', page.ids, page.texts);
+  };
+  test('[A,S,B,S] against a page of [A,S]: speaking the second S lights nothing (the page has one copy, the entry two)', () => {
+    expect(each([A, S, B, S], [[A, S]], 0.1)).toEqual(NO_FOLLOW);
+  });
+  test('[A,S,B,S] against the same: the second S is page sentence 3', () => {
+    expect(each([A, S, B, S], [[A, S, B, S]], 0.1)).toEqual({ address: 'pub:/p/x', blockId: 'p1', sentence: 3 });
+    expect(each([A, S, B, S], [[A, S, B, S]], 0.1, 1)).toEqual({ address: 'pub:/p/x', blockId: 'p1', sentence: 1 });
+  });
+  test('[S,A,S,B] against [S,B,S,A], speaking the second S: the page\'s second S', () => {
+    expect(each([S, A, S, B], [[S, B, S, A]], 0.1, 2)).toEqual({ address: 'pub:/p/x', blockId: 'p1', sentence: 2 });
+    expect(each([S, A, S, B], [[S, B], [S, A]], 0.1, 2)).toEqual({ address: 'pub:/p/x', blockId: 'p2', sentence: 0 });
+  });
+  test('a page-only duplicate lights nothing', () => {
+    expect(each([A, S, B], [[A, S, B, S]], 0.1, 1)).toEqual(NO_FOLLOW);
+  });
+  test('unique sentences in a reordered page still light', () => {
+    expect(each([A, B, C], [[C], [A], [B]], 0.1, 1)).toEqual({ address: 'pub:/p/x', blockId: 'p3', sentence: 0 });
+  });
+  test('a 3,000-sentence document lights the right sentence, and one call is quick', () => {
+    const e = Array.from({ length: 3000 }, (_, i) => `Sentence number ${i} here with some words.`);
+    const pg = Array.from({ length: 30 }, (_, b) => e.slice(b * 100, b * 100 + 100));
+    followOf({ ...EMPTY_STATE }, {}, '', '', '');                                    // warm
+    const entry = pg.map((b) => b.join(' ')).join('\n\n'), page = blocks(pg.map((b, i) => [`p${i + 1}`, b.join(' ')] as [string, string]));
+    const t0 = performance.now();
+    const r = followOf({ ...EMPTY_STATE, why: 'playing', item: 'e1', place: { entry: 'e1', digest: digestOf(entry), start: entry.indexOf(e[2500]), length: e[2500].length, seconds: 1, total: 10 } }, { id: 'e1', address: 'pub:/p/x', handedId: 'e1', handedText: entry }, 'pub:/p/x', page.ids, page.texts);
+    const ms = performance.now() - t0;
+    console.log(`followOf on 3000 sentences: ${ms.toFixed(1)} ms`);
+    expect(r).toEqual({ address: 'pub:/p/x', blockId: 'p26', sentence: 0 });
+    expect(ms).toBeLessThan(200);
+  });
+  test('a sentence longer than the reader\'s limit is one sentence on both sides, so it is found', () => {
+    const long = 'Wording here. '.repeat(1600).trim();                              // over MAX_SENTENCE_CHARS: the reader counts it as one
+    expect(long.length).toBeGreaterThan(20000);
+    const entry = `${A}\n\n${long}`;
+    const page = blocks([['p1', A], ['p2', long]]);
+    const start = entry.indexOf('Wording here.', A.length + 5000);
+    const r = followOf({ ...EMPTY_STATE, why: 'playing', item: 'e1', place: { entry: 'e1', digest: digestOf(entry), start, length: 40, seconds: 0, total: 10 } }, { id: 'e1', address: 'pub:/p/x', handedId: 'e1', handedText: entry }, 'pub:/p/x', page.ids, page.texts);
+    expect(r).toEqual({ address: 'pub:/p/x', blockId: 'p2', sentence: 0 });
   });
 });

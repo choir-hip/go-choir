@@ -411,6 +411,7 @@ class DeckMediaEngine(
      *  the journal's ticks run on the main-looper `HandlerScheduler` (DeckAndroid.kt). ExoPlayer is built here on the main looper and `speechChunks` is written only by `startSpeech` on that scope, so no generation is needed.
      *  The chunk's duration is Media3's: C.TIME_UNSET (a large negative number) until it is known, which `placeOf` makes 0. */
     override fun place(): DeckPlace {
+        if (Looper.myLooper() !== Looper.getMainLooper()) return DeckPlace()      // never read the player or the chunk list from another thread: no place (no sentence), playback untouched
         val current = item ?: return DeckPlace()
         if (current.kind != "speech") return DeckPlace()
         return placeOf(itemID, itemDigest, speechChunks.map { SpeechPart(it.block, it.text, it.start, it.length) }, exo.currentMediaItemIndex, exo.currentPosition, exo.duration)
