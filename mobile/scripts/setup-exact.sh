@@ -76,6 +76,18 @@ if command -v rustup >/dev/null 2>&1; then
     echo "hermes: installing the pinned bundles (online, once per pin)"
     (cd "$SRC" && env -u HERMES_LEAN_SYS_OFFLINE -u CARGO_NET_OFFLINE cargo run -q --manifest-path "$INST" -- $TARGETS)
   fi
+  # The web artifact builds with a dated nightly of its own (Exact's scripts/cargo-check.mjs, WEB_TOOLCHAIN), with that nightly's std
+  # sources and llvm-tools (-Zbuild-std). At the 8552d20f9 pin a Mac that had the nightly without them failed `test web` with "the web
+  # artifact builds with nightly-2026-08-21, its std sources and llvm-tools". Read the name from the pin and install what is missing.
+  WEBCHAN="$(sed -n "s/^export const WEB_TOOLCHAIN = '\\(.*\\)';.*/\\1/p" "$SRC/scripts/cargo-check.mjs" 2>/dev/null | head -1)"
+  if [ -n "$WEBCHAN" ]; then
+    rustup toolchain list | grep -q "^$WEBCHAN-" || rustup toolchain install "$WEBCHAN" --profile minimal
+    WHAVE="$(rustup component list --toolchain "$WEBCHAN" --installed)"
+    for C in rust-src llvm-tools; do
+      echo "$WHAVE" | grep -q "^$C" || { echo "rust: adding $C to $WEBCHAN"; rustup component add "$C" --toolchain "$WEBCHAN"; }
+    done
+    rustup target list --toolchain "$WEBCHAN" --installed | grep -qx wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown --toolchain "$WEBCHAN"
+  fi
   # The web build (`test web`, `agent web`) reads the workspace with `cargo metadata --locked --offline`, so every crate the
   # pin's Cargo.lock names must already be in the Cargo cache. A new pin can lock new crates (2026-11-21: i_float); fetch them here, once.
   if ! (cd "$SRC" && cargo metadata --locked --offline --format-version 1) >/dev/null 2>&1; then
