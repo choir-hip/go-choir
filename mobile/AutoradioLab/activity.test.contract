@@ -1,38 +1,41 @@
-// Activity on the web host: the page opens when asked for, shows its status line and Refresh, and keeps standing while the clock moves.
-// The number of asks is not visible to a contract test (`expect no failures` did not catch the 2026-11-28 storm: about 60 asks a second here); it is held by
-// exact-facts.test.ts H3 (no resource reads the clock; Activity is asked only with its page on top) and measured in docs/changes/2026-11-28-activity-asked-per-frame.md.
-// The web host has no account, so no rows are fetched; the ages are the contract's `agoText` (activity.contract), checked in the change entry.
-//  A1 before the Activity page is on top its status line is not drawn; once opened it is, and Refresh is there.
-//  A2 the clock moving does not take the page away or fail anything.
-//  A3 Refresh leaves the page answered.
-test "Activity: opens on press, and stands while the clock moves"
+// Activity on the web host: the page opens when asked for, shows its status line and Refresh, and its clock for the ages is one number that moves rarely.
+// The number of asks of the source is not visible to a contract test (`expect no failures` did not catch the 2026-11-28 storm: about 60 asks a second here); it is held by
+// exact-facts.test.ts H3 (no resource names the clock or a name that carries it; Activity is asked only with its page on top). agoText's cases are ago/app.test.contract.
+// The web host has no account, so no rows are fetched; what is shown here is the page and its clock (`actNow`: 0 until the page opens, set at open, on Refresh and every 30 s).
+//  A1 before the Activity page is on top its status line is not drawn and the clock is unset; once opened the status line and Refresh are drawn and the clock is set.
+//  A2 the clock does not move for a few seconds, and moves on at 30 s.
+//  A3 Refresh moves the tick its source is asked for (`actTick`) and sets the clock again; the page stays answered. (The web host cannot show the source being asked: signed out it answers at once.)
+test "Activity: opens on press, and its clock is set at open and moves every 30 seconds"
   clock data
   tap "bar-mark"
   clock settle
   expect tree missing "activity-status"
+  expect state actNow == 0
   tap "place-activity"
   clock data
   clock settle
   expect tree has "activity-status"
   expect tree has "activity-refresh"
-  clock +5000
+  expect state actNow != 0
+  clock +31000
   clock settle
-  clock +5000
-  clock settle
-  expect tree has "activity-status"
+  expect state actNow >= 30000
   expect no failures
 
-test "Activity: Refresh asks again and the page stays answered"
+test "Activity: Refresh moves the tick and sets the clock, and the page stays answered"
   clock data
   tap "bar-mark"
   clock settle
   tap "place-activity"
   clock data
   clock settle
+  expect state actTick == 0
+  clock +5000
+  clock settle
   tap "activity-refresh"
   clock data
   clock settle
+  expect state actTick == 1
+  expect state actNow >= 5000
   expect tree has "activity-status"
-  clock +5000
-  clock settle
   expect no failures

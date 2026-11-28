@@ -4,7 +4,6 @@ import { items, target, stamp, activityInfo, view, label, type Item } from './ac
 import { HTTPError, SignedOutError } from './api.ts';
 import changelog from '../fixtures/activity/changelog.json';
 
-const NOW = 1_800_000_000_000;
 const turn: Item = { id: 't1', kind: 'turn', label: 'Answered', detail: '', group: 'radio', stamp: '', target: '', title: '', at: 0, unseen: false };
 
 describe('activity', () => {
@@ -19,7 +18,7 @@ describe('activity', () => {
     expect(rows.filter((r) => r.unseen).length).toBe(2);
   });
   test('V2 an unknown kind is shown, not dropped', () => {
-    const r = items({ events: [{ inbox_seq: 1, level: 'major', changelog: { event_id: 'e', kind: 'brand_new_thing', occurred_at: '2026-11-10T10:00:00Z', summary: 's', subject: {} } }], seen_seq: 0 }, NOW);
+    const r = items({ events: [{ inbox_seq: 1, level: 'major', changelog: { event_id: 'e', kind: 'brand_new_thing', occurred_at: '2026-11-10T10:00:00Z', summary: 's', subject: {} } }], seen_seq: 0 });
     expect(r.length).toBe(1); expect(r[0].label).toBe('Brand New Thing'); expect(r[0].target).toBe(''); expect(label('wake_decision')).toBe('Desk decision');
   });
   test('V6 and V3 targets refuse absolute addresses and schemes', () => {

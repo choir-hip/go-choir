@@ -376,6 +376,7 @@ component Autoradio
     act
     stime
     stimeKnown
+    actNow
     about
     bld
     themeDoc

@@ -28,6 +28,15 @@ members Autoradio
   // It is read only by the Activity page, so it is asked when that page is on top and not before.
   resource stime = exactTime() as shape SettingsTime else empty()
   derive stimeKnown = current(stime)
+  // The page's clock for the ages: one number, written when the Activity page opens, on Refresh and every 30 s while it is on top, so a row's age is worked out at most that often and
+  // no row reads the clock itself. It is never an argument, `with` or `when` of a resource (exact-facts.test.ts H3 fails the build if it is: that was the 2026-11-28 request storm).
+  state actNow = 0
+  action stepActClock
+    actNow = performanceNow()
+  task actClockOpen when pg.top.startsWith("activity:") key=actTick
+    change(stepActClock)
+  task actClock when pg.top.startsWith("activity:")
+    every(30000, stepActClock)
   resource act = activityPage(sfacts, au.signedIn, actTick, cmpt.state, cmpt.updateAvailable, cmpt.checked) when pg.top.startsWith("activity:") as shape ActivityInfo else empty()
   resource about = aboutPage(sfacts, au.signedIn) as shape AboutInfo else empty()
   // The commits (shared code, about.ts): the app's own and the server's. The tick is the Refresh button's.

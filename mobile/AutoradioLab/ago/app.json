@@ -1,0 +1,1 @@
+{ "name": "Ago fixture", "short_name": "Ago", "id": "news.choir.autoradio.agofixture", "start_url": "/", "display": "standalone", "app": { "id": "news.choir.autoradio.agofixture", "name": "Ago fixture" } }

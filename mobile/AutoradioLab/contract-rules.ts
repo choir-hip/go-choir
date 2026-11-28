@@ -95,3 +95,57 @@ export function literal(e: El): string | undefined { return /^text\s+"([^"]*)"/.
 export function isCaps(e: El): boolean {
   return attr('text-transform', e.text) === '"uppercase"' || /"[A-Z][A-Z .·&']{3,}"/.test(e.text);
 }
+
+// ---- the clock and the resources (2026-11-28: a date passed after `with` was a new number every frame, so a source was asked every frame) ----
+// A resource is asked again whenever any of its arguments, its `with` or its `when` changes. So no resource may name the clock: `performanceNow()` or `epochAtZero`, or a name
+// that carries them, a `derive`, a `fn`, a `state` initialised from them or assigned them in an action (transitively). A declaration runs over the lines indented under its head.
+const CLOCK = /performanceNow\s*\(\s*\)|\bepochAtZero\b/;
+const mentions = (text: string, name: string): boolean => new RegExp(`(?<![.\\w])${name}(?!\\w)`).test(text);
+
+/** Every resource declaration, whole (its head and the lines indented under it), that names the clock directly or through a name that carries it. A name is read in its own
+ *  component or members block (the `members` blocks of every file are one scope: they are one root), and a top-level `fn` anywhere; a `fn`'s parameters shadow. */
+export function clockInResources(files: Contract[]): string[] {
+  type Block = { file: string; line: number; head: string; text: string; body: string[]; scope: string };
+  const blocks: Block[] = [];
+  for (const f of files) {
+    const ls = f.lines.map((raw) => code(raw));
+    let top = '';
+    for (let i = 0; i < ls.length; i++) {
+      if (trim(ls[i]) === '') continue;
+      const ind = ls[i].length - ls[i].trimStart().length, body: string[] = []; let j = i + 1;
+      for (; j < ls.length; j++) { if (trim(ls[j]) === '') continue; if (ls[j].length - ls[j].trimStart().length <= ind) break; body.push(trim(ls[j])); }
+      const head = trim(ls[i]);
+      if (ind === 0) top = /^members\s/.test(head) ? head : /^fn\s/.test(head) ? 'global' : `${f.name}:${head}`;
+      blocks.push({ file: f.name, line: i + 1, head, text: [head, ...body].join(' '), body, scope: ind === 0 && /^fn\s/.test(head) ? 'global' : top });
+    }
+  }
+  const tainted = new Set<string>();
+  const key = (scope: string, n: string): string => `${scope}\u0000${n}`;
+  const carries = (text: string, scope: string, locals: Set<string> = new Set(), shadow: Set<string> = new Set()): boolean =>
+    CLOCK.test(text) || [...locals].some((n) => mentions(text, n)) || [...tainted].some((k) => { const [sc, n] = k.split('\u0000'); return (sc === scope || sc === 'global') && !shadow.has(n) && mentions(text, n); });
+  for (let changed = true; changed;) {
+    changed = false;
+    const add = (scope: string, n: string): void => { if (!tainted.has(key(scope, n))) { tainted.add(key(scope, n)); changed = true; } };
+    for (const b of blocks) {
+      const d = /^(derive|fn|state)\s+(\w+)/.exec(b.head);
+      if (d) {
+        const params = new Set<string>(); const pm = /^fn\s+\w+\(([^)]*)\)/.exec(b.head);
+        if (pm) for (const p of pm[1].split(',')) { const n = /^\s*(\w+)/.exec(p); if (n) params.add(n[1]); }
+        const rest = b.text.slice(b.text.indexOf(d[2]) + d[2].length).replace(pm ? /^\([^)]*\)/ : /^$/, '');
+        if (carries(rest, b.scope, new Set(), params)) add(b.scope, d[2]);
+      }
+      if (/^action\s+\w+/.test(b.head)) {
+        const locals = new Set<string>(), mine = new Set<string>();
+        for (const l of b.body) {
+          const m = /^let\s+(\w+)\s*=\s*(.*)$/.exec(l);
+          if (m) { mine.add(m[1]); if (carries(m[2], b.scope, locals)) locals.add(m[1]); continue; }
+          const a = /^(\w+)\s*=(?!=)\s*(.*)$/.exec(l);
+          if (a && !mine.has(a[1]) && carries(a[2], b.scope, locals)) add(b.scope, a[1]);
+        }
+      }
+    }
+  }
+  const bad: string[] = [];
+  for (const b of blocks) if (/^resource\s/.test(b.head) && carries(b.text, b.scope)) bad.push(`${b.file}:${b.line} a resource names the clock, or a value made from it: ${b.head.slice(0, 90)}`);
+  return bad;
+}

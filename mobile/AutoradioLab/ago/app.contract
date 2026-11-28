@@ -1,0 +1,21 @@
+use agoText from "./ago.contract"
+
+// Fixture: agoText for fixed inputs, run by `bun exact.mjs test web` through ago.test.ts. The stamp is "S" so a stamp is told from an age.
+component App
+  view
+    column
+      text agoText(1800000000000-300000, 1800000000000, false, "S") testId="g-unknown"
+      text agoText(0, 1800000000000, true, "S") testId="g-at0"
+      text agoText(86400000, 1800000000000, true, "S") testId="g-atmax"
+      text agoText(1800000000000+60000, 1800000000000, true, "S") testId="g-future"
+      text agoText(1800000000000, 1800000000000, true, "S") testId="g-s0"
+      text agoText(1800000000000-59000, 1800000000000, true, "S") testId="g-s59"
+      text agoText(1800000000000-119000, 1800000000000, true, "S") testId="g-s119"
+      text agoText(1800000000000-120000, 1800000000000, true, "S") testId="g-s120"
+      text agoText(1800000000000-3599000, 1800000000000, true, "S") testId="g-m59s59"
+      text agoText(1800000000000-3600000, 1800000000000, true, "S") testId="g-h1"
+      text agoText(1800000000000-7140000, 1800000000000, true, "S") testId="g-h1m59"
+      text agoText(1800000000000-7200000, 1800000000000, true, "S") testId="g-h2"
+      text agoText(1800000000000-86340000, 1800000000000, true, "S") testId="g-h23m59"
+      text agoText(1800000000000-86400000, 1800000000000, true, "S") testId="g-d1"
+      text agoText(1800000000000-864000000, 1800000000000, true, "S") testId="g-older"
