@@ -139,10 +139,9 @@ fresh() { rm -rf "$T/cont" "$T/sc" "$T/curl.log" "$T/curl.log.leak"; mkdir -p "$
 SECDIR="$T/cont/Library/Caches/exact/test.app.id/agent/default/secrets"; DATADIR="$T/cont/Library/Caches/exact/test.app.id/agent/default/data"
 fresh; mkdir -p "$DATADIR" "$SECDIR"; : > "$DATADIR/account-stamp"; : > "$DATADIR/signout-pending"; : > "$DATADIR/pending-revoke"; : > "$SECDIR/choir.computer-id"
 out=$(sk 'proof_mint && proof_seed "$CONT"')
-[ "$(ls "$SECDIR" | tr '\n' ' ')" = "choir.key choir.key-id " ] && ok "seed: the secrets directory holds choir.key and choir.key-id and nothing else (an old computer id is gone)" || no "seed: secrets are '$(ls "$SECDIR" 2>&1 | tr '\n' ' ')': $out"
+[ "$(ls "$SECDIR" | tr '\n' ' ')" = "choir.key " ] && ok "seed: the secrets directory holds choir.key and nothing else (no key id: native would refuse the sign-out as superseded; an old computer id is gone)" || no "seed: secrets are '$(ls "$SECDIR" 2>&1 | tr '\n' ' ')': $out"
 [ "$(cat "$SECDIR/choir.key")" = "$PK_MINTED" ] && [ "$(wc -c < "$SECDIR/choir.key" | tr -d ' ')" = "${#PK_MINTED}" ] && ok "seed: choir.key is the minted key, bytes exact, no newline" || no "seed: choir.key content"
-[ "$(cat "$SECDIR/choir.key-id")" = "key-123" ] && [ "$(wc -c < "$SECDIR/choir.key-id" | tr -d ' ')" = 7 ] && ok "seed: choir.key-id is the id the mint answered" || no "seed: choir.key-id"
-[ "$(stat -f %Lp "$SECDIR/choir.key")" = 600 ] && [ "$(stat -f %Lp "$SECDIR/choir.key-id")" = 600 ] && [ "$(stat -f %Lp "$SECDIR")" = 700 ] && ok "seed: files are 0600 and the directory 0700" || no "seed: modes"
+[ "$(stat -f %Lp "$SECDIR/choir.key")" = 600 ] && [ "$(stat -f %Lp "$SECDIR")" = 700 ] && ok "seed: files are 0600 and the directory 0700" || no "seed: modes"
 [ ! -e "$DATADIR/account-stamp" ] && [ ! -e "$DATADIR/signout-pending" ] && [ ! -e "$DATADIR/pending-revoke" ] && ok "seed: a stale stamp, marker and pending-revoke list are removed" || no "seed: stale data files stay"
 grep -q 'choir_sk_qa_FAKEQA' "$SECDIR/choir.key" && no "seed: the QA key itself was seeded" || ok "seed: the seeded key is not the QA key"
 grep -q '^HDR mode=600 qa=1$' "$T/curl.log" && [ ! -e "$T/curl.log.leak" ] && ok "mint: the QA key goes in a 0600 header file (-H @file), never in argv" || no "mint: header file or argv: $(cat "$T/curl.log" "$T/curl.log.leak" 2>&1)"

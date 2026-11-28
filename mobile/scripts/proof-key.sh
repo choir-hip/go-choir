@@ -4,7 +4,7 @@
 #
 # The account key rests in Exact's secret store and shared code is its only reader (api.ts storeSource). In an agent drive that store is a file
 # per secret under <container>/Library/Caches/exact/<app id>/agent/default/secrets/ (host/apple store.rs, picker.rs), kept between drives. So the proof
-# writes the two files a sign-in writes (app-signin.ts KEY_NAME `choir.key`, KEY_ID_NAME `choir.key-id`; keepKey) and clears what would make the next
+# writes the key file a sign-in writes (app-signin.ts KEY_NAME `choir.key`; not KEY_ID_NAME `choir.key-id`, see proof_seed) and clears what would make the next
 # launch wipe or sign out (account.ts reconcile): `choir.computer-id` (keepKey forgets it; shared code finds the computer itself), and under .../data
 # `account-stamp` (a stamp that differs from the digest of the new key is "another account": it wipes every shared store), `signout-pending` and `pending-revoke`.
 #
@@ -62,8 +62,12 @@ proof_seed() {
   root="$1/Library/Caches/exact/$APP/agent/default"
   ( umask 077; mkdir -p "$root/secrets" "$root/data" ) || fail "sign-in" "could not make the scratch secret store"
   chmod 700 "$root/secrets"
-  cp "$SCRATCH/minted.key" "$root/secrets/choir.key" && cp "$SCRATCH/minted.id" "$root/secrets/choir.key-id" || fail "sign-in" "could not write the seeded key"
-  chmod 600 "$root/secrets/choir.key" "$root/secrets/choir.key-id"
+  # The key's id is NOT seeded. With an id, shared code hands it to the native sign-out, which compares it with the id in the Keychain (ModelsEntry.swift, the
+  # "superseded" answer); in an agent drive the secrets are these scratch files and the Keychain holds no id, so every sign-out was refused as superseded (the run of
+  # 2026-11-28: "Sign-out did not finish"). A key with no id signs out on the phone; the app then makes no server revoke, so the exit trap's revoke is the only one,
+  # and the app's own revoke at sign-out is not proved by this script.
+  cp "$SCRATCH/minted.key" "$root/secrets/choir.key" || fail "sign-in" "could not write the seeded key"
+  chmod 600 "$root/secrets/choir.key"; rm -f "$root/secrets/choir.key-id"
   rm -f "$root/secrets/choir.computer-id"
   for r in $(proof_scratch_roots "$1"); do rm -f "$r/data/account-stamp" "$r/data/signout-pending" "$r/data/pending-revoke"; done
 }

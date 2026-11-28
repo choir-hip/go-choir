@@ -529,7 +529,8 @@ fi
 echo "not driven: background: no remote next (a script cannot press the lock screen), and no frozen shared code (the simulator does not suspend it): only the owner's locked phone shows those"
 SIM launch "$EXACT_SIM" $APP >/dev/null 2>&1
 
-# ---- 3g. SIGN-OUT DRILL, LAST (local: it signs the simulator's app out; the app holds the disposable key with its id, so Sign out revokes THAT key on the server; the exit trap then finds it gone, which is fine).
+# ---- 3g. SIGN-OUT DRILL, LAST (local: it signs the simulator's app out. The seeded key has no id (proof-key.sh proof_seed says why), so the app makes no server revoke here; the exit trap revokes the key.)
+echo "not driven: drill: the app's own server revoke at sign-out (the seeded key carries no id: with one, native refuses the sign-out as superseded, because an agent drive's secrets are not in the Keychain)"
 # Data is on the pages first; then Sign out; then the account page says signed out, Files and Mail show no data, and the wipe marker and the stamp are gone from the app's files.
 step "clock data"; wait_ 5000
 place paper 2000
