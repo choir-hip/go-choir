@@ -275,7 +275,8 @@ extension DeckLine {
 
     public func wipe() {
         lines = []; seq = 0; acked = 0; dropped = 0; isLoaded = true
-        if let storage { try? FileManager.default.removeItem(at: storage); try? FileManager.default.removeItem(at: Self.seqFile(for: storage)) }
+        if let storage { try? FileManager.default.removeItem(at: storage); try? FileManager.default.removeItem(at: Self.seqFile(for: storage))
+            try? FileManager.default.removeItem(at: storage.deletingPathExtension().appendingPathExtension("bad")) }   // the set-aside journal holds the account's lines too
     }
 
     /// Nothing is written while the file could not be read (it would destroy what it holds). A failed write is counted and logged with counts only;

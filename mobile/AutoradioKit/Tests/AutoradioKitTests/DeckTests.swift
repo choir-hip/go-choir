@@ -351,6 +351,15 @@ final class DeckTests: XCTestCase {
         XCTAssertEqual(j2.lines.map(\.command), ["journal-corrupt", ""]); XCTAssertEqual(j2.lines.first?.seq, 4); XCTAssertEqual(l.seq, 5, "the numbers file carries on")
         XCTAssertEqual(DeckJournal(storage: f).lines.count, 2, "and it is saved again")
     }
+    func test19b_ASetAsideJournalGoesAtSignOut() async throws {
+        let f = tmp(); let bad = f.deletingPathExtension().appendingPathExtension("bad")
+        defer { for u in [f, bad, DeckJournal.seqFile(for: f)] { try? FileManager.default.removeItem(at: u) } }
+        try Data("previous account deck entries".utf8).write(to: f)
+        let d = Deck(journal: DeckJournal(storage: f))      // the real corrupt-journal path: setAside moves the file to .bad
+        XCTAssertEqual(try Data(contentsOf: bad), Data("previous account deck entries".utf8))
+        let w = AccountWipe(); w.registerStandard(legacyTakeFiles: [], tempDirectory: f.deletingLastPathComponent().appendingPathComponent("wipe-tmp-\(UUID().uuidString)"), deck: d); await w.run()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: bad.path), "the set-aside journal holds the old account's entries and goes with the wipe")
+    }
     func test20_AnUnreadableLaunchStillClosesTheItemAKillLeftOpen() throws {
         let f = tmp(); defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: f.path); try? FileManager.default.removeItem(at: f); try? FileManager.default.removeItem(at: DeckJournal.seqFile(for: f)) }
         let j = DeckJournal(storage: f); j.append("started", item: "a")

@@ -12,7 +12,7 @@ mobile/exact-package/apple/AutoradioModule+Onboarding.swift | voice-setup.json |
 mobile/exact-package/apple/AutoradioModule.swift | filesCacheDisk | wiped:app-files (removeContents of the files cache) | 1
 mobile/exact-package/apple/AutoradioModule+Platform.swift | console.log | unruled | 6
 mobile/AutoradioKit/Sources/AutoradioKit/Deck.swift | deck-journal.json | wiped:deck (Deck.wipe removes the journal and seq.json) | 5
-mobile/AutoradioKit/Sources/AutoradioKit/Deck.swift | .bad | unruled | 1
+mobile/AutoradioKit/Sources/AutoradioKit/Deck.swift | .bad | wiped:deck (Deck.wipe removes the set-aside journal) | 1
 mobile/AutoradioKit/Sources/AutoradioKit/KeptTurns.swift | KeptTurnStore | wiped:kept-turns (registered when LabRuntime.store is passed in ChoirApp.registerAccountWipe) | 6
 mobile/AutoradioKit/Sources/AutoradioKit/Audio.swift | writeMono | wiped:kept-turns (the only caller is KeptTurnStore.save) | 1
 mobile/AutoradioKit/Sources/AutoradioKit/VoiceChoice.swift | VoiceChoiceStore | unruled | 2

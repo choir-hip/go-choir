@@ -29,7 +29,7 @@ Kotlin: `mobile/exact-package/android/` holds Kotlin (for example `ModelDownload
 | `apple/AutoradioModule.swift` | `filesCacheDisk` | 1 | wiped:app-files (removeContents of the files cache) |
 | `apple/AutoradioModule+Platform.swift` | `console.log` | 6 | unruled |
 | `Kit/Deck.swift` | `deck-journal.json` | 5 | wiped:deck (Deck.wipe removes the journal and seq.json) |
-| `Kit/Deck.swift` | `.bad` | 1 | unruled |
+| `Kit/Deck.swift` | `.bad` | 1 | wiped:deck (Deck.wipe removes the set-aside journal) |
 | `Kit/KeptTurns.swift` | `KeptTurnStore` | 6 | wiped:kept-turns (registered when LabRuntime.store is passed in ChoirApp.registerAccountWipe) |
 | `Kit/Audio.swift` | `writeMono` | 1 | wiped:kept-turns (the only caller is KeptTurnStore.save) |
 | `Kit/VoiceChoice.swift` | `VoiceChoiceStore` | 2 | unruled |
@@ -64,17 +64,14 @@ Reading the paths: Application Support is `Application Support/Autoradio/` for t
 
 ## Account data that sign-out does NOT remove
 
-1. `Application Support/Autoradio/deck-journal.bad` (`Deck.swift`, `setAside`): a journal that failed to decode is moved aside, and `Deck.wipe()`
-   removes `deck-journal.json` and `deck-journal.seq.json` only. The journal holds the deck's lines (items, commands, reasons). It is an account store the wipe misses.
-2. `Application Support/Autoradio/console.log` and `console.log.1` (`AutoradioModule+Platform.swift`, `ConsoleFile`): every `AUTORADIO ...` line the Kit prints, 256 KB, rotated.
+1. `Application Support/Autoradio/console.log` and `console.log.1` (`AutoradioModule+Platform.swift`, `ConsoleFile`): every `AUTORADIO ...` line the Kit prints, 256 KB, rotated.
    The comment says lines carry counts and ids, never content; ids of turns and entries are the old account's. No registration removes it. Unruled.
-3. Nothing else that holds the person's words, audio or key was found outside a registration: kept turns, takes, clips, the deck journal, the voice profile,
+2. Nothing else that holds the person's words, audio or key was found outside a registration: kept turns, takes, clips, the deck journal, the voice profile,
    the sign-in key and the mail key are all wiped (the mail key by `MailSeal().forget()` in `ModelsEntry.swift`, outside the registry; the design moves it in).
 
 ## The unruled ones, each with its question
 
 - `console.log` (6 lines, two `ConsoleFile` copies, Mac and iOS): is an id of the old account's turns and entries account data? If yes, wipe it at sign-out (it is open for append, so close and truncate); if no, say so beside the write.
-- `deck-journal.bad` (1 line): remove it in `Deck.wipe()`? Almost certainly yes; the question is only whether the corrupt file may be kept for diagnosis once the account has left.
 - `voice-choice.json` (`VoiceChoiceStore`, 2 lines): holds a `StageSetting` (a stage id and a free-form `params` map). Does any stage put the person's text in `params`? If not it is device data and becomes kept.
 - `configs/*.json` (`ConfigStore.save`, 2 lines) and `LabConfiguration.write(to:)` (1 line): the same `StageSetting` shape. No caller of `ConfigStore.save` was found in the app, so the writer may be dead code (delete it) or lab-only (kept).
 
