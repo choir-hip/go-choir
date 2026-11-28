@@ -139,7 +139,7 @@ step logs
 proof_mint      # one disposable key for the whole run (proof-key.sh); a refused mint stops the proof here
 run_drive warm light "" --touch platform
 # The proof was blind to a signed-out app for five days (2026-11-23 to 28): every drive was judged by the driver's exit code alone. A file placed before launch leaves no first-launch race, so one miss is real.
-proof_assert_signed_in "$SHOTS/drive-warm.txt"
+proof_assert_signed_in "$SHOTS/drive-warm.txt" "$PROOF_JSLOG"
 
 # ---- 3a. SURVEY drive: every place once, trees dumped so the next drive can pick real ids
 step "clock data"; wait_ 6000

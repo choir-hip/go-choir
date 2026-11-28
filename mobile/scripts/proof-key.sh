@@ -90,10 +90,12 @@ proof_key_cleanup() {
   esac
 }
 
-# proof_assert_signed_in <drive dump>: the app launched signed in (the account page and the app's own console line agree).
+# proof_assert_signed_in <drive dump> [device console]: the app launched signed in (the account page and the app's own console line agree).
+# The app logs the line once, at its first key read; the drive's dump holds it only when the drive attached before that (the run of 2026-11-28 missed it, signed in),
+# so the simulator's own console, which the proof records from launch, counts as well.
 proof_assert_signed_in() {
-  if [ ! -s "$1" ] || ! grep -qE '\[settings-account-signed\][^"]*"Yes"' "$1" || ! grep -q 'api: session found=true key=true' "$1"; then
-    [ -s "$1" ] && grep -m3 'api: session ' "$1" | cut -c1-160
+  if [ ! -s "$1" ] || ! grep -qE '\[settings-account-signed\][^"]*"Yes"' "$1" || ! cat "$1" "${2:-/dev/null}" 2>/dev/null | grep -q 'api: session found=true key=true'; then
+    [ -s "$1" ] && cat "$1" "${2:-/dev/null}" 2>/dev/null | grep -m3 'api: session ' | cut -c1-160
     fail "sign-in: the app is signed out"
   fi
   echo "ok: sign-in: the app launched signed in with the seeded key"
