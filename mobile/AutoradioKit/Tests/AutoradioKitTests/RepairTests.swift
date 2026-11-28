@@ -127,13 +127,4 @@ final class HostGuardTests: XCTestCase {
         _ = try? await env.client().send("GET", "/api/anything")
         XCTAssertEqual(StubProtocol.seen.first?.headers["authorization"], "Bearer \(secretKey)")
     }
-
-    func testRemoteHostAllowsOnlyTheConfiguredHost() {
-        let env = ChoirEnvironment()                            // the default host
-        XCTAssertFalse(RemoteHost.allows(URL(string: "https://evil.example.com/s1")!, env: env))
-        XCTAssertTrue(RemoteHost.allows(URL(string: "https://choir.news/review/1")!, env: env))
-        env.configuredBaseURL = "https://staging.choir.example:8443"
-        XCTAssertFalse(RemoteHost.allows(URL(string: "https://choir.news/review/1")!, env: env), "compares with the configured host, not the default")
-        XCTAssertTrue(RemoteHost.allows(URL(string: "https://staging.choir.example:8443/review/1")!, env: env))
-    }
 }

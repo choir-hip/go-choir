@@ -100,7 +100,6 @@ path mobile/exact-package/android/ModelDownloadManager.kt manifest-pinned, Wi-Fi
 path mobile/exact-package/android/SileroState.kt Silero v6.2.1's exact 16 kHz context and [2,1,128] recurrent state
 path mobile/exact-package/android/SileroVad.kt Silero v6.2.1 op15 ONNX execution and its iterator hysteresis
 path mobile/exact-package/android/NativeModelSelfTest.kt the native model proof seam shared code drives; chooses nothing
-path mobile/exact-package/android/NativeTts.kt the Tiny Voca seam, which refuses until a real Android synthesis exists
 # --- the deck (owner rule: the audio session and what plays are native; Kotlin, Android)
 path mobile/exact-package/android/DeckContract.kt the deck's stable native names (state, play, enqueue, act, ack, wipe) and the topic shared code listens on
 path mobile/exact-package/android/DeckEngine.kt the deck's engine seam: session, play, pause, resume, stop, seek, position, release

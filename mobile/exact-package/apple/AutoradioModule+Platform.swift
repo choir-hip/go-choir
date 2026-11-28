@@ -22,15 +22,6 @@ enum Platform {
         }
     }
 
-    #if os(iOS)
-    static let becameActive = UIApplication.willEnterForegroundNotification
-    static let willResign = UIApplication.willResignActiveNotification
-    static let wentToBackground = UIApplication.didEnterBackgroundNotification
-    #else
-    static let becameActive = NSApplication.willBecomeActiveNotification
-    static let willResign = NSApplication.willResignActiveNotification
-    static let wentToBackground = NSApplication.didResignActiveNotification
-    #endif
     /// Where the sound goes, for the setup screen ("Playing on ...").
     static func outputName() -> String {
         #if os(iOS)

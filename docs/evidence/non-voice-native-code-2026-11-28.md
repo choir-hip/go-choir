@@ -53,7 +53,7 @@ Paths are under `mobile/AutoradioKit/Sources/AutoradioKit/` unless a prefix is s
 | Choir/ChoirClient.swift | 442 | the voice turn's HTTP client, key store, origin check, computer id | the three desk stages, ChoirSignIn, TurnGate, ModelsEntry, replay tool, tests | b (D6, D7) | the turn's streaming POST is native by design (gaps.md row 36); the key store waits on D6, the legacy key on D7 |
 | Choir/RadioProgramme.swift | 255 | splits a spoken entry into speech blocks and now-playing text | ChoirApp.speakSegment, LiveAudio | c | speech block preparation for the voice |
 | Choir/ChoirApp.swift | 240 | stage registration, deck and audio wiring, native sign-out, error words | AutoradioModule, ChoirPlayback, +Bar, LabRuntime | b (D6) | about 160 lines are deck and audio wiring; sign-out and signed-in wait on D6 |
-| +Platform | 157 | audio-session alias, console log file, `open`, `outputName` | AutoradioModule, +Onboarding, +Reader | c | a platform seam; 12 lines of unused constants are dead |
+| +Platform | 157 | audio-session alias, console log file, `open`, `outputName` | AutoradioModule, +Onboarding, +Reader | c | a platform seam; the 12 lines of unused constants are deleted (2026-11-28) |
 | SavedAnswerHolder.swift | 148 | the on-phone model's first answer from saved passages | ChoirApp, LabRuntime | c | a voice-turn stage |
 | Conversation.swift | 124 | the turn's question and answer record | TurnEngine, LabRuntime, +Talk | c | written during a turn; `conversation.ts` only reads it |
 | +Bar | 120 | engine events and mic frames into `barFacts`, `radioView`, `radioSpeed` | AutoradioModule, ModelsEntry | c | mic level and engine events are native; `radioSpeed` is the unanswered-on-Android op |
@@ -100,7 +100,7 @@ but nobody checked that llama.cpp can read the path Exact writes. `NativeTts.kt`
    native. Low risk: no secret, no audio write. The silent failure would be a
    content sync running while remote audio plays. It also gives Android a real
    answer; today the app module answers nothing there, so busy is false.
-   Unverified: that the item kind sits on the `item` object of `deckState`.
+   Checked 2026-11-28 and false: `item` on `deckState` is the item's id, a string, on both platforms (`deck.json` DeckState; Swift `Deck.swift` snapshot, Kotlin `DeckController.snapshot`, `DeckController.kt:48`). The kind (`speech` or `audio`) is on the `DeckItem` shared code sends in, not on the state that comes back. So the move needs a new field on `deckState` in both natives, or shared code remembering the kind of what it posted. Not built.
 2. Old-build file deletions (about 33 lines: `AccountWipe.oldBuildFiles`,
    `removeOldBuildFiles`, `TakeFiles.legacy`, and the launch calls at
    `AutoradioModule.swift:145-150`). CLAUDE.md says a moved page carries nothing
@@ -112,9 +112,9 @@ but nobody checked that llama.cpp can read the path Exact writes. `NativeTts.kt`
    the speed to 1.0 and touch audio rate. Only (a) if shared code pushes the
    speed to native before the first play (not verified).
 
-Plain deletions beat all three on lines per risk but are (d): `NativeTts.kt`
-(16), the unused notification constants in `+Platform` (about 12) and
-`RemoteHost` (about 7).
+Plain deletions beat all three on lines per risk but are (d). Done 2026-11-28:
+`NativeTts.kt` (16), the unused notification constants in `+Platform` (12) and
+`RemoteHost` (8, with its test).
 
 ## Recommendations for the owner's list
 
