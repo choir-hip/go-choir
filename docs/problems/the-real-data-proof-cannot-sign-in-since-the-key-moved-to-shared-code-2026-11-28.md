@@ -45,14 +45,10 @@ The Keychain item is the same item in a normal launch, but an agent drive does n
 
 ## Remaining error
 
-- The proof needs a way to sign in a simulator that shared code will read. It
-  must stay out of device and store builds, as `ProofKey` is. Key custody is
-  owner decision D6, so the seam must not decide it.
-- Nothing fails when the proof cannot sign in: it runs signed-out drives and
-  reports them ok. Its first act after launch should be to assert the account
-  page says signed in, and stop there if not.
-- The signed-out banner covers a row of the topics list. Whether that is a
-  layout defect for a real signed-out person is not checked.
-- `mobile/scripts/sim-device.sh` could not create a simulator: it picks the
-  newest runtime (iOS 27.1), which refuses the iPhone 18 Pro device type. The
-  run reused an existing slim simulator.
+Built 2026-11-28 (scripts only, not yet run against staging; see the change entry `2026-11-28-the-real-data-proof-signs-in-again`):
+
+- The proof signs in by seeding a disposable key into Exact's scratch secret store (`proof-key.sh`). Not proved until a run: that Exact reads the hand-placed files, that the QA key may mint keys (a refusal stops the proof with `PROOF FAILED at sign-in: the test key may not mint keys`), and the scratch path.
+- Blindness: the proof now asserts the app is signed in right after the warm-up drive, and that the signed-out drives are signed out. Other checks that pass vacuously signed out (the drill's "no rows after sign-out" when no rows were ever shown) are not yet given a positive twin.
+- The signed-out banner covering the "Culture" row: the edition drive now runs signed in, with no banner, so the proof no longer meets it. Whether it matters to a signed-out person is still not checked (the plan, 7a, finds it by design).
+- `sim-device.sh` now picks the newest runtime that supports the device type and fails naming the type; tested over fake `simctl`.
+- `ProofKey.swift` and its two call sites remain (Swift; owner decision D6).

@@ -792,10 +792,14 @@ Decisions made at the seams:
 data (paper, two stories in the reader with "More on this", a played story, Textures list and documents, the edition state, Files, Mail, Settings
 account / computer / appearance, a theme loaded from a Texture, the largest document). It asserts real conditions (a title is not empty, no error
 banner), not fixture text. `REAL_PROMPT=1` adds one typed question in the bar (a model call on the test computer); it is off by default.
-- **Sign-in.** The real sign-in is a passkey sheet a script cannot approve. The proof copies a key file (`REAL_KEY_FILE`, default the QA key of the
-  test account) with `cp` into the app's `Documents/proof-key`; the simulator build reads it into the Keychain at launch and deletes it
-  (`AutoradioKit/ProofKey.swift`, called under `#if targetEnvironment(simulator)` only). The key is never printed; the script fails if a `choir_sk_`
-  string appears in the drive output.
+- **Sign-in.** The real sign-in is a passkey sheet a script cannot approve. In an agent drive shared code reads its key from Exact's scratch secret store, not the
+  Keychain, so the proof (`scripts/proof-key.sh`) mints a disposable key with the QA key (`REAL_KEY_FILE`, default the QA key of the test account; `POST /auth/api-keys`,
+  needs `manage:keys` or `admin`; three hours) and writes it as `choir.key` and its id as `choir.key-id` under `Library/Caches/exact/<app id>/agent/default/secrets/` in the
+  simulator's container, and clears the stamp, the sign-out marker and the pending-revoke list. Right after the warm-up drive the proof asserts the account page says Signed
+  in; if not it stops with `PROOF FAILED at sign-in`. The signed-out drives clear the seed and assert they are signed out. An exit trap revokes the minted key by id (and
+  says so loudly, with the id, if it cannot). The QA key is never seeded: the sign-out drill revokes the key the app holds. No key is printed or put on a command line; the
+  script fails if a `choir_sk_` string appears in the drive output. `AutoradioKit/ProofKey.swift` (the old Documents import) is no longer used by a drive; it waits on owner
+  decision D6 to be deleted. Not yet run against staging.
 - **First run is real.** With no edition on the computer the app opens the "Make it yours" offer once; the proof screenshots it (`real-00`) and skips it.
   The app now asks the computer first (`GET /api/texture/edition`): `{found:false}` is the normal first-run answer; a computer that has an edition gets
   no offer and no card, and the Textures list pins that document.

@@ -1,6 +1,6 @@
 # How the real-data proof signs in now that the key lives in shared code (plan, red: auth and session)
 
-Standing: undecided | kind: wanted | settled-by: none yet; a plan for review | note: written by reading only on 2026-11-28 (origin/main 54add1a0c); nothing was built or run except `simctl list`; the layout of Exact's scratch secret store was read from source and never exercised, and whether the QA key may mint keys is not known
+Standing: built | kind: wanted | settled-by: a signed-in run of mobile/scripts/proof-real.sh on staging, which nobody has made yet | note: option A is built as scripts only on 2026-11-28 (`proof-key.sh`, `proof-real.sh`, `sim-device.sh`, `test-proof-helpers.sh`; entry `docs/changes/2026-11-28-the-real-data-proof-signs-in-again.md`); the shell tests pass over fake `curl` and `simctl`; not proved: that Exact reads the hand-placed files, that the QA key may mint keys, and the path and app id under Caches. `ProofKey.swift` and its two call sites are not deleted (Swift, waits on owner decision D6)
 
 Problem record: [the real-data proof cannot sign in](../problems/the-real-data-proof-cannot-sign-in-since-the-key-moved-to-shared-code-2026-11-28.md).
 Exact sources read (read-only, the lead's tree `.lane/trees/qa-mac/mobile/.exact-src`): `docs/contract-for-agents.md`, `docs/reference.md`, `host/apple/src/store.rs`, `picker.rs`, `store_secrets.rs`, `scripts/agent.mjs`, `scripts/agent-launch.mjs`, `vendor/ibex/crates/ibex2/src/secrets/`.

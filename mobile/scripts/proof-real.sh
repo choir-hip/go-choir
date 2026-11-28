@@ -1,8 +1,9 @@
 #!/bin/sh
 # Real-data proof: the app on a simulator of its own, signed in to the test computer (d@e) on staging.
-# Sign-in: the real one is a browser device flow a script cannot approve, so the key file (REAL_KEY_FILE, default the QA key for d@e)
-# is copied with `cp` into the app's Documents as `proof-key`; the simulator build reads it into the Keychain at launch and deletes it
-# (AutoradioKit/ProofKey.swift, compiled only for the simulator). The key is never printed, logged or put on a command line.
+# Sign-in: the real one is a browser device flow a script cannot approve. The QA key (REAL_KEY_FILE, default the key for d@e) only MINTS a disposable key
+# (POST /auth/api-keys); that key and its id are written as the two secret files shared code reads in an agent drive (proof-key.sh, which says where and why),
+# the proof asserts the app launched signed in, and the exit trap revokes the key by id. The QA key itself is never seeded: the sign-out drill revokes the key the app holds.
+# No key is ever printed, logged or put on a command line. (AutoradioKit/ProofKey.swift, the old Documents import, is no longer used by a drive; it waits on owner decision D6.)
 # Reads only on the computer: the tour taps nothing that writes or spends (no prompts, no mail). The one local write is the theme choice on the phone (the Appearance tap; reset_state clears it). Set REAL_PROMPT=1 for the one optional
 # prompt-bar question at the end (a model call on d@e).
 # Assertions are on real conditions (a title is not empty, there is no error banner), never on fixture text.
@@ -14,11 +15,13 @@ SHOTS="${PROOF_SHOTS:-${TMPDIR:-/tmp}/autoradio-proof-real-$(date +%H%M%S)}"
 mkdir -p "$SHOTS"
 rm -f "$SHOTS"/real-*.png      # a reused PROOF_SHOTS must not satisfy the screenshot count with an earlier run's pictures
 . "$HERE/proof-common.sh"
+. "$HERE/proof-key.sh"
+trap 'rc=$?; proof_key_cleanup || rc=1; rm -rf "$SCRATCH"; exit $rc' EXIT
 KEYFILE="${REAL_KEY_FILE:-$HOME/.config/choir-qa/keys/d-e.key}"
 [ -r "$KEYFILE" ] || fail "key file" "cannot read the test key file"
 echo "screenshots: $SHOTS"
 
-# A clean app: no open pages, no first-run flags, the key file placed for the app to take at launch.
+# A clean app: no open pages, no first-run flags, the disposable key seeded into the scratch secret store (none with NOKEY).
 reset_state() {
   SIM terminate "$EXACT_SIM" $APP >/dev/null 2>&1
   sleep 2
@@ -37,12 +40,8 @@ reset_state() {
   rm -rf "$CONT"/Library/Application\ Support/exact/*/data/theme-choice.json "$CONT"/Library/Application\ Support/exact/*/data/themes   # app:/data on a device build
   rm -rf "$CONT"/Library/Caches/exact/*/agent/*/data/theme-choice.json "$CONT"/Library/Caches/exact/*/agent/*/data/themes   # the themes' own place now (themes.ts: app:/data, which an agent drive keeps under Library/Caches/exact/<app id>/agent/default/data), not UserDefaults and Autoradio/themes
   rm -f "$CONT/Library/Preferences/$APP.plist"
-  mkdir -p "$CONT/Documents"
-  if [ -n "${NOKEY:-}" ]; then rm -f "$CONT/Documents/proof-key"      # a launch with no key at all (the sign-out drill before it emptied the Keychain)
-  else
-    cp "$KEYFILE" "$CONT/Documents/proof-key" || fail "reset" "could not place the key file"
-    chmod 600 "$CONT/Documents/proof-key"
-  fi
+  if [ -n "${NOKEY:-}" ]; then proof_unseed "$CONT"      # a launch with no key at all: the sign-out drill signed the app out, and a signed-out drive must not find a key
+  else proof_seed "$CONT"; fi
   # The old-choice drill (SEED_LEGACY=1) seeds what an old build left, in THIS simulator's app container only: two preference keys (AutoradioThemeID=depth, AutoradioThemeMode=dark)
   # and one file, Application Support/Autoradio/themes/drill-user.json (a valid theme with the id drill-user). Nothing else; legacy_clean removes all three.
   # The takes drills (SEED_TAKES=1) seed what the old build kept, in THIS simulator's app container only: Application Support/Autoradio/takes-own.json (a handle and the own ids in TAKES_SEED_IDS, a
@@ -136,7 +135,10 @@ PROOF_JSLOG_PID=$!
 step "clock data"; wait_ 6000
 place settings 900; step "tap settings-nav-account"; view real-00w-warmup 4000
 step logs
+proof_mint      # one disposable key for the whole run (proof-key.sh); a refused mint stops the proof here
 run_drive warm light "" --touch platform
+# The proof was blind to a signed-out app for five days (2026-11-23 to 28): every drive was judged by the driver's exit code alone. A file placed before launch leaves no first-launch race, so one miss is real.
+proof_assert_signed_in "$SHOTS/drive-warm.txt"
 
 # ---- 3a. SURVEY drive: every place once, trees dumped so the next drive can pick real ids
 step "clock data"; wait_ 6000
@@ -164,7 +166,7 @@ run_drive survey light "" --touch platform
 
 # ---- 3a2. SYSTEM DARK drive: the simulator's appearance is dark and the app has no choice and no mode (reset_state clears both), so the default pair follows the SYSTEM's scheme,
 # read from exactViewport().prefersColorScheme in shared code (themes.ts). The appearance goes back to light when the drive ends or the script stops.
-trap 'SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1; rm -rf "$SCRATCH"' EXIT
+trap 'rc=$?; SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1; proof_key_cleanup || rc=1; rm -rf "$SCRATCH"; exit $rc' EXIT
 SIM ui "$EXACT_SIM" appearance dark >/dev/null 2>&1; sleep 2
 echo "sysdark: the simulator's appearance is now: $(SIM ui "$EXACT_SIM" appearance 2>&1 | head -1)"
 step "clock data"; wait_ 4000
@@ -174,7 +176,7 @@ SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1
 
 # ---- 3a3. OLD-CHOICE drill (owner's ruling, 2026-11-20 and 2026-11-24: a moved page carries nothing over from the Swift build): an old build's choice (theme depth, mode dark) and one old user theme file are
 # SEEDED (reset_state, SEED_LEGACY), the app launches, and NOTHING of them arrives: the default shows, the user theme is not listed, the kept choice file (if any) has no `migrated`. The old keys and file are removed again afterwards.
-trap 'SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1; legacy_clean; rm -rf "$SCRATCH"' EXIT
+trap 'rc=$?; SIM ui "$EXACT_SIM" appearance light >/dev/null 2>&1; legacy_clean; proof_key_cleanup || rc=1; rm -rf "$SCRATCH"; exit $rc' EXIT
 SEED_LEGACY=1; export SEED_LEGACY
 step "clock data"; wait_ 5000
 place settings 900; view real-07d-old-choice 900
@@ -526,7 +528,7 @@ fi
 echo "not driven: background: no remote next (a script cannot press the lock screen), and no frozen shared code (the simulator does not suspend it): only the owner's locked phone shows those"
 SIM launch "$EXACT_SIM" $APP >/dev/null 2>&1
 
-# ---- 3g. SIGN-OUT DRILL, LAST (local: it signs the simulator's app out; the proof key has no key id, so nothing is revoked on the server and nothing else is written there).
+# ---- 3g. SIGN-OUT DRILL, LAST (local: it signs the simulator's app out; the app holds the disposable key with its id, so Sign out revokes THAT key on the server; the exit trap then finds it gone, which is fine).
 # Data is on the pages first; then Sign out; then the account page says signed out, Files and Mail show no data, and the wipe marker and the stamp are gone from the app's files.
 step "clock data"; wait_ 5000
 place paper 2000
@@ -577,6 +579,7 @@ run_drive signedout light "" --touch platform
 kill "$PROOF_JSLOG_PID" 2>/dev/null; PROOF_JSLOG=
 unset NOKEY
 SO="$SHOTS/drive-signedout.txt"
+proof_assert_signed_out "$SO"      # the seed was cleared: the tour cannot tell a signed-out launch from a signed-in-then-out one without this
 # the FIRST screen's dump only: the text of the drive up to the first screenshot step (real-50), not the whole drive
 SO1="$SHOTS/signedout-first.txt"; awk '{ print } /real-50-so-first-screen/ { exit }' "$SO" > "$SO1"
 
