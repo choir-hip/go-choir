@@ -12,7 +12,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { EMPTY_STATE } from './deck-native.ts';
 import { barInfo, forgetBar } from './bar.ts';
-import { digestOf, runOf, type Air, type Place } from './radio-follow.ts';
+import { digestOf, runOf as runOfAir, type Air, type Place } from './radio-follow.ts';
 
 const TEXT = 'First sentence here. Second one follows it. Third closes.\n\nA new paragraph begins now. It has two sentences.';
 const FIRST = 'First sentence here. Second one follows it. Third closes.';
@@ -21,27 +21,28 @@ const ds = (over: Record<string, unknown> = {}, p: Partial<Place> = {}) => ({ ..
 const air = (over: Partial<Air> = {}): Air => ({ id: 'e1', address: 'pub:/p/x', handedId: 'e1', handedText: TEXT, ...over });
 const spoken = { onAir: true, title: 'Harbor strike ends', audio: false };
 const clip = { onAir: true, title: 'Episode 12', audio: true };
+/** The run as the contract asks it: one deck state and one on-air entry (its title and audio flag in the same answer as its id). `view.onAir` false is an empty on-air entry. */
+const runOf = (view: { onAir: boolean; title: string; audio: boolean }, d: unknown, a: unknown) => runOfAir(d, view.onAir ? { ...(a as object), title: view.title, audio: view.audio } : { id: '', address: '', handedId: '', handedText: '', title: '', audio: false });
 
 describe('G1 and G2 the entry on air decides which deck state is about it', () => {
   test('the deck playing the entry on air: playing, with the sheet\'s title', () => {
     expect(runOf(spoken, ds(), air())).toMatchObject({ ready: true, onAir: true, playing: true, paused: false, waiting: false, title: 'Harbor strike ends' });
   });
   test('G2 skip: the deck is still on the old item while the sheet has the new one on air: nothing plays, and the title is the new one\'s', () => {
-    expect(runOf({ ...spoken, title: 'New story' }, ds({ item: 'old' }), air({ id: 'new', handedId: 'new' }))).toMatchObject({ playing: false, paused: false, waiting: false, title: 'New story', progress: 0 });
+    expect(runOf({ ...spoken, title: 'New story' }, ds({ item: 'old' }), air({ id: 'new', handedId: 'new' }))).toMatchObject({ playing: false, paused: false, waiting: false, title: '', progress: 0 });   // never the new title with the old item's place
   });
   test('G2 the deck has moved on to the next item and the sheet has not: nothing plays', () => {
     expect(runOf(spoken, ds({ item: 'next', place: place({ entry: 'next' }) }), air())).toMatchObject({ playing: false, paused: false, progress: 0 });
   });
   test('G2 nothing on air: nothing plays, no title, whatever the deck says', () => {
     expect(runOf({ onAir: false, title: 'Left over', audio: false }, ds(), air({ id: '', handedId: '' }))).toMatchObject({ onAir: false, playing: false, paused: false, waiting: false, title: '', progress: 0 });
-    expect(runOf({ onAir: false, title: 'Left over', audio: false }, ds(), air())).toMatchObject({ playing: false, title: '' });          // even when the ids agree: the sheet says nothing is on air
   });
   test('G2 an empty on-air id never matches an empty deck item', () => {
     expect(runOf(spoken, ds({ item: '' }), air({ id: '', handedId: '' }))).toMatchObject({ playing: false, paused: false });
   });
   test('the contract\'s empty forms (no answer yet) say nothing plays', () => {
-    expect(runOf(spoken, {}, {})).toMatchObject({ playing: false, paused: false, waiting: false, progress: 0 });
-    expect(runOf(spoken, undefined, undefined)).toMatchObject({ playing: false });
+    expect(runOfAir({}, {})).toMatchObject({ playing: false, paused: false, waiting: false, progress: 0 });
+    expect(runOfAir(undefined, undefined)).toMatchObject({ playing: false });
   });
 });
 
@@ -96,10 +97,11 @@ describe('G6 nothing is kept, and the contract lists what it reads', () => {
   });
   test('the bar run is asked with the deck\'s state and the on-air entry, the entry from the spine\'s own resource', () => {
     const c = (f: string): string => readFileSync(new URL(f, import.meta.url), 'utf8');
-    expect(c('spine.contract')).toContain('resource brun = barRun(rpulse.tick, posKey, ds, rair) as shape BarRun');
-    expect(c('spine.contract')).toContain('resource rair = radioAir(rpulse.tick, posKey, ds.item)');
+    expect(c('spine.contract')).toContain('resource brun = barRun(rpulse.tick, posKey, ds, rair, signedOutTick, acs.state) as shape BarRun');
+    expect(c('spine.contract')).toContain('resource rair = radioAir(rpulse.tick, posKey, ds.item, signedOutTick, acs.state)');
+    expect(c('members-radio.contract')).toMatch(/mutation rpm as shape SettingsAck refreshes [^\n]*\bbrun\b/);
     expect(c('members-radio.contract')).not.toContain('resource rair =');
-    expect(c('app.ts')).toContain('barRun: ([_t, _pos, deck, air]');
+    expect(c('app.ts')).toContain('barRun: ([_t, _pos, deck, air, _out, _acct]');
   });
 });
 
@@ -118,5 +120,26 @@ describe('G8 the bar from what plays alone: a phone with no voice', () => {
     const after = barInfo({ ...noVoice, ...runOf({ ...spoken, title: 'Second story' }, ds({}, { seconds: 8, total: 10 }), air({ id: 'e2', handedId: 'e2' })) }, { entries: [] });
     expect(before.progress).toBeGreaterThan(0.1);
     expect(after).toMatchObject({ state: 'idle', progress: 0 });
+  });
+});
+
+describe('G9 one snapshot: the title and the place are of the same entry, in every order the two answers can arrive', () => {
+  // `ds` and `rair` are two resources; whichever is asked first, the pair is checked by id, so a pair is never half old and half new.
+  const A = { id: 'a', handedId: 'a' }, B = { id: 'b', handedId: 'b' };
+  const withTitle = (a: object, title: string) => ({ ...air(a as Partial<Air>), title, audio: false });
+  const dsOf = (item: string, seconds: number) => ds({ item, place: place({ entry: item, seconds, total: 10 }) });
+  test('skip: the new entry\'s air with the old deck state shows neither title nor progress; the old air with the new deck state likewise', () => {
+    expect(runOfAir(dsOf('a', 8), withTitle(B, 'Story B'))).toMatchObject({ title: '', progress: 0, playing: false, paused: false });
+    expect(runOfAir(dsOf('b', 1), withTitle(A, 'Story A'))).toMatchObject({ title: '', progress: 0, playing: false });
+    expect(runOfAir(dsOf('b', 1), withTitle(B, 'Story B'))).toMatchObject({ title: 'Story B', playing: true });
+  });
+  test('a revision of the entry on air (the text handed over changes, the digest with it): the old place gives progress 0 with the new text', () => {
+    expect(runOfAir(ds({}, { seconds: 5, total: 10 }), withTitle({ handedText: TEXT + ' Revised.' }, 'Story'))).toMatchObject({ title: 'Story', progress: 0 });
+  });
+  test('G10 mid-skip the deck still sounds the old item: nothing is on the bar\'s state but the button says Pause, because a tap pauses (radio-runtime.ts toggle reads the deck)', () => {
+    const mid = runOfAir(dsOf('a', 8), withTitle(B, 'Story B'));
+    expect(mid.sounding).toBe(true);
+    expect(barInfo({ phase: 'playing', ...mid }, { entries: [] })).toMatchObject({ state: 'idle', text: '', playing: true });
+    expect(runOfAir(ds({ why: 'paused_listener' }), withTitle({}, 'T')).sounding).toBe(false);
   });
 });

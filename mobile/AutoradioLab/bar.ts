@@ -66,7 +66,7 @@ function plain(stage: string, message: string): string {
 export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): BarInfo {
   const f = obj(rawFacts);
   now = now ?? num(f.at);
-  const b: BarInfo = { state: 'idle', text: '', playing: bool(f.ready) && bool(f.playing), talking: false, handsFree: bool(f.handsFree), progress: 0, question: '', answerId: '', answerText: '', answerLabel: '', answerState: '', answerNote: '', canRetry: false, answering: false, until: 0 };
+  const b: BarInfo = { state: 'idle', text: '', playing: bool(f.ready) && (bool(f.playing) || bool(f.sounding)), talking: false, handsFree: bool(f.handsFree), progress: 0, question: '', answerId: '', answerText: '', answerLabel: '', answerState: '', answerNote: '', canRetry: false, answering: false, until: 0 };
   // What plays is the run sheet's and the deck's (radio-follow.ts `runOf`, handed over as `barRun`): ready once the run has answered; before that the bar says nothing is playing.
   const ran = bool(f.ready);
   const title = ran ? str(f.title) : '';
@@ -94,7 +94,7 @@ export function barInfo(rawFacts: unknown, rawEntries: unknown, now?: number): B
   else if (phase === 'ended') { b.state = 'heard'; b.text = transcript || 'Heard you'; }
   else if (phase === 'acknowledging' || phase === 'holding') { b.state = 'holding'; b.text = str(f.holding) || 'On it…'; }
   else if (phase === 'revised' || left(revisedAt, REVISED_WINDOW) > 0) { b.state = 'revised'; b.text = 'Revised · Show'; }
-  else if (b.playing) { b.state = 'playing'; b.text = title; }
+  else if (ran && bool(f.playing)) { b.state = 'playing'; b.text = title; }
   else if (title !== '' && ran && (bool(f.paused) || bool(f.waiting))) { b.state = 'paused'; b.text = title; }       // paused by the listener or the system, or held for the audio session: the deck's own word, never a guess
 
   // The answer card: the latest entry that is not cancelled, unless the listener closed it. A cancelled entry is skipped and the answer before it shows only if it was not closed.

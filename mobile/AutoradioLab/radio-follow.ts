@@ -9,13 +9,13 @@ import { MAX_SENTENCE_CHARS, sentenceEnds } from './reader-parse.ts';
 export type Place = DeckPlace;
 
 /** The on-air entry as the contract hands it: its id and the address of the page it reads (`airAddressOf`), and what shared code last handed the deck under that id (`handedId`, `handedText`: the item's `paragraphs`). */
-export type Air = { id: string; address: string; handedId: string; handedText: string };
+export type Air = { id: string; address: string; handedId: string; handedText: string; /** the on-air entry's title and whether it is audio, from the same instant as `id` (the bar's `runOf`) */ title?: string; audio?: boolean };
 export type Follow = { address: string; blockId: string; sentence: number };
 export const NO_FOLLOW: Follow = { address: '', blockId: '', sentence: -1 };
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
-const readAir = (v: unknown): Air => { const o = obj(v); return { id: str(o.id), address: str(o.address), handedId: str(o.handedId), handedText: str(o.handedText) }; };
+const readAir = (v: unknown): Air => { const o = obj(v); return { id: str(o.id), address: str(o.address), handedId: str(o.handedId), handedText: str(o.handedText), title: str(o.title), audio: o.audio === true }; };
 
 /** The length in UTF-16 code units, a colon, and the 32-bit FNV-1a of those code units as eight hex digits. The iPhone (`DeckDigest`) and Android (`DeckDigest`) make the same string; each pins the same test values. */
 export function digestOf(text: string): string {
@@ -158,18 +158,18 @@ export function nowOf(rawDeck: unknown, rawAir: unknown): { sentence: string; pr
   return { sentence: sayingOf(p, air.handedText)?.text ?? '', progress: Math.min(1, (p.start + share * p.length) / air.handedText.length) };
 }
 
-/** What the bar says is playing, from the run sheet and the deck (`barRun`): the title of the entry on air, and whether the deck is playing it, paused (by the listener or the system), or held for the audio session. Every value is an argument:
- *  `view` is what the sheet says of the entry on air (its title, whether it is audio), the deck's state and the on-air entry as the contract hands them. The deck speaks for the entry on air only when its item IS that entry's id: any other
- *  deck state (an entry that just ended, one the sheet has not yet put on air) is no verdict about it, and the bar shows nothing playing. Progress: audio is the seconds over its length; spoken words are the place's share of the text handed
- *  over (`nowOf`), 0 when the place is not that entry's. Nothing is kept. */
-export function runOf(view: { onAir: boolean; title: string; audio: boolean }, rawDeck: unknown, rawAir: unknown): { ready: boolean; onAir: boolean; waiting: boolean; playing: boolean; paused: boolean; title: string; progress: number } {
+/** What the bar says is playing, from ONE snapshot: the deck's state and the on-air entry as `radioAir` made it (its id, title, whether it is audio and the text handed to the deck, all from one instant). It reads nothing else.
+ *  The deck speaks for the entry on air only when its item IS that entry's id: any other pairing (a skip or a revision that reached one of the two first, an entry that just ended) shows no title, no progress and nothing
+ *  playing on the bar's state, never one entry's title with another's place. `sounding` says the deck is audibly playing something, whatever it is: the play button says Pause then, because a tap pauses the deck
+ *  (radio-runtime.ts `toggle` reads the deck's own state). Progress: audio is the seconds over its length; spoken words are the place's share of the text handed over (`nowOf`). Nothing is kept. */
+export function runOf(rawDeck: unknown, rawAir: unknown): { ready: boolean; onAir: boolean; waiting: boolean; playing: boolean; sounding: boolean; paused: boolean; title: string; progress: number } {
   const ds = readState(rawDeck), air = readAir(rawAir);
-  const on = view.onAir && air.id !== '' && ds.item === air.id;
+  const on = air.id !== '' && ds.item === air.id;
   const playing = on && ds.why === 'playing', paused = on && (ds.why === 'paused_listener' || ds.why === 'paused_system'), waiting = on && ds.why === 'held_session';
   let progress = 0;
-  if (on && view.audio) progress = ds.duration > 0 && Number.isFinite(ds.seconds) ? Math.min(1, Math.max(0, ds.seconds / ds.duration)) : 0;
+  if (on && air.audio === true) progress = ds.duration > 0 && Number.isFinite(ds.seconds) ? Math.min(1, Math.max(0, ds.seconds / ds.duration)) : 0;
   else if (on) progress = nowOf(rawDeck, rawAir).progress;
-  return { ready: true, onAir: view.onAir, waiting, playing, paused, title: view.onAir ? view.title : '', progress };
+  return { ready: true, onAir: air.id !== '', waiting, playing, sounding: ds.why === 'playing', paused, title: on ? str(air.title) : '', progress };
 }
 
 export { NO_PLACE };

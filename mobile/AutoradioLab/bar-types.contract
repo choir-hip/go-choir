@@ -28,6 +28,8 @@ shape BarRun
   waiting: bool
   // The deck is playing the entry on air / paused on it (by the listener or the system).
   playing: bool
+  // The deck is audibly playing something (the entry on air or not): the play button says Pause, because a tap pauses it.
+  sounding: bool
   paused: bool
   // The entry on air's title.
   title: string

@@ -329,7 +329,7 @@ export async function radioPulse(storage: Store | undefined, native: NativeReade
   // `live`: something is sounding and the app is in front (native's `foreground`: with the screen off or the app away the audio plays on and nothing here asks again), so the position is moving and the screens that show it are asked again each second (spine.contract `posKey`). `beat` moves once per pulse while it is, and not otherwise:
   // the key is the beat, so the screens are asked after THIS pulse's read of the deck (they never read a position older than the pulse that said so), and a pause or a hidden page leaves the key still.
   const live = r.rt.view().playing && r.rt.inFront();
-  // The beat moves once per device SECOND, not once per pulse: the pulse is asked again whenever native touches the radio note (the engine's 0.4 s progress timer, a state change), and each beat asks the three screens and
+  // The beat moves once per device SECOND, not once per pulse: the pulse is asked again whenever native touches the radio note (a state change), and each beat asks the three screens and
   // what reads them again. The position label changes once a second at the most.
   const second = Math.floor(clock.ms / 1000);
   if (live && (second !== r.beatSecond || clock.ms <= 0)) { r.beat += 1; r.beatSecond = second; }
@@ -594,11 +594,9 @@ export async function radioPageAct(storage: Store | undefined, native: NativeRea
   await r.rt.pump(); return ACK;
 }
 
-/** What the bar shows of what plays, for both phones: the sheet's on-air entry and the deck's state (radio-follow.ts `runOf`). The deck's state and the on-air entry are arguments (the contract's `ds` and `rair`), so a change to either asks again. */
-export async function barRun(storage: Store | undefined, native: NativeReader | undefined, deck: unknown, air: unknown): Promise<Record<string, unknown>> {
-  const r = await getRadio(storage, native, false);
-  const v = r.rt.view();
-  return runOf({ onAir: v.onAir, title: v.current, audio: v.audio }, deck, air);
+/** What the bar shows of what plays, for both phones: a pure function of the deck's state and the on-air entry (radio-follow.ts `runOf`), both arguments (the contract's `ds` and `rair`). It reads no runtime state. */
+export async function barRun(_storage: Store | undefined, _native: NativeReader | undefined, deck: unknown, air: unknown): Promise<Record<string, unknown>> {
+  return runOf(deck, air);
 }
 
 /** The sheet as the page's facts carry it. The facts are asked again every second while the radio sounds (spine.contract `posKey`), and the sheet can be a megabyte: it is written out when it moved
@@ -612,11 +610,12 @@ function sheetText(sheet: Sheet): string {
 }
 
 /** The entry on air as the contract needs it for the sentence follow (members-radio.contract `rair`): its id, its page's address, and what was last handed to the deck under that id. Asked on the pulse and the beat. */
-export async function radioAir(storage: Store | undefined, native: NativeReader | undefined): Promise<{ id: string; address: string; handedId: string; handedText: string }> {
+export async function radioAir(storage: Store | undefined, native: NativeReader | undefined): Promise<{ id: string; address: string; handedId: string; handedText: string; title: string; audio: boolean }> {
   const r = await getRadio(storage, native, false);
-  const e = r.rt.store.onAir();
+  const e = r.rt.store.onAir(), v = r.rt.view();
   const h = e ? r.rt.handed(e.id) : { id: '', text: '' };
-  return { id: e?.id ?? '', address: airAddressOf(e), handedId: h.id, handedText: h.text };
+  // the title and the audio flag are the entry's own, read in the same step as its id and its handed text: the bar's run (`runOf`) is a function of this and the deck's state, nothing else
+  return { id: e?.id ?? '', address: airAddressOf(e), handedId: h.id, handedText: h.text, title: e ? v.current : '', audio: e ? v.audio : false };
 }
 
 export async function radioPageFacts(storage: Store | undefined, native: NativeReader | undefined, deck: unknown, air: unknown): Promise<RadioFacts> {

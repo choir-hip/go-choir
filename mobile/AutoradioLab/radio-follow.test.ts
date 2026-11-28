@@ -212,11 +212,11 @@ describe('F15 and F23 the module holds nothing, and the resources ask again on e
   });
   test('F23 the on-air entry is asked again on the beat (posKey) and on every pulse; the page\'s sentence is asked with the deck state and that entry', () => {
     const air = contracts.split('\n').find((l) => /resource rair\b/.test(l)) ?? '';
-    expect(air).toContain('radioAir(rpulse.tick, posKey, ds.item)');
+    expect(air).toContain('radioAir(rpulse.tick, posKey, ds.item, signedOutTick, acs.state)');
     const facts = contracts.split('\n').find((l) => /resource rpfacts\b/.test(l)) ?? '';
     expect(facts).toContain('radioPageFacts(rpulse.tick, posKey, ds, rair)');
     const mut = contracts.split('\n').find((l) => /mutation rpm\b/.test(l)) ?? '';
-    expect(mut).toMatch(/refreshes rpfacts, rair, rp, rpulse/);       // what the page's facts read is asked again with them
+    expect(mut).toMatch(/refreshes rpfacts, rair, brun, rp, rpulse/);       // what the page's facts read is asked again with them
   });
 });
 

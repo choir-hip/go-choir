@@ -17,3 +17,15 @@ Remaining native ops of the bar, each with its Android answer (all "NotSupported
 Replaced: the native title, playing flag and block-index progress of the bar; the run-sheet overlay in `bar.ts` for remote audio.
 
 Undo: revert the second commit; the first is independent.
+
+Review round (same change, one more commit). The bar's run is now ONE snapshot: `radioAir` returns the on-air entry's id, address, handed text, title and audio flag from one step, and `runOf(ds, air)` reads nothing else; `barRun` reads no runtime state at all. The deck speaks for the entry only when `ds.item === air.id`; any other pairing (a skip or revision that reached one answer first) gives no title, no progress, nothing playing on the bar's state. Resources against the rule (every value read is an input):
+- `ds` = deckState(radioTick): native source, read per radio tick.
+- `rpulse` = radioPulse(ds, rnote.tick, radioTick): reads the deck state, the note, the clock tick, the runtime (the pump's own).
+- `rair` = radioAir(rpulse.tick, posKey, ds.item, signedOutTick, acs.state): reads the runtime's on-air entry, its title and audio flag, what was handed to the deck; asked again on the pulse, the beat, a change of the deck's item, a sign-out and an account-state change.
+- `brun` = barRun(rpulse.tick, posKey, ds, rair, signedOutTick, acs.state): pure in `ds` and `rair`; the other four only ask it again.
+- `rpfacts` = radioPageFacts(rpulse.tick, posKey, ds, rair): reads the runtime's sheet and view (the page's own facts, not the bar's), `ds`, `rair`.
+- `rfollow` = readerFollowShared(ds, rair, address, ids, texts): pure in its arguments.
+- `bi` = barInfo(bf, brun, cvraw, barTick|signedOutTick): pure in its arguments plus the account generation (the held message).
+- `rp` = radioPage(rpfacts, bf, cvraw): pure.
+- `mutation rpm` now refreshes `rpfacts, rair, brun, rp, rpulse`.
+Mid-skip edge: while the deck still sounds the old item and the sheet has the new one on air (until the deck's next state and `rair` agree: one pulse, about 1 s in front, up to 5 s on the slow clock), the bar's state is idle with no title, and the play button says Pause, because a tap sends `radioPlayPause`, whose `toggle` (radio-runtime.ts:131-136) reads the deck's own state and pauses a playing deck. A new fact `sounding` says so. No "between items" state exists to reuse. Tests: G9 and G10 in `bar-run.test.ts`, S19-bar (the next `rair` ask is empty and the contract keys carry the sign-out and account state), churn C1.

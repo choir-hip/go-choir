@@ -11,7 +11,7 @@ members Autoradio
   resource rpfacts = radioPageFacts(rpulse.tick, posKey, ds, rair) as shape RadioPageFacts else empty()
   resource rp = radioPage(rpfacts, bf, cvraw) as shape RadioPageInfo else empty()
   // The gestures stay native until the queue and its posted ops move: the native side carries them out and the page is read again.
-  mutation rpm as shape SettingsAck refreshes rpfacts, rair, rp, rpulse
+  mutation rpm as shape SettingsAck refreshes rpfacts, rair, brun, rp, rpulse
   // The desk's ask and the sheet's post (radio-bridge.ts radioWrite): long fetches, so a mutation that stays until they are done (a resource answer is let go when the next pulse is asked).
   mutation rwm as shape RadioTick
   action writeNow

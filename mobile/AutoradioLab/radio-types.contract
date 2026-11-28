@@ -54,6 +54,9 @@ shape RadioAir
   address: string
   handedId: string
   handedText: string
+  // The entry's title and whether it is audio, from the same instant as its id (the bar's `runOf`).
+  title: string
+  audio: bool
 
 shape RadioBuiltOn
   n: number

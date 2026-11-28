@@ -84,9 +84,9 @@ members Autoradio
   // A seek, Next or a new entry moves `rpulse.tick` (the pump), which is the other half of every key. No second timer: this is the radioClock's pulse above.
   derive posKey = rpulse.live and hpg.visibilityState == "visible" ? rpulse.beat : 0
   // The on-air entry (its id, its page's address, the id and text last handed to the deck): the sentence follow, the Autoradio page and the bar read it. Asked again when the deck's item changes as well as on the pulse and the beat.
-  resource rair = radioAir(rpulse.tick, posKey, ds.item) as shape RadioAir else empty()
-  // What plays, for the bar, on both phones (radio-follow.ts `runOf`): the sheet's on-air entry and the deck's state. Every value it reads is here: the deck's state and the on-air entry.
-  resource brun = barRun(rpulse.tick, posKey, ds, rair) as shape BarRun else empty()
+  resource rair = radioAir(rpulse.tick, posKey, ds.item, signedOutTick, acs.state) as shape RadioAir else empty()
+  // What plays, for the bar, on both phones (radio-follow.ts `runOf`): the sheet's on-air entry and the deck's state. It is a pure function of the deck's state and the on-air entry (id, title, audio flag and handed text from one instant), and reads nothing else; the sign-out and account-state keys ask it again with the others.
+  resource brun = barRun(rpulse.tick, posKey, ds, rair, signedOutTick, acs.state) as shape BarRun else empty()
   resource bi = barInfo(bf, brun, cvraw, `${barTick}|${signedOutTick}`) as shape BarInfo else empty()
   // The shared set's handles (pages.ts); each refreshes the shared view.
   mutation pms as shape PageList refreshes pgs
