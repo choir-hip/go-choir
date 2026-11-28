@@ -57,6 +57,10 @@ final class SentencePlaceTests: XCTestCase {
         XCTAssertNil(SegmentPrep.prepare(inc)?.segment.unitRanges)
         XCTAssertNil(DeckDigest.ranges(of: ["Absent words."], in: "Other text."))
         XCTAssertNil(DeckDigest.ranges(of: [""], in: "Other text."))
+        XCTAssertNil(DeckDigest.ranges(of: ["ab"], in: "a b"), "a character run does not match across a blank in the source")
+        XCTAssertNil(DeckDigest.ranges(of: ["a b"], in: "ab"), "nor a blank in the unit where the source has none")
+        XCTAssertEqual(DeckDigest.ranges(of: ["a b"], in: "a \n b"), [UnitRange(start: 0, length: 5)], "a run of blanks stands for a run")
+        XCTAssertNil(DeckDigest.ranges(of: ["x", ""], in: "x y"), "an index that is not a speech unit (a clip's empty text) refuses the whole segment, so no unit is mis-indexed")
     }
 
     // MARK: the one read

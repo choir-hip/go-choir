@@ -406,8 +406,10 @@ class DeckMediaEngine(
             DeckPosition(speechChunks.getOrNull(index)?.block ?: current.block, seconds, speechChunks.lastOrNull()?.block ?: current.block, 0.0)
         }
     }
-    /** Voice: only the player knows which chunk sounds and how far. Run where ExoPlayer and `speechChunks` live (the main looper); the chunks and the player share that thread and no document can be replaced under them, so no
-     *  generation is needed. The duration of the chunk is Media3's, C.TIME_UNSET (a large negative number) until it is known: that is 0 (placeOf). */
+    /** Voice: only the player knows which chunk sounds and how far. Every caller is on the main looper, as `position()` above already is: `DeckController.snapshot()` is reached from `DeckAndroid.state` (AutoradioModule.kt `deckState`,
+     *  a call the host makes on the main thread: dev.exact.canvas.Extensions.kt header, "every one is on the main thread") and from the deck sends, launched on `Dispatchers.Main.immediate` (AutoradioModule.kt scope, DeckAndroid.kt scope);
+     *  the journal's ticks run on the main-looper `HandlerScheduler` (DeckAndroid.kt). ExoPlayer is built here on the main looper and `speechChunks` is written only by `startSpeech` on that scope, so no generation is needed.
+     *  The chunk's duration is Media3's: C.TIME_UNSET (a large negative number) until it is known, which `placeOf` makes 0. */
     override fun place(): DeckPlace {
         val current = item ?: return DeckPlace()
         if (current.kind != "speech") return DeckPlace()

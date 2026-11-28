@@ -331,7 +331,7 @@ public enum DeckDigest {
         return "\(n):" + String(repeating: "0", count: 8 - hex.count) + hex
     }
     /// Each unit's range in `source`, in order. The units are `source` cut and trimmed, with a run of white space (a newline joined to a space) standing for the run it came from, so a unit is matched
-    /// character by character, white space to white space. Nil when any unit cannot be found that way: no place is reported rather than a wrong one.
+    /// character by character, a run of white space only against a run of white space. Nil when any unit cannot be found that way: no place is reported rather than a wrong one.
     public static func ranges(of units: [String], in source: String) -> [UnitRange]? {
         let src = Array(source.unicodeScalars)
         var offset = [Int](); offset.reserveCapacity(src.count + 1)
@@ -352,8 +352,7 @@ public enum DeckDigest {
                     guard i < src.count, blank(src[i]) else { return nil }
                     while i < src.count, blank(src[i]) { i += 1 }
                 } else {
-                    while i < src.count, blank(src[i]) { i += 1 }
-                    guard i < src.count, src[i] == us[j] else { return nil }
+                    guard i < src.count, src[i] == us[j] else { return nil }      // a blank in the source stands for a blank in the unit: "ab" is not found in "a b"
                     i += 1; j += 1
                 }
             }

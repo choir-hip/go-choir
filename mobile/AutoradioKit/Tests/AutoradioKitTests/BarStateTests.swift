@@ -33,6 +33,18 @@ final class BarStateTests: XCTestCase {
         XCTAssertEqual(tr.raw().errorAt, 0); XCTAssertEqual(tr.raw().holding, ""); XCTAssertEqual(tr.raw().revisedAt, 0)
     }
 
+    func testRadioInfoClampsTheBlockIndex() {
+        let tr = BarTracker()
+        let d = segmentedDocument(["One.", "Two.", "Three."])
+        let last = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: 2, count: 3), document: d, now: t0)
+        let over = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: 500, count: 3), document: d, now: t0)
+        let under = tr.radioInfo(player: player(playing: true), snapshot: snap(idx: -4, count: 3), document: d, now: t0)
+        XCTAssertEqual(over.title, last.title, "a block index past the end is the last block, not a trap")
+        XCTAssertEqual(under.title, "Title 0")
+        let empty = tr.radioInfo(player: player(playing: false, title: ""), snapshot: snap(count: 0), document: ProgrammeDocument(id: "n", title: "", blocks: []), now: t0)
+        XCTAssertEqual(empty.title, "")
+    }
+
     func testClockCountsOnlyRunningTime() {
         var c = BlockClock()
         c.update(index: 0, running: true, now: t0)

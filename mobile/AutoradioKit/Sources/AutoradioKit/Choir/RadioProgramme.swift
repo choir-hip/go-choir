@@ -205,7 +205,7 @@ public enum SegmentPrep {
         }
         let seg = ProgrammeSegment(id: s.segmentID, stretchID: s.stretchID, kind: s.kind, title: title(s.title, kind: s.kind), cites: cites,
                                    firstBlock: 0, blockCount: units.count, serverBlockCount: reported, unitServerBlocks: map,
-                                   unitRanges: s.source.flatMap { DeckDigest.ranges(of: units.compactMap(\.spokenText), in: $0) }, sourceDigest: s.source.map(DeckDigest.of))
+                                   unitRanges: s.source.flatMap { DeckDigest.ranges(of: units.map { $0.spokenText ?? "" }, in: $0) }, sourceDigest: s.source.map(DeckDigest.of))
         return PreparedSegment(segment: seg, blocks: units)
     }
 }

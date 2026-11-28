@@ -185,7 +185,7 @@ describe('P7 the contract is wired to the key', () => {
   });
   test('the page facts, the queue view and the bar run take it', () => {
     expect(c('members-radio.contract')).toContain('radioPageFacts(rpulse.tick, posKey, ds, rair)');
-    expect(c('members-radio.contract')).toContain('radioAir(rpulse.tick, posKey)');
+    expect(c('members-radio.contract')).toContain('radioAir(rpulse.tick, posKey, ds.item)');
     expect(c('members-queue.contract')).toContain('queueView(rpulse.tick, posKey)');
     expect(c('spine.contract')).toContain('barRun(rpulse.tick, posKey)');
   });

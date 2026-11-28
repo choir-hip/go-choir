@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { EMPTY_STATE, readState } from './deck-native.ts';
-import { digestOf, followOf, fractionOf, locate, NO_FOLLOW, nowOf, owns, sentenceAt, sentencesOf, unitOf, type Air, type Place } from './radio-follow.ts';
+import { digestOf, followOf, fractionOf, locateAt, NO_FOLLOW, nowOf, owns, sentenceAt, sentencesOf, unitOf, type Air, type Place } from './radio-follow.ts';
 
 const TEXT = 'First sentence here. Second one follows it. Third closes.\n\nA new paragraph begins now. It has two sentences.';
 const at = (s: string, from = 0) => { const start = TEXT.indexOf(s, from); return { start, length: s.length }; };
@@ -137,19 +137,21 @@ describe('the reader\'s follow', () => {
     expect(follow(ds(), air(), 'pub:/other')).toEqual(NO_FOLLOW);
     expect(follow(ds(), air(), '')).toEqual(NO_FOLLOW);
   });
-  test('F10 a sentence in two blocks lights the first (no memory, no tie-break); this pins the limit', () => {
+  test('F10 a sentence in two blocks that the entry has once lights neither: the order cannot say which (it was the first, by search)', () => {
     const two = blocks([['b1', 'First sentence here. Second one follows it. Third closes.'], ['b2', 'First sentence here. Second one follows it. Third closes.']]);
-    expect(follow(ds(), air(), 'pub:/p/x', two).blockId).toBe('b1');
+    expect(follow(ds(), air(), 'pub:/p/x', two).blockId).toBe('');
   });
   test('F13 a unit that begins in the middle of a sentence is found by the page sentence that holds its head', () => {
     const tail = { start: TEXT.indexOf('Second one follows it.'), length: 'Second one follows it. Third closes.'.length };
     expect(follow(ds({}, tail), air())).toEqual({ address: 'pub:/p/x', blockId: 'b2', sentence: 1 });
-    expect(locate('Second one follows it.', [{ id: 'b2', text: 'First sentence here. Second one follows it. Third closes.' }])).toEqual({ block: 'b2', sentence: 1 });
-    expect(locate('hello', [{ id: 'b', text: 'hello there' }])).toBeUndefined();     // under six characters
+    const E = 'First sentence here. Second one follows it. Third closes.';
+    expect(locateAt(E, E.indexOf('Second'), [{ id: 'b2', text: E }])).toEqual({ block: 'b2', sentence: 1 });
+    expect(locateAt('Hi.', 0, [{ id: 'b', text: 'Hi.' }])).toBeUndefined();     // under six characters
+    expect(locateAt(E, E.length + 5, [{ id: 'b2', text: E }])).toBeUndefined();               // an offset outside the text
   });
-  test('a very long block is one sentence, as the reader numbers it', () => {
+  test('a very long block is one sentence, as the reader numbers it, and the walk goes by that', () => {
     const long = 'Word one here. ' + 'x'.repeat(20001);
-    expect(locate('Word one here.', [{ id: 'b', text: long }])).toEqual({ block: 'b', sentence: 0 });
+    expect(locateAt(long, 0, [{ id: 'b', text: long }])).toEqual({ block: 'b', sentence: 0 });
   });
 });
 
@@ -210,8 +212,70 @@ describe('F15 and F23 the module holds nothing, and the resources ask again on e
   });
   test('F23 the on-air entry is asked again on the beat (posKey) and on every pulse; the page\'s sentence is asked with the deck state and that entry', () => {
     const air = contracts.split('\n').find((l) => /resource rair\b/.test(l)) ?? '';
-    expect(air).toContain('radioAir(rpulse.tick, posKey)');
+    expect(air).toContain('radioAir(rpulse.tick, posKey, ds.item)');
     const facts = contracts.split('\n').find((l) => /resource rpfacts\b/.test(l)) ?? '';
     expect(facts).toContain('radioPageFacts(rpulse.tick, posKey, ds, rair)');
+    const mut = contracts.split('\n').find((l) => /mutation rpm\b/.test(l)) ?? '';
+    expect(mut).toMatch(/refreshes rpfacts, rair, rp, rpulse/);       // what the page's facts read is asked again with them
+  });
+});
+
+describe('the page position is the reported range, mapped by order and never searched for', () => {
+  const P1 = 'Intro line here. Same words repeated here. Tail one.', P2 = 'Other opening text. Same words repeated here. Tail two.';
+  const ENTRY = `${P1}\n\n${P2}`;
+  const unit = (text: string, part: string, from = 0) => ({ start: text.indexOf(part, from), length: part.length });
+  const run = (entry: string, part: string, page: [string, string][], fraction: number, from = 0, a: Partial<Air> = {}) => {
+    const pg = blocks(page);
+    return followOf({ ...EMPTY_STATE, why: 'playing', item: 'e1', place: { entry: 'e1', digest: digestOf(entry), ...unit(entry, part, from), seconds: fraction * 10, total: 10 } }, { id: 'e1', address: 'pub:/p/x', handedId: 'e1', handedText: entry, ...a }, 'pub:/p/x', pg.ids, pg.texts);
+  };
+  test('a sentence repeated in two blocks: speaking the second lights the second', () => {
+    expect(run(ENTRY, P2, [['b1', P1], ['b2', P2]], 0.5, ENTRY.indexOf(P2))).toEqual({ address: 'pub:/p/x', blockId: 'b2', sentence: 1 });
+    expect(run(ENTRY, P1, [['b1', P1], ['b2', P2]], 0.5)).toEqual({ address: 'pub:/p/x', blockId: 'b1', sentence: 1 });
+  });
+  test('the same opening 24 characters in two sentences of one block: the second is the second', () => {
+    const B = 'The committee met on Monday and voted. The committee met on Monday and adjourned.';
+    expect(run(B, B, [['b1', B]], 0.9)).toEqual({ address: 'pub:/p/x', blockId: 'b1', sentence: 1 });
+    expect(run(B, B, [['b1', B]], 0.1).sentence).toBe(0);
+  });
+  test('a block the page has and the entry lacks, whose sentence is also in the entry: it is not lit', () => {
+    const E = 'Real paragraph start. Same words repeated here.';
+    expect(run(E, E, [['x1', 'Same words repeated here. Filler one.'], ['x2', E]], 0.9)).toEqual({ address: 'pub:/p/x', blockId: 'x2', sentence: 1 });
+  });
+  test('two page sentences that fit the entry equally well light nothing (the order cannot say which)', () => {
+    const S = 'Same words repeated here.';
+    expect(run(S, S, [['b1', S], ['b2', S]], 0.5)).toEqual(NO_FOLLOW);
+  });
+  test('a heading the page has and the entry lacks does not move the rest', () => {
+    const E = 'First sentence here. Second one follows it. Third closes.';
+    expect(run(E, E, [['h', 'A heading the entry lacks.'], ['b1', E]], 0.5)).toEqual({ address: 'pub:/p/x', blockId: 'b1', sentence: 1 });
+  });
+  test('a page that does not align with the entry lights nothing', () => {
+    expect(run(ENTRY, P2, [['b1', 'Entirely different words on this page. Nothing alike at all.']], 0.5, ENTRY.indexOf(P2))).toEqual(NO_FOLLOW);
+  });
+  test('the radio page\'s own sentence for the repeated case is the second, by range (nowOf never searches)', () => {
+    const d = { ...EMPTY_STATE, why: 'playing', item: 'e1', place: { entry: 'e1', digest: digestOf(ENTRY), ...unit(ENTRY, P2, ENTRY.indexOf(P2)), seconds: 5, total: 10 } };
+    const r = nowOf(d, { id: 'e1', address: '', handedId: 'e1', handedText: ENTRY });
+    expect(r.sentence).toBe('Same words repeated here.');
+    expect(r.progress).toBeGreaterThan(0.6);
+    const first = nowOf({ ...d, place: { ...d.place, ...unit(ENTRY, P1), seconds: 5 } }, { id: 'e1', address: '', handedId: 'e1', handedText: ENTRY });
+    expect(first.sentence).toBe('Same words repeated here.');
+    expect(first.progress).toBeLessThan(0.4);
+  });
+});
+
+describe('skip, then the follow before the next pulse: never the previous item\'s', () => {
+  const old = ds({}, { seconds: 4.5, total: 10 });                                  // the deck state of the item that was skipped (e1)
+  test('the sheet has moved on (e2) and the deck state has not: nothing lit', () => {
+    expect(follow(old, air({ id: 'e2', handedId: 'e2', handedText: 'Other words for the second entry.' }))).toEqual(NO_FOLLOW);
+    expect(nowOf(old, air({ id: 'e2', handedId: 'e2', handedText: 'Other words for the second entry.' }))).toEqual({ sentence: '', progress: 0 });
+  });
+  test('the deck state has moved on (e2, no place yet) and the on-air entry has not: nothing lit', () => {
+    expect(follow(ds({ item: 'e2' }, { entry: '' }), air())).toEqual(NO_FOLLOW);
+    expect(follow(ds({ item: 'e2' }, { entry: 'e2' }), air())).toEqual(NO_FOLLOW);
+  });
+  test('both have moved on: the new item\'s own sentence', () => {
+    const E2 = 'Second entry words come first. Then more words follow here.';
+    const d = { ...EMPTY_STATE, why: 'playing', item: 'e2', place: { entry: 'e2', digest: digestOf(E2), start: 0, length: E2.length, seconds: 0, total: 10 } };
+    expect(follow(d, air({ id: 'e2', handedId: 'e2', handedText: E2 }), 'pub:/p/x', blocks([['c1', E2]])).blockId).toBe('c1');
   });
 });
