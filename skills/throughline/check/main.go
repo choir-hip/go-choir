@@ -30,7 +30,6 @@ var dateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}`)
 // was added (2026-11-12). Entries may only be removed, never added: a new
 // unparseable file must be fixed. TestBaselineShrinks fails once an entry parses.
 var parseBaseline = map[string]bool{
-	"choir-launch-fp10-net-05-2026-10-21.md":              true,
 	"choir-launch-fp10-res-08-2026-10-21.md":              true,
 	"choir-launch-fp4-selfdev-architecture-2026-10-21.md": true,
 	"choir-launch-fp6-network-2026-10-21.md":              true,

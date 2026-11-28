@@ -211,7 +211,7 @@ now:
     evidence_refs:
       - docs/archive/evidence/m11-probe-run9-satisfied-2026-09-29.json
       - docs/archive/desk-rlm-rectification-plan-2026-09-23.md §11.2 (M11), §11.3 (owner rulings)
-      - docs/world-wire-mission-stack-2026-09-22.md (3e gate)
+      - docs/archive/world-wire-mission-stack-2026-09-22.md (3e gate)
   belief:
     believed_state: >-
       Every dependency is landed and proven: management/engineering/

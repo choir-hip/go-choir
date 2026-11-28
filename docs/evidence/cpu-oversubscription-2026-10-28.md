@@ -1,6 +1,6 @@
 # CPU oversubscription, isolation tiers and desktop hosting (DeepSeek research, 2026-10-28)
 
-Status: raw research by the DeepSeek v4.1 flash seat, landed verbatim at FP0's handoff (token-limited). **Not spot-checked by FP0**: treat every source and number as [H] until verified. Its predictions are not yet in the precommitment ledger. Prompt: `.agentic-consensus/data-arch/cpu-oversub/prompt.md` (gitignored). Context: the owner notes of ~16:00 and ~16:10 UTC in docs/definitions/choir-data-architecture-selection-2026-10-28.md.
+Status: raw research by the DeepSeek v4.1 flash seat, landed verbatim at FP0's handoff (token-limited). **Not spot-checked by FP0**: treat every source and number as [H] until verified. Its predictions are not yet in the precommitment ledger. Prompt: `.agentic-consensus/data-arch/cpu-oversub/prompt.md` (gitignored). Context: the owner notes of ~16:00 and ~16:10 UTC in docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md.
 
 ---
 
@@ -10,7 +10,7 @@ Panel answer, convergent mode. Research seat: DeepSeek v4.1 flash. Date: 2026-10
 Read-only on the repo; the only file written is this answer.
 
 Scope: the owner note at the end of
-`docs/definitions/choir-data-architecture-selection-2026-10-28.md` (CPU
+`docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md` (CPU
 oversubscription, isolation tiers, desktop as the main host). Host facts are
 Node B (Xeon E-2236, 6C/12T, SMT on, 31.1 GiB, kernel booted 6.18.16, l1tf /
 mds / mmio_stale_data "SMT vulnerable", 3 Firecracker VMs, load 0.08).
@@ -573,7 +573,7 @@ guest) and should wait for confidential VMs.
 ## 6. Precommitted predictions
 
 Candidate round-0e records for
-`docs/definitions/choir-data-architecture-selection-2026-10-28.precommit.md`.
+`docs/archive/definitions/choir-data-architecture-selection-2026-10-28.precommit.md`.
 Intervals are 80%. Every claim names a falsifier and the measurement that
 settles it; the measurement column names the run that decides.
 
@@ -751,7 +751,7 @@ Repo evidence:
   VMScape state, microcode EOL, stranger policy options).
 - `docs/security-density-architecture-checklist-2026-10-21.md` (NET-07,
   DEC-06, L17 jailer off).
-- `docs/definitions/choir-data-architecture-selection-2026-10-28.md` (owner
+- `docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md` (owner
   notes, host facts, tape schema v2, FP0 desktop notes).
-- `docs/definitions/choir-data-architecture-selection-2026-10-28.precommit.md`
+- `docs/archive/definitions/choir-data-architecture-selection-2026-10-28.precommit.md`
   (R0d density records; these are candidate R0e records).

@@ -182,7 +182,7 @@ vision is the architecture supervision lives in.
   argument.
 - `docs/archive/reports/choir-state-and-vision-2026-10-14.md` — what is built, designed
   and vision today, and the business model.
-- `docs/ACTIVE.md` — current sequencing (`docs/world-wire-mission-stack-2026-09-22.md`
+- `docs/ACTIVE.md` — current sequencing (`docs/archive/world-wire-mission-stack-2026-09-22.md`
   is a superseded roadmap kept for reference).
 - `docs/archive/choir-coherent-computer-convergence-2026-07-21.md` — the
   ratified durable-work kernel this vision runs on.

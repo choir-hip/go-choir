@@ -1,7 +1,7 @@
 # Restore bases design: three review rounds without convergence
 
 Date: 2026-11-15T06:52Z. Subject:
-docs/design/restore-bases-store-once-2026-11-15.md. Rule applied: three
+docs/archive/design/restore-bases-store-once-2026-11-15.md. Rule applied: three
 rounds without convergence, stop patching and change the approach.
 
 ## What happened

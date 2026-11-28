@@ -3,7 +3,7 @@
 Standing: built | kind: happened | scope: in part | settled-by: 117871ae6 (ARCH-15 launcher rename) on origin/main; RES-15 was a comment; ARCH-14 landed as 6e33c3d8f | note: ARCH-14 internal/appverbs was deleted by 510cd7ee0 as unused, so that item is not standing
 
 Station of the launch first pass
-([metamission](choir-launch-first-pass-metamission-2026-10-21.md)); items from
+([metamission](../archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md)); items from
 [the security-density checklist](../security-density-architecture-checklist-2026-10-21.md).
 Lane branch `lane/fp10-p2-small`.
 

@@ -78,7 +78,7 @@ If I do not hear back, I will do the overnight plan above, keep real computers o
 
 ## Names and receipts
 
-Staging serves d9336696b (D30); main is at 880ca9638 or later. The ledger is docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md and the status page is https://claude.ai/artifact/WArejUzHzD42RnT7SMpP2F (version 46).
+Staging serves d9336696b (D30); main is at 880ca9638 or later. The ledger is docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md and the status page is https://claude.ai/artifact/WArejUzHzD42RnT7SMpP2F (version 46).
 
 Deploys in this letter: D17 c53237618, D19 883a38c21, D20 e0bd976a3, D21 06979ca71, D22 2b7d130c3, D23 46e4e0a8e, D24 a01d2e1f0, D25 e30c8b51a, D26 372cd205b, D27 f84c8fe34 (its deploy failed), D28 1fec78a1b, D29 0d943bee0, D30 d9336696b. D18 shipped inside D20.
 

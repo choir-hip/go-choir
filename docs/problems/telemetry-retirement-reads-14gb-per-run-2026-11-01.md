@@ -1,7 +1,7 @@
 # Telemetry retirement reads about 14.5 GB of the paper's store per run
 
 Date: 2026-11-01. Found by the paper memory sampler during the guest memory
-cap benchmark (docs/definitions/choir-memory-optimization-2026-11-01.md).
+cap benchmark (docs/archive/definitions/choir-memory-optimization-2026-11-01.md).
 Mutation class of any fix: orange (store queries).
 
 ## Evidence

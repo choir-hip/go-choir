@@ -1,7 +1,7 @@
 # Remove zot (decision and deletion record, 2026-10-22)
 
 Station: FP10, lane `lane/fp10-remove-zot`, first-pass metamission
-(`docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md`).
+(`docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md`).
 
 ## Decision
 

@@ -80,7 +80,7 @@ If I were holding the phone, I would do two things before your demos. Decide wha
 
 ## Names and receipts
 
-Goal files: docs/definitions/choir-ordinary-prompt-path-2026-11-09.md (complete) and docs/definitions/choir-autopaper-improvement-2026-11-09.md (live), with its ledger alongside.
+Goal files: docs/definitions/choir-ordinary-prompt-path-2026-11-09.md (complete) and docs/archive/definitions/choir-autopaper-improvement-2026-11-09.md (live), with its ledger alongside.
 
 Evidence: docs/problems/paper-quota-incidents-2026-11-09.md, docs/evidence/provider-retry-audit-2026-11-09.md, docs/evidence/paper-token-budget-2026-11-09.md.
 

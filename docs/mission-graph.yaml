@@ -1138,7 +1138,7 @@ nodes:
       Specification: docs/reports/lu-guest-updates-design-2026-10-14.md.
   - id: choir-launch-first-pass-metamission-2026-10-21
     title: Launch first pass — every agent-doable launch batch, built concurrently, landed in order, reviewed with the owner
-    path: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md
+    path: docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md
     ledger: ''
     status: superseded  # 2026-10-24, by choir-selfdev-readiness-metamission-2026-10-24
     kind: spine
@@ -1154,7 +1154,7 @@ nodes:
   - id: choir-selfdev-readiness-metamission-2026-10-24
     title: Self-development readiness — the platform upgrades the self-development loop needs, then the first real loop (the Reader app) end to end
     path: docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.md
-    ledger: docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md
+    ledger: docs/archive/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md
     status: checkpoint_incomplete  # 2026-10-26, superseded in ordering by choir-consolidate-and-scale-metamission-2026-10-26
     kind: spine
     entrypoint: false
@@ -1168,7 +1168,7 @@ nodes:
   - id: choir-overnight-pd-then-selfdev-metamission-2026-11-03
     title: Overnight metamission — progressive delivery, then self-development, in concurrent lanes, with calibration as the bridge
     path: docs/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.md
-    ledger: docs/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.ledger.md
+    ledger: docs/archive/definitions/choir-overnight-pd-then-selfdev-metamission-2026-11-03.ledger.md
     status: superseded  # 2026-11-04; successor choir-modular-architecture-2026-11-04
     kind: metamission
     entrypoint: false
@@ -1191,7 +1191,7 @@ nodes:
     enables: [choir-autopaper-improvement-2026-11-09]
   - id: choir-autopaper-improvement-2026-11-09
     title: Autopaper improvement — prove the paper uses its sources well, then images that add information
-    path: docs/definitions/choir-autopaper-improvement-2026-11-09.md
+    path: docs/archive/definitions/choir-autopaper-improvement-2026-11-09.md
     status: superseded  # 2026-11-09 evening; only the stale-queue rule (D13) landed; successor choir-autopaper-overnight-2026-11-09
     kind: mission
     entrypoint: false
@@ -1261,7 +1261,7 @@ nodes:
   - id: choir-selfdev-apps-side-by-side-2026-11-02
     title: Self-development — the desktop apps rewritten on b@c with the Claude (Sonnet) delegate, each as <app>-next beside its original
     path: docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.md
-    ledger: docs/definitions/choir-selfdev-apps-side-by-side-2026-11-02.ledger.md
+    ledger: docs/archive/definitions/choir-selfdev-apps-side-by-side-2026-11-02.ledger.md
     status: superseded  # 2026-11-03; successor choir-selfdev-apps-feature-complete-2026-11-03
     kind: spine
     entrypoint: false
@@ -1287,8 +1287,8 @@ nodes:
       guest isolation I0 numbers as its baseline.
   - id: choir-guest-isolation-2026-11-01
     title: Guest isolation — per-VM pressure, the paper jailed, disk I/O, disk space, network and CPU limits, so one guest cannot hurt another or the host
-    path: docs/definitions/choir-guest-isolation-2026-11-01.md
-    ledger: docs/definitions/choir-guest-isolation-2026-11-01.ledger.md
+    path: docs/archive/definitions/choir-guest-isolation-2026-11-01.md
+    ledger: docs/archive/definitions/choir-guest-isolation-2026-11-01.ledger.md
     status: superseded  # 2026-11-01; successor choir-store-header-body-split-2026-11-02
     kind: spine
     entrypoint: false
@@ -1300,8 +1300,8 @@ nodes:
       Make a throughline." Carries the memory mission's close-out as I0.
   - id: choir-memory-optimization-2026-11-01
     title: Memory optimization — the backup, the paper, and Node B
-    path: docs/definitions/choir-memory-optimization-2026-11-01.md
-    ledger: docs/definitions/choir-memory-optimization-2026-11-01.ledger.md
+    path: docs/archive/definitions/choir-memory-optimization-2026-11-01.md
+    ledger: docs/archive/definitions/choir-memory-optimization-2026-11-01.ledger.md
     status: superseded  # 2026-11-01; successor choir-guest-isolation-2026-11-01
     kind: spine
     entrypoint: false
@@ -1338,7 +1338,7 @@ nodes:
       docs/design/choir-data-system-frame-2026-10-30.md.
   - id: choir-data-architecture-selection-2026-10-28
     title: Data architecture selection — census, owner budgets and hard gates, tape-replay bake-off against the incumbent, differential shadow, ratify
-    path: docs/definitions/choir-data-architecture-selection-2026-10-28.md
+    path: docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md
     status: superseded  # 2026-10-30; successor choir-data-system-build-2026-10-30 (terminal receipt in the file)
     kind: station
     entrypoint: false
@@ -1351,7 +1351,7 @@ nodes:
   - id: choir-consolidate-and-scale-metamission-2026-10-26
     title: Consolidate and scale — computers start without a person making room, then every started thing finished or deleted, then the residuals
     path: docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.md
-    ledger: docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.ledger.md
+    ledger: docs/archive/definitions/choir-consolidate-and-scale-metamission-2026-10-26.ledger.md
     status: superseded  # 2026-10-28, dropped (owner); successor choir-data-architecture-selection-2026-10-28
     kind: spine
     entrypoint: false
@@ -1364,7 +1364,7 @@ nodes:
       L0, D (density), X, W, F, R, Z.
   - id: choir-t1a-app-self-development-2026-10-26
     title: T1a — the desktop apps self-developed to a design bar, one per request, on b@c
-    path: docs/definitions/choir-t1a-app-self-development-2026-10-26.md
+    path: docs/archive/definitions/choir-t1a-app-self-development-2026-10-26.md
     ledger: ''
     status: superseded  # 2026-11-02; successor choir-selfdev-apps-side-by-side-2026-11-02
     kind: station
@@ -1599,7 +1599,7 @@ nodes:
       C183.
   - id: choir-exact-search-entities-2026-11-20
     title: Exact, search and entities — demo mode removed, the remaining Swift moved, web searches under 1,000 a day, the entity layer, the remaining settings
-    path: docs/definitions/choir-exact-search-entities-2026-11-20.md
+    path: docs/archive/definitions/choir-exact-search-entities-2026-11-20.md
     status: superseded  # 2026-11-20 by choir-exact-cutover-and-ontology-2026-11-20; its landed list is the record of that day
     kind: station
     entrypoint: true
@@ -1612,7 +1612,7 @@ nodes:
       choir-night-exact-vectors-learning-2026-11-19.
   - id: choir-night-exact-vectors-learning-2026-11-19
     title: The night of 19 November — the Exact cutover, vectors in pgvector with EmbeddingGemma 2, and the trace read with the calibration experiment (tracks X, V, L)
-    path: docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md
+    path: docs/archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md
     status: superseded  # 2026-11-20 by choir-exact-search-entities-2026-11-20; its station statuses were never kept
     kind: station
     entrypoint: true

@@ -108,7 +108,7 @@ and finalize per tape event.
 
 F-c (`docs/archive/design/choir-event-table-f-c-2026-10-22.md`) moves the same ten
 kinds into `choir_events`, with 4 trees. The owner accepted its defaults
-at 13:20 today (`docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`,
+at 13:20 today (`docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md`,
 commit `0bf8a097d`) **[V]**. Deploy 1 is built on `lane/fp1-event-table`
 and deploy 2 on `lane/fp1-event-table-d2`. Neither is on `main` yet
 **[V]** (`git log origin/main..origin/lane/fp1-event-table-d2`: 38

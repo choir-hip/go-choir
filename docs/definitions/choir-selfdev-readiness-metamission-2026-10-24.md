@@ -3,7 +3,7 @@ definition_version: 4
 
 # Self-development readiness: the platform upgrades the self-development
 # loop needs, landed in waves, then the first real loop, run end to end.
-# Supersedes docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md
+# Supersedes docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md
 # (its open items carry over by name, station SR6).
 # Owner 2026-10-24, in session (ledger 19:3x to 20:1x of the first pass,
 # and this file's ledger): "self-development is our priority"; "we should do
@@ -125,7 +125,7 @@ metamission:
         uses the existing media progress kind (I27), not a file or browser
         storage.
     - id: SR6
-      path: docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md (carried items)
+      path: docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md (carried items)
       readiness: executable
       status: working
       depends_on: []
@@ -210,7 +210,7 @@ metamission:
         pattern (I26). Red (Texture canonical writes, a new persistent
         agent, store refusals).
     - id: T1a
-      path: docs/definitions/choir-t1a-app-self-development-2026-10-26.md
+      path: docs/archive/definitions/choir-t1a-app-self-development-2026-10-26.md
       readiness: drafted
       status: working
       depends_on: [SR5, PD3]
@@ -468,7 +468,7 @@ now:
   # working state, kept as the receipt.
   status: checkpoint_incomplete
   slice: >-
-    T1a (the live station, docs/definitions/choir-t1a-app-self-development-2026-10-26.md):
+    T1a (the live station, docs/archive/definitions/choir-t1a-app-self-development-2026-10-26.md):
     the apps self-developed to a design bar, one per request, engineering on
     b@c with Synthetic DeepSeek and the Claude delegate (live on b@c since
     2026-10-26 00:12). PD3 complete (S1 and S2 live on b@c; receipt in its

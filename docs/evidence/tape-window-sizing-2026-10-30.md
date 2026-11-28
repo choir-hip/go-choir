@@ -4,7 +4,7 @@ Status: measurement only, mutation class green (docs). No production data or
 service was changed; every row was read from btrfs reflink copies or from
 sealed segment files read-only. Serves the "Owner direction 2026-10-30"
 section of
-[the data-architecture selection](../definitions/choir-data-architecture-selection-2026-10-28.md)
+[the data-architecture selection](../archive/definitions/choir-data-architecture-selection-2026-10-28.md)
 (item 3: "to measure per computer before choosing: events per day and bytes
 per event under the new schema"). Method inherits
 [last night's storage measurement](new-engine-storage-measurement-2026-10-30.md).

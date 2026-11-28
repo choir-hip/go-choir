@@ -54,7 +54,7 @@ self-development operation.
 - The only real use, 2026-10-27: the owner's `release adopt` of release
   4320be52… answered 404 (cross-owner reads), and the owner paused release
   adoption for a design pass
-  (docs/definitions/choir-consolidate-and-scale-metamission-2026-10-26.ledger.md).
+  (docs/archive/definitions/choir-consolidate-and-scale-metamission-2026-10-26.ledger.md).
 - Staging today: `choir release list` answers `count: 0` for the owner; the
   keep-set accounting counts 4 `choir.software_release` records
   (docs/evidence/keep-set-accounting-2026-10-29.md), none in the keep set.

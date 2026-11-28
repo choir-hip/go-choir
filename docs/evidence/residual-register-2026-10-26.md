@@ -513,7 +513,7 @@ Separately named open sub-items, de-duplicated (doc, approximate line).
 
 # Batch 02 inventory (origin/main 33f1f983a, 2026-10-26)
 
-Sha note: many shas named inside the docs are lane shas; the table gives the main equivalent where the sha was rewritten. Evidence marked [led] is the first-pass ledger (docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md) or the selfdev ledger.
+Sha note: many shas named inside the docs are lane shas; the table gives the main equivalent where the sha was rewritten. Evidence marked [led] is the first-pass ledger (docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md) or the selfdev ledger.
 
 | doc slug (no .md) | one-line problem | status | evidence | severity | area | proposed disposition |
 |---|---|---|---|---|---|---|

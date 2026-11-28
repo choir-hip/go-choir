@@ -1,7 +1,7 @@
 ---
 definition_version: 7
 readiness: executable
-supersedes: docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md
+supersedes: docs/archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md
 authority: 'the owner, 2026-11-20 about 04:45Z: "we should make sure the /goal file is correct, then i will start a new thread"; "i think we should be able to finish these missions overnight"'
 review:
   reviewer: none (written by the lead of the previous thread as its handoff; the stations name their own review tiers)
@@ -219,7 +219,7 @@ now:
     - 'E2 (design station E2: ready list, candidates with no model, the public entity read) built at b74f9f431 on the old wake commit; in review; needs a rebase.'
     - 'W2: the root desk was sent back a fourth time (a digest retried after a deferral is dropped by its own nonce check). Contract rule 7 applied: stop patching. The reading: process-local state (pending set, nonce, full-refresh flag) beside a durable digest is two authorities for one fact. Restructure in progress: a durable watermark, a digest that carries nothing and computes what is pending from the store, so any duplicate or late digest is harmless.'
     - 'NEW problem: the paper''s dispatcher holds twelve of twelve slots with 82 to 99 agents due and median waits of 250 s, since before 04:56Z (docs/problems/paper-dispatcher-twelve-slots-full-ninety-due-2026-11-20.md). Publishing rate is normal. Half the noroom waits are deadline wake-ups for finished work. Lane dispatch-deadlines: log activation time, then resolve finished deadlines without a slot.'
-    - 'NEW problem: the paper''s snapshot took 82m51s for 51.39 GB against a 90-minute budget; at 2.4 GB a day it stops finishing in about two days (docs/problems/paper-snapshot-will-pass-its-ninety-minute-budget-2026-11-20.md). H1 designs are on main (docs/design/snapshot-without-scratch-copy-2026-11-20.md, docs/design/gateway-handoff-without-a-gap-2026-11-20.md). Lane snapshot-stream builds S1.'
+    - 'NEW problem: the paper''s snapshot took 82m51s for 51.39 GB against a 90-minute budget; at 2.4 GB a day it stops finishing in about two days (docs/problems/paper-snapshot-will-pass-its-ninety-minute-budget-2026-11-20.md). H1 designs are on main (docs/archive/design/snapshot-without-scratch-copy-2026-11-20.md, docs/design/gateway-handoff-without-a-gap-2026-11-20.md). Lane snapshot-stream builds S1.'
     - 'W2 round six: both seats sent the restructure (cf31b8d2d) back for boundary conditions of the watermark, not for two authorities: cut-off stamped after the read, read errors that still moved it, the 50-document bound silently dropping, restarts stacking runs, every ordinary run listing all documents. Answered in 7a6d66dc4 (cut-off before the read with a one-minute overlap and version marks; stories not digested by the root desk, the lead''s decision and a residual for the owner; a durable hourly gate; doubling wait after runs that move nothing). In review by both seats. If it is sent back again it goes to the owner.'
     - 'H1 snapshot S1 (fab0d6a0e): both seats sent it back: it reverted the ledger and this file by accident; its WAL figure can be zero or negative; the claimed 12 GiB bound has no mechanism; the checkpoint after release is a six-times-larger burst on the one write connection; the paper''s first capture has no decision rule. The trade is judged unproven until measured on a test computer. Rework in progress.'
     - 'W3: vm_guest_reclaim_damon and intake.event_wakes are deleted as dead paths on lane last-switches (4715d2f02, 6fe318268), in review. owner_act_mode is prepared (ba32aa571, red) and HELD: enforcing it contradicts the owner''s ruling of 2026-10-24 (observe), no observe window with real owner acts was ever read, and a missing proxy key would refuse every owner mode write. Owner decision; default: leave observe.'
@@ -254,7 +254,7 @@ operating_notes:
   - 'A builder''s report is a claim. Before a landing, see the suite''s ok line yourself, look at the proof''s screenshots yourself, and enter the calibration claim in docs/calibration/claude-ledger.md (next free id C179).'
   - 'State times only after date -u. The ledger and reports are in UTC; the owner is UTC-5.'
 receipts:
-  - 'previous goal: docs/definitions/choir-night-exact-vectors-learning-2026-11-19.md (superseded by this file; its station statuses were never updated and are not to be trusted)'
+  - 'previous goal: docs/archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md (superseded by this file; its station statuses were never updated and are not to be trusted)'
   - 'landings of 2026-11-19 and 20: 4365f2ca3 event layer; 2754468d2 query embedder; 62cb7f35b Exact deck and reader; ad44370da embedder threads; 41cd8c979 search usage status; 3f3e10ba1 search gate; 39d2138d5 and bd2ff1c24 signed-out work'
   - 'ledger: 87 settled at handoff (C166 true); open C120, C127, C129, C148 to C150, C163, C167'
   - 'letters: docs/reports/exact-vectors-and-the-search-count-2026-11-19.md'

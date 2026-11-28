@@ -2,12 +2,12 @@
 
 Standing: superseded | kind: decided | settled-by: this file's header line 5; the replacing file's line 3 ('It supersedes') | replaced-by: docs/design/snapshot-one-pass-2026-11-22.md
 
-Superseded on 2026-11-22 by [snapshot-one-pass-2026-11-22.md](snapshot-one-pass-2026-11-22.md):
+Superseded on 2026-11-22 by [snapshot-one-pass-2026-11-22.md](../../design/snapshot-one-pass-2026-11-22.md):
 the witness it keeps inside the read transaction takes 55 minutes on the paper.
 
 Class of this file: green (a design; nothing changes until the landings
 below). Problem: [the paper's data image grows by the store's size at every
-capture](../problems/paper-data-image-grew-40-gib-in-eleven-minutes-2026-11-16.md).
+capture](../../problems/paper-data-image-grew-40-gib-in-eleven-minutes-2026-11-16.md).
 Code read at `origin/main` 7f5ad41e1. Every claim about code cites the file
 and line it was read at. A number marked *(not measured)* is not a fact.
 

@@ -6,10 +6,10 @@ Status: design, green; the record and its rules were built unwired in
 `internal/egressgrant` (red, off); the code was removed in November 2026
 (never wired; `internal/appnet` with it) and stays in git history. Date: 2026-10-21. Station:
 [FP10 NET-05](../definitions/choir-launch-fp10-net-05-2026-10-21.md). Problem:
-[no grant object for open egress](../problems/no-grant-object-for-open-egress-2026-10-21.md).
-Builds on: the [grants design](engineering-network-grants-2026-10-10.md) §4.0a
+[no grant object for open egress](../../problems/no-grant-object-for-open-egress-2026-10-21.md).
+Builds on: the [grants design](../../design/engineering-network-grants-2026-10-10.md) §4.0a
 (the L0 to L4 ladder), §4.2 (the grant object), §5 (phases); the
-[app-agent network policy](../archive/design/app-agent-network-policy-2026-10-21.md) (NET-10)
+[app-agent network policy](app-agent-network-policy-2026-10-21.md) (NET-10)
 §2.1 and §3; `internal/owneract` (owner-act receipts).
 
 ## 1. What this adds, and what it narrows from §4.2

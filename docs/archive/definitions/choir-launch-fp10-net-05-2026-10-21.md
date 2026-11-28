@@ -37,7 +37,7 @@ finish:
     host fetch service (NET-01) and the mirrors (NET-02).
   artifact: >-
     Commits on lane/fp10-net05-grants: the problem record and this file
-    (green); docs/design/egress-grant-object-2026-10-21.md (green);
+    (green); docs/archive/design/egress-grant-object-2026-10-21.md (green);
     internal/egressgrant with its tests (red, unwired).
   acceptance:
     - action: go test ./internal/egressgrant; go vet ./internal/egressgrant
@@ -106,8 +106,8 @@ now:
     digest: none
     scope:
       - docs/problems/no-grant-object-for-open-egress-2026-10-21.md
-      - docs/definitions/choir-launch-fp10-net-05-2026-10-21.md
-      - docs/design/egress-grant-object-2026-10-21.md
+      - docs/archive/definitions/choir-launch-fp10-net-05-2026-10-21.md
+      - docs/archive/design/egress-grant-object-2026-10-21.md
       - internal/egressgrant/
   conjecture:
     id: C-one-grant-model
@@ -149,7 +149,7 @@ receipts:
   - id: design
     boundary: define
     identity: a644127df
-    proof_refs: [docs/design/egress-grant-object-2026-10-21.md]
+    proof_refs: [docs/archive/design/egress-grant-object-2026-10-21.md]
     rollback_ref: git revert a644127df
     disposition: committed
   - id: egressgrant-package
@@ -164,7 +164,7 @@ receipts:
 
 Standing: superseded | kind: wanted | settled-by: a18568ee4 deleted internal/egressgrant (landed unwired as b52a4c026) as never wired; the package no longer exists on origin/main | replaced-by: none
 
-Problem: [no grant object for open egress](../problems/no-grant-object-for-open-egress-2026-10-21.md).
+Problem: [no grant object for open egress](../../problems/no-grant-object-for-open-egress-2026-10-21.md).
 Design: [egress grant object](../design/egress-grant-object-2026-10-21.md).
 
 ## Failure list (written before the tests)

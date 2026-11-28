@@ -117,7 +117,7 @@ one story and the web is searched only for what is new.
 
 The owner, 2026-11-20: "we should make sure the /goal file is correct, then i
 will start a new thread". Goal:
-[`definitions/choir-exact-search-entities-2026-11-20.md`](definitions/choir-exact-search-entities-2026-11-20.md).
+[`definitions/choir-exact-search-entities-2026-11-20.md`](archive/definitions/choir-exact-search-entities-2026-11-20.md).
 It supersedes the night goal below, whose station statuses were never kept
 and are not to be trusted. What is true at the handoff is in that file's
 `start` block: vectors and the event layer are deployed, entities are not
@@ -140,7 +140,7 @@ goal doc to get this all done tonight"; "we need to get vectors in pgvector,
 using embeddinggemma2"; "we need to review the traces and investigate all the
 problems"; the calibration experiment "is something that we should do now".
 Goal:
-[`definitions/choir-night-exact-vectors-learning-2026-11-19.md`](definitions/choir-night-exact-vectors-learning-2026-11-19.md).
+[`definitions/choir-night-exact-vectors-learning-2026-11-19.md`](archive/definitions/choir-night-exact-vectors-learning-2026-11-19.md).
 Track X is the cutover below, which keeps its stations. Track V is the
 corpus-first retrieval design with pgvector, stories first and one vector a
 captured page. Track L reads the traces of every recurring failure and
@@ -211,7 +211,7 @@ The station below is superseded by it.
 Owner, 2026-11-17: one voice at a time, local retrieval for the on-device
 model, the latest Exact on phone and Mac, a native Mac app, EmbeddingGemma 2
 tried on device, and a page that is the radio. Goal:
-[`definitions/choir-autoradio-overnight-2026-11-17.md`](definitions/choir-autoradio-overnight-2026-11-17.md).
+[`definitions/choir-autoradio-overnight-2026-11-17.md`](archive/definitions/choir-autoradio-overnight-2026-11-17.md).
 The goal of the 15th below was cleared by the owner on the 17th and is
 superseded by it.
 
@@ -297,10 +297,10 @@ storage the live station again. Frame:
 
 ## Earlier station (2026-11-09 evening): Autopaper improvement, then one merged overnight mission
 
-**Goal:** [`definitions/choir-autopaper-improvement-2026-11-09.md`](definitions/choir-autopaper-improvement-2026-11-09.md)
+**Goal:** [`definitions/choir-autopaper-improvement-2026-11-09.md`](archive/definitions/choir-autopaper-improvement-2026-11-09.md)
 (`readiness: executable`, `now.status: working`; ledger
-[`definitions/choir-autopaper-improvement-2026-11-09.ledger.md`](definitions/choir-autopaper-improvement-2026-11-09.ledger.md)).
-Run it with `/goal docs/definitions/choir-autopaper-improvement-2026-11-09.md`.
+[`definitions/choir-autopaper-improvement-2026-11-09.ledger.md`](archive/definitions/choir-autopaper-improvement-2026-11-09.ledger.md)).
+Run it with `/goal docs/archive/definitions/choir-autopaper-improvement-2026-11-09.md`.
 
 Owner, 2026-11-09: "Okay, one more key feature before we go into the auto
 paper improvements", so the ordinary prompt path and its added features came
@@ -408,7 +408,7 @@ file's own. Nothing is deleted; the goal files stay where they are.
 
 ## Superseded (2026-11-01): guest isolation
 
-**Goal:** [`definitions/choir-guest-isolation-2026-11-01.md`](definitions/choir-guest-isolation-2026-11-01.md).
+**Goal:** [`definitions/choir-guest-isolation-2026-11-01.md`](archive/definitions/choir-guest-isolation-2026-11-01.md).
 I1 to I6 landed; I0's numbers are the header/body split's baseline.
 
 Owner, 2026-11-01: "a thrashing guest shouldn't obstruct other guests";
@@ -416,7 +416,7 @@ Owner, 2026-11-01: "a thrashing guest shouldn't obstruct other guests";
 Stations: I0 close the memory mission with numbers; I1 per-VM pressure in
 the memory meter; I2 jail the paper; I3 disk I/O isolation; I4 disk space;
 I5 network; I6 CPU and memory backstops. It supersedes the memory mission
-([`definitions/choir-memory-optimization-2026-11-01.md`](definitions/choir-memory-optimization-2026-11-01.md)).
+([`definitions/choir-memory-optimization-2026-11-01.md`](archive/definitions/choir-memory-optimization-2026-11-01.md)).
 
 ## Superseded (2026-10-30): the data system build
 
@@ -430,7 +430,7 @@ stays the design source.
 ## Superseded (2026-10-30): data architecture selection
 
 
-**Goal:** [`definitions/choir-data-architecture-selection-2026-10-28.md`](definitions/choir-data-architecture-selection-2026-10-28.md)
+**Goal:** [`definitions/choir-data-architecture-selection-2026-10-28.md`](archive/definitions/choir-data-architecture-selection-2026-10-28.md)
 (`readiness: reviewed`, Devin 381 accept). Owner, 2026-10-28: "the data
 architecture remains the major bottleneck"; design for many hosts and about
 100,000x; memory spikes were the killer. Process: census (memory-capped
@@ -466,7 +466,7 @@ wave; each is turned on for one test computer at a time.
 
 **Now (2026-10-26 00:5x):** PD3 is complete (the Texture root desk and
 master document, S1 and S2, live on b@c). The live station is
-[T1a, the apps to a design bar](definitions/choir-t1a-app-self-development-2026-10-26.md):
+[T1a, the apps to a design bar](archive/definitions/choir-t1a-app-self-development-2026-10-26.md):
 the Reader redesign awaits approval on b@c, then Slides, Files (Open with),
 Calendar and Podcasts, with Synthetic DeepSeek and the Claude delegate
 (live on b@c). SR9, propagating accepted changes by an internal mechanism,
@@ -474,7 +474,7 @@ is in investigation. Then T1c (the desktop redesign).
 
 ## Superseded (2026-10-24): the launch first pass
 
-[`definitions/choir-launch-first-pass-metamission-2026-10-21.md`](definitions/choir-launch-first-pass-metamission-2026-10-21.md)
+[`definitions/choir-launch-first-pass-metamission-2026-10-21.md`](archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md)
 landed and proved deploys through D44 and closed as superseded (terminal
 receipt in the file). Its open items continue as station SR6 above.
 
@@ -703,7 +703,7 @@ listed with reasons in [`archive/PRUNED-2026-10-14.md`](archive/PRUNED-2026-10-1
 and recoverable from Git history. Recorded problems are in
 [`problems/`](problems/), evidence receipts in [`evidence/`](evidence/).
 The superseded 2026-09-22 R-series roadmap is
-[`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md)
+[`world-wire-mission-stack-2026-09-22.md`](archive/world-wire-mission-stack-2026-09-22.md)
 (kept only because AGENTS.md names it); sequencing now lives in this file
 and [`reports/roadmap-sequencing-appdev-security-2026-10-14.md`](archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md).
 

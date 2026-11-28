@@ -8,7 +8,7 @@ Evidence labels: **[V]** read in code or a doc at file:line on this tree (origin
 
 ## The invariant this tests
 
-Owner ruling, 2026-10-24, ledger entry 19:0x (`docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md:1605`): one object graph per computer, as the Autopaper object graph is one for the world. A new app "schmail" uses the same message data as Mail; data one app writes is usable by every other app and agent; an organization can later share one graph under RBAC. "Every type of data has only one right way to store and access it." Files and Dolt must integrate.
+Owner ruling, 2026-10-24, ledger entry 19:0x (`docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md:1605`): one object graph per computer, as the Autopaper object graph is one for the world. A new app "schmail" uses the same message data as Mail; data one app writes is usable by every other app and agent; an organization can later share one graph under RBAC. "Every type of data has only one right way to store and access it." Files and Dolt must integrate.
 
 Coordinator addition (same day): the rule that the invariant becomes is that every meaningful data kind is an object graph kind with exactly one writer, and a file is a content-addressed blob plus a path view, never a second home. The "Target" column below applies that rule to each kind.
 

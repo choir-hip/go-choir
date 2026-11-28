@@ -1,7 +1,7 @@
 # Two Deployed-Proof Steps Need A View From Inside A Guest, And There Is No Route
 
 Date: 2026-10-23. Source: the launch first-pass ledger
-([docs/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md](../definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md),
+([docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md](../archive/definitions/choir-launch-first-pass-metamission-2026-10-21.ledger.md),
 08:25 UTC entry: "Step 11 (oversized bodies from a guest shell as root), FP7
 step 5 and SEC-10 step 3 need a guest root shell") and the SEC-10 section of
 `docs/plans/security-reds-readiness-2026-10-23.md` on

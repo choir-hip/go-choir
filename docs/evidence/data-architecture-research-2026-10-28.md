@@ -1,6 +1,6 @@
 # Data architecture research, 2026-10-28
 
-Status: evidence for docs/definitions/choir-data-architecture-selection-2026-10-28.md.
+Status: evidence for docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md.
 It follows the consensus record docs/evidence/data-architecture-consensus-2026-10-28.md.
 
 Owner request: "do as much more research as we can, but delegate that to

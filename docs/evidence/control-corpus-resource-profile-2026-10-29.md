@@ -18,7 +18,7 @@ cancellation.
 
 Earlier comparison and sources:
 [engine alternatives](storage-engine-alternatives-2026-10-29.md),
-[selection goal](../definitions/choir-data-architecture-selection-2026-10-28.md),
+[selection goal](../archive/definitions/choir-data-architecture-selection-2026-10-28.md),
 [initial direction](../archive/design/data-rearchitecture-2026-10-28.md).
 
 ## Conclusions and corrections

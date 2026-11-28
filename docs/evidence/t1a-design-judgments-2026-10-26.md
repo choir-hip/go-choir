@@ -6,7 +6,7 @@ rendered locally in the real shell (mocked backend, signed in) from the
 candidate's patch, at London Salmon, Futuristic Noir and Carbon Fiber Kintsugi,
 1100x750 desktop and 390x844 phone, with the slow capture (15 s wait) while the
 laptop is loaded. One fail rejects. Goal file:
-[choir-t1a-app-self-development-2026-10-26.md](../definitions/choir-t1a-app-self-development-2026-10-26.md).
+[choir-t1a-app-self-development-2026-10-26.md](../archive/definitions/choir-t1a-app-self-development-2026-10-26.md).
 
 ## The Reader, rounds 3 and 4 (selfdev-dc62cd52, then selfdev-02626b17), 2026-10-26
 

@@ -4,7 +4,7 @@ Standing: undecided | kind: wanted | settled-by: nothing; status line 5: draft f
 
 Status: draft for re-review. Not built; nothing in this document is authorized
 to execute. Owner requirement, 2026-10-28 (goal
-docs/definitions/choir-data-architecture-selection-2026-10-28.md, section
+docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md, section
 "Owner requirement 2026-10-28 ~14:47 UTC: a secrets vault"). Author: DeepSeek
 v4.1 flash (delegated design research, read-only, code refs at 7e962b910,
 re-verified for revision 2 at a9fa488a3). Review round 1: Devin, tier 2,

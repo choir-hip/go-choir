@@ -139,7 +139,7 @@ lives at `docs/archive/learning/precommitment-records.md` instead of the Enginee
 rest is for the owner:
 
 1. **Roadmap pointer.** Replace "The mission roadmap from here to World Wire
-   live is `docs/world-wire-mission-stack-2026-09-22.md`" with "Mission
+   live is `docs/archive/world-wire-mission-stack-2026-09-22.md`" with "Mission
    sequencing lives in `docs/ACTIVE.md` and
    `docs/archive/reports/roadmap-sequencing-appdev-security-2026-10-14.md`." The stack
    is bannered superseded and kept only because this line cites it; once the

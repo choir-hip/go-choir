@@ -6,7 +6,7 @@ definition_version: 4
 # passkey-bound owner acts) and launch checklist L2-04 (backup ready for
 # launch). Run as `/goal docs/archive/definitions/choir-launch-fp9-keys-recovery-2026-10-21.md`.
 # Authority: the owner's statements quoted in the metamission
-# (docs/definitions/choir-launch-first-pass-metamission-2026-10-21.md) and its
+# (docs/archive/definitions/choir-launch-first-pass-metamission-2026-10-21.md) and its
 # FP9 entry; the worker rules sent with the lane. This is a worker lane: it
 # builds and proves locally, FP0 lands, deploys and runs live proofs.
 readiness: drafted

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Guest isolation I5 network drill, run as root on Node B.
-# docs/definitions/choir-guest-isolation-2026-11-01.md (I5) and its ledger.
+# docs/archive/definitions/choir-guest-isolation-2026-11-01.md (I5) and its ledger.
 #
 # Every target is ours: network namespaces on Node B, never an outside host.
 #   drill-t  the target, 192.88.99.2 (the only block d@e's drill route may dial: the

@@ -91,7 +91,7 @@ Read the relevant contract before touching its protected surface.
   [`mission-residues.md`](mission-residues.md),
   [`memo-diagonal-media-strategy-2026-09-17.md`](memo-diagonal-media-strategy-2026-09-17.md)
   (business origin; superseded by the strategy takeaways), and the superseded
-  roadmap [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md).
+  roadmap [`world-wire-mission-stack-2026-09-22.md`](archive/world-wire-mission-stack-2026-09-22.md).
 - **Enforcement artifacts**: [`heresy-detectors.md`](heresy-detectors.md)
   (detector manifest read by `scripts/check-heresies.sh`),
   [`conjecture-assertion-ledger-2026-06.md`](conjecture-assertion-ledger-2026-06.md)

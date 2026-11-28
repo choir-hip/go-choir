@@ -324,14 +324,14 @@ receipts: []
 
 # The night of 19 November 2026: Exact, vectors, and learning
 
-Standing: superseded | kind: wanted | settled-by: the successor's supersedes field (its line 4) and line 257 | replaced-by: docs/definitions/choir-exact-search-entities-2026-11-20.md | note: the successor is itself superseded by choir-exact-cutover-and-ontology
+Standing: superseded | kind: wanted | settled-by: the successor's supersedes field (its line 4) and line 257 | replaced-by: docs/archive/definitions/choir-exact-search-entities-2026-11-20.md | note: the successor is itself superseded by choir-exact-cutover-and-ontology
 
 The owner came back after eighteen hours, asked what was done, and set the
 night's work in a few sentences (the rulings above). This file orders it. It
 is a set of three tracks, not a new design. Track X is the
-[cutover from Swift to Exact](choir-autoradio-exact-cutover-2026-11-18.md),
+[cutover from Swift to Exact](../../definitions/choir-autoradio-exact-cutover-2026-11-18.md),
 which keeps its own stations. Track V is the
-[corpus-first retrieval design](../design/corpus-first-retrieval-and-research-2026-11-18.md)
+[corpus-first retrieval design](../../design/corpus-first-retrieval-and-research-2026-11-18.md)
 with two changes the owner made tonight. Track L is new.
 
 ## What changed in the retrieval design tonight

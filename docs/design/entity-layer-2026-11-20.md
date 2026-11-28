@@ -4,7 +4,7 @@ Standing: undecided | kind: wanted | settled-by: nothing; this file's status (li
 
 **Status: a proposal, not ratified.** Written 2026-11-20 between 05:00Z and
 06:00Z by a design agent (Opus, no code) for station E2 of
-[the goal of 2026-11-20](../definitions/choir-exact-search-entities-2026-11-20.md).
+[the goal of 2026-11-20](../archive/definitions/choir-exact-search-entities-2026-11-20.md).
 Nothing here is built unless [current-architecture.md](../current-architecture.md)
 says so. It extends stations S8 and S11 of
 [corpus-first retrieval](corpus-first-retrieval-and-research-2026-11-18.md)

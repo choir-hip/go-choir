@@ -27,7 +27,7 @@ review:
   reviewer: owner (ratified the spine in session, 2026-10-26 12:1x)
   frozen_ref: this file as first staged, before the 12:1x ruling edits
   verdict: accept
-  evidence_ref: docs/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md, entry 12:1x
+  evidence_ref: docs/archive/definitions/choir-selfdev-readiness-metamission-2026-10-24.ledger.md, entry 12:1x
 
 metamission:
   stations:
@@ -246,7 +246,7 @@ now:
   status: superseded
   slice: >-
     Data architecture selection
-    (docs/definitions/choir-data-architecture-selection-2026-10-28.md,
+    (docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md,
     drafted): census, owner budgets, candidates, tape-replay bake-off,
     panel, shadow migration. Dolt versioning is load-bearing nowhere found.
   bridge_conjecture: >-
@@ -289,7 +289,7 @@ The owner dropped this goal. Landed and deployed on its watch (staging
 the witness spill, the capture inode pin, S3, S4, S5, S6, V, the switch
 registry, the squash quoting fix; the b@c 8 GiB start observed. Carried
 forward, not done: the paper's store_stalled and the Store A squash memory
-go to docs/definitions/choir-data-architecture-selection-2026-10-28.md
+go to docs/archive/definitions/choir-data-architecture-selection-2026-10-28.md
 (its parallel track: the kill -9 drill for store.debounced_checkpoint, the
 squash per-phase measurement, R7); the b@c citation redo waits for
 self-development (docs/problems/cite-promote-expands-all-citations-2026-10-28.md);
