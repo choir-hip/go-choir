@@ -57,9 +57,14 @@ where the rule is "unreadable, never signed out".
   It has not been proved.
 - Not checked: other sources fed a clock the same way.
 
-## Next
+## Fixed
 
-A fix is being built in lane `activity-storm`: the source is asked only when
-its real inputs change, and a test counts the asks while the clock moves. The
-session read's "throws means unreadable" is a second, separate change, because
-it touches sign-in.
+`954102fc7` (2026-11-28): the Activity source no longer reads the clock and is
+asked only while its page is on top; ages are made where the row is drawn from
+a page clock that steps every 30 seconds. A signed-in proof run on that code
+shows 0 changelog requests in the plain launch (was 6,643) and 3 key-read
+flips (was 313). `be8b0dc6e` then made a refused key read "could not read"
+and never "no key". Not fixed: the sign-in sheet still opens on a key that
+could not be read
+([record](the-sign-in-sheet-is-offered-while-the-key-cannot-be-read-2026-11-28.md)).
+Not measured on a phone.
