@@ -189,6 +189,7 @@ class DeckJournal(val storage: File? = null) {
     fun wipe() {
         lines = emptyList(); seq = 0; acked = 0; dropped = 0; floor = 0; aside = false; bootPending = false; isLoaded = true
         storage?.delete(); numbersFile?.delete()
+        badFile?.delete()   // the set-aside journal holds the account's lines too
     }
 
     private fun stamp(): String = Instant.ofEpochMilli(now()).toString()

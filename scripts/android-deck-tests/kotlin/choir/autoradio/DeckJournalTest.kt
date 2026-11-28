@@ -83,6 +83,15 @@ class DeckJournalTest {
         assertEquals(5, next.append("started", item = "x").seq)
     }
 
+    @Test fun aSetAsideJournalGoesAtSignOut() {
+        val f = file(); val bad = f.resolveSibling("deck-journal.bad")
+        f.writeText("previous account deck entries")
+        val j = DeckJournal(f)   // the real corrupt-journal path: setAside moves the file to .bad
+        assertEquals("previous account deck entries", bad.readText())
+        j.wipe()
+        assertFalse("the set-aside journal holds the old account's entries and goes with the wipe", bad.exists())
+    }
+
     @Test fun failedSaveIsCountedAndTheNextEventWritesEverything() {
         val f = File(dir(), "missing/deck-journal.json")
         val j = DeckJournal(f); val told = ArrayList<String>(); j.log = { told += it }
